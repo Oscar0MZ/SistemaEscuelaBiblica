@@ -1,113 +1,68 @@
-import { db } from "./config/firebase.js";
+// Firebase config
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
 
 import {
+getFirestore,
 collection,
 addDoc,
 getDocs,
 query,
 where,
 doc,
-getDoc,
-setDoc
+updateDoc
+
 } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 
 
-// botones
+// CONFIGURACIÓN FIREBASE
+const firebaseConfig = {
 
-const btnLogin = document.getElementById("btnLogin");
-const btnRegistro = document.getElementById("btnRegistro");
-const btnGuardarAlumno = document.getElementById("btnGuardarAlumno");
-const btnPasarAsistencia = document.getElementById("btnPasarAsistencia");
-
-
-// =========================
-// LOGIN
-// =========================
-
-btnLogin.onclick = async () => {
-
-const nombre = document.getElementById("nombreCompleto").value.trim();
-const rol = document.getElementById("rol").value;
-const campo = document.getElementById("campo").value;
-const password = document.getElementById("password").value;
-
-if(!nombre || !rol || !password){
-
-alert("Complete todos los campos");
-return;
-
-}
-
-try{
-
-const q = query(
-collection(db,"usuarios"),
-where("nombre","==",nombre),
-where("rol","==",rol),
-where("password","==",password)
-);
-
-const snap = await getDocs(q);
-
-if(snap.empty){
-
-alert("Usuario no encontrado");
-return;
-
-}
-
-const user = snap.docs[0].data();
-
-if(user.aprobado !== true){
-
-alert("Aún no ha sido aprobado por el administrador");
-return;
-
-}
-
-// guardar sesión
-
-localStorage.setItem("usuario", JSON.stringify(user));
-
-
-// mostrar sistema
-
-document.getElementById("loginContainer").classList.add("hidden");
-
-document.getElementById("menuContainer").classList.remove("hidden");
-
-cargarResumen();
-
-}
-catch(error){
-
-alert("Error login: "+error.message);
-
-}
+apiKey: "TU API KEY",
+authDomain: "TU AUTH DOMAIN",
+projectId: "TU PROJECT ID",
+storageBucket: "TU STORAGE",
+messagingSenderId: "TU SENDER ID",
+appId: "TU APP ID"
 
 };
 
 
+// iniciar firebase
+const app = initializeApp(firebaseConfig);
 
-// =========================
-// REGISTRO
-// =========================
+const db = getFirestore(app);
 
-btnRegistro.onclick = async () => {
 
-const nombre = document.getElementById("nombreCompleto").value.trim();
-const rol = document.getElementById("rol").value;
-const campo = document.getElementById("campo").value;
-const password = document.getElementById("password").value;
+// REGISTRAR USUARIO
+window.registrar = async function(){
 
-if(!nombre || !rol || !password){
+const nombre = document.getElementById("registroNombre").value;
+
+const rol = document.getElementById("registroRol").value;
+
+const campo = document.getElementById("registroCampo").value;
+
+const password = document.getElementById("registroPassword").value;
+
+
+if(nombre=="" || rol=="" || password==""){
 
 alert("Complete todos los campos");
+
 return;
 
 }
 
-try{
+
+// administrador se aprueba solo
+let aprobado = false;
+
+if(rol=="Administrador"){
+
+aprobado=true;
+
+}
+
 
 await addDoc(collection(db,"usuarios"),{
 
@@ -115,172 +70,152 @@ nombre,
 rol,
 campo,
 password,
-aprobado:false,
-fecha:new Date().toISOString()
+aprobado
 
 });
 
-alert("Registro enviado. Espere aprobación del administrador.");
 
-}
-catch(error){
+alert("Usuario registrado, espere aprobación");
 
-alert("Error registro: "+error.message);
-
-}
+mostrarLogin();
 
 };
 
 
 
-// =========================
-// AGREGAR ALUMNO
-// =========================
+// LOGIN
+window.login = async function(){
 
-btnGuardarAlumno.onclick = async () => {
+const nombre = document.getElementById("loginNombre").value;
 
-const nombre = document.getElementById("nombreAlumno").value;
-const edad = document.getElementById("edadAlumno").value;
-const fecha = document.getElementById("fechaAlumno").value;
-const campo = document.getElementById("campoAlumno").value;
+const rol = document.getElementById("loginRol").value;
 
-if(!nombre || !edad || !fecha || !campo){
+const campo = document.getElementById("loginCampo").value;
 
-alert("Complete todos los campos");
-return;
+const password = document.getElementById("loginPassword").value;
 
-}
-
-await addDoc(collection(db,"alumnos"),{
-
-nombre,
-edad,
-fechaNacimiento:fecha,
-campo
-
-});
-
-alert("Alumno agregado");
-
-};
-
-
-
-// =========================
-// PASAR ASISTENCIA
-// =========================
-
-btnPasarAsistencia.onclick = async () => {
-
-const usuario = JSON.parse(localStorage.getItem("usuario"));
-
-const campo = usuario.campo;
-
-const fechaHoy = new Date().toISOString().split("T")[0];
 
 const q = query(
-collection(db,"asistencia"),
-where("fecha","==",fechaHoy),
-where("campo","==",campo)
+
+collection(db,"usuarios"),
+
+where("nombre","==",nombre),
+
+where("rol","==",rol),
+
+where("password","==",password)
+
 );
 
-const snap = await getDocs(q);
 
-if(!snap.empty){
+const querySnapshot = await getDocs(q);
 
-alert("La asistencia ya fue registrada hoy");
+
+if(querySnapshot.empty){
+
+alert("Usuario no existe");
+
 return;
 
 }
 
 
-// obtener alumnos del campo
-
-const alumnosQ = query(
-collection(db,"alumnos"),
-where("campo","==",campo)
-);
-
-const alumnosSnap = await getDocs(alumnosQ);
-
-let presentes = alumnosSnap.size;
-let ausentes = 0;
-let permiso = 0;
-
-await addDoc(collection(db,"asistencia"),{
-
-fecha:fechaHoy,
-campo,
-presentes,
-ausentes,
-permiso,
-registradoPor:usuario.nombre
-
-});
-
-alert("Asistencia registrada");
-
-cargarResumen();
-
-};
-
-
-
-// =========================
-// RESUMEN
-// =========================
-
-async function cargarResumen(){
-
-const usuario = JSON.parse(localStorage.getItem("usuario"));
-
-const campo = usuario.campo;
-
-const q = query(
-collection(db,"asistencia"),
-where("campo","==",campo)
-);
-
-const snap = await getDocs(q);
-
-let presentes = 0;
-let ausentes = 0;
-let permiso = 0;
-
-snap.forEach(doc=>{
+querySnapshot.forEach((doc)=>{
 
 const data = doc.data();
 
-presentes += data.presentes;
-ausentes += data.ausentes;
-permiso += data.permiso;
+if(!data.aprobado){
+
+alert("Usuario pendiente de aprobación");
+
+return;
+
+}
+
+
+// guardar sesión
+localStorage.setItem("usuario",JSON.stringify({
+
+id:doc.id,
+nombre:data.nombre,
+rol:data.rol,
+campo:data.campo
+
+}));
+
+
+// redirigir
+window.location.href="/views/sistema.html";
+
 
 });
 
-document.getElementById("presentes").innerText = presentes;
-document.getElementById("ausentes").innerText = ausentes;
-document.getElementById("permiso").innerText = permiso;
-
-}
+};
 
 
 
-// =========================
-// SESION AUTOMATICA
-// =========================
 
-window.onload = () => {
+// PANEL ADMIN APROBAR USUARIOS
+window.cargarPendientes = async function(){
 
-const user = localStorage.getItem("usuario");
+const q = query(
 
-if(user){
+collection(db,"usuarios"),
 
-document.getElementById("loginContainer").classList.add("hidden");
+where("aprobado","==",false)
 
-document.getElementById("menuContainer").classList.remove("hidden");
+);
 
-cargarResumen();
 
-}
+const querySnapshot = await getDocs(q);
+
+
+const div = document.getElementById("pendientes");
+
+
+div.innerHTML="";
+
+
+querySnapshot.forEach((documento)=>{
+
+const data = documento.data();
+
+div.innerHTML += `
+
+<div>
+
+${data.nombre} - ${data.rol}
+
+<button onclick="aprobar('${documento.id}')">
+
+Aprobar
+
+</button>
+
+</div>
+
+`;
+
+});
+
+};
+
+
+
+
+// aprobar usuario
+window.aprobar = async function(id){
+
+const ref = doc(db,"usuarios",id);
+
+await updateDoc(ref,{
+
+aprobado:true
+
+});
+
+alert("Usuario aprobado");
+
+cargarPendientes();
 
 };
