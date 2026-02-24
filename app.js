@@ -8,15 +8,14 @@ function App() {
     // Datos
     const [maestros, setMaestros] = useState([]);
     const [alumnos, setAlumnos] = useState([]);
-    const [asistenciaHoy, setAsistenciaHoy] = useState(null); // NUEVO: Resumen de hoy
+    const [asistenciaHoy, setAsistenciaHoy] = useState(null);
     
-    // Modales y Edición
+    // Modales
     const [modalAbierto, setModalAbierto] = useState(false);
     const [modalAlumno, setModalAlumno] = useState(false);
     const [maestroEdicion, setMaestroEdicion] = useState(null);
     const [idBorrar, setIdBorrar] = useState(null);
     
-    // Auxiliar para edad
     const [edadCalculada, setEdadCalculada] = useState(null);
 
     const camposDisponibles = [
@@ -38,14 +37,21 @@ function App() {
         }
     }, []);
 
-    // Cargar Alumnos y Asistencia de Hoy (Maestros)
+    // --- CORRECCIÓN CLAVE: CARGAR ALUMNOS SOLO POR CAMPO ---
     useEffect(() => {
         if (usuario && usuario !== 'ADMIN' && datosUsuarioActual && AlumnosService) {
-            // 1. Alumnos
-            const unsubAlumnos = AlumnosService.suscribirPorClase(datosUsuarioActual.clase, setAlumnos);
             
-            // 2. Asistencia de Hoy
-            const unsubAsistencia = AlumnosService.suscribirAsistenciaHoy(datosUsuarioActual.clase, setAsistenciaHoy);
+            // 1. Alumnos: Filtramos SOLO por el campo del maestro (Ej: La Isla)
+            const unsubAlumnos = AlumnosService.suscribirPorCampo(
+                datosUsuarioActual.campo, 
+                setAlumnos
+            );
+            
+            // 2. Asistencia: Filtramos SOLO por el campo
+            const unsubAsistencia = AlumnosService.suscribirAsistenciaHoy(
+                datosUsuarioActual.campo, 
+                setAsistenciaHoy
+            );
 
             return () => {
                 unsubAlumnos();
@@ -54,7 +60,7 @@ function App() {
         }
     }, [usuario, datosUsuarioActual]);
 
-    // --- LOGINS Y REGISTROS (Sin cambios mayores) ---
+    // Login
     const handleLogin = async (rol, clave, nombre, campo) => {
         if (!AuthService.verificar(rol, clave)) return { exito: false, mensaje: "Clave incorrecta." };
         if (rol === 'ADMIN') {
@@ -63,22 +69,32 @@ function App() {
             return { exito: true };
         }
         try {
+            // Buscamos al maestro
             const snapshot = await window.db.collection('maestros')
-                .where('nombre', '==', nombre.trim()).where('clase', '==', rol).get();
+                .where('nombre', '==', nombre.trim())
+                .where('clase', '==', rol)
+                .get();
 
             if (snapshot.empty) {
-                await MaestrosService.guardar({ nombre: nombre.trim(), clase: rol, campo: campo || '', telefono: '' }, null, 'SISTEMA_AUTO');
+                // Registro nuevo
+                await MaestrosService.guardar({ 
+                    nombre: nombre.trim(), 
+                    clase: rol, 
+                    campo: campo || '', // El campo es vital ahora
+                    telefono: '' 
+                }, null, 'SISTEMA_AUTO');
                 return { exito: true, mensaje: "Solicitud enviada al Director." };
             } else {
                 const doc = snapshot.docs[0];
                 const datos = doc.data();
                 if (datos.estado === 'Activo') {
                     setUsuario(rol);
+                    // Guardamos los datos completos (IMPORTANTE: Aquí va el campo)
                     setDatosUsuarioActual({ ...datos, id: doc.id });
                     AuthService.guardarSesion(rol);
                     return { exito: true };
                 } else {
-                    return { exito: true, mensaje: "Tu cuenta aún no ha sido aprobada." };
+                    return { exito: true, mensaje: "Cuenta pendiente de aprobación." };
                 }
             }
         } catch (error) { return { exito: false, mensaje: "Error de conexión." }; }
@@ -106,6 +122,7 @@ function App() {
         return edad;
     };
 
+    // --- REGISTRAR ALUMNO (Vinculado solo al CAMPO) ---
     const handleGuardarAlumno = async (e) => {
         e.preventDefault();
         const formData = new FormData(e.target);
@@ -118,37 +135,45 @@ function App() {
                 nombre: nombreNino,
                 fechaNacimiento: fechaNacimiento,
                 edad: calcularEdad(fechaNacimiento),
+                
+                // Datos de referencia
                 maestroResponsable: datosUsuarioActual?.nombre,
-                clase: datosUsuarioActual?.clase,
-                campo: datosUsuarioActual?.campo,
-                registradoPorId: datosUsuarioActual?.id
+                registradoPorId: datosUsuarioActual?.id,
+                
+                // EL DATO CRÍTICO: CAMPO
+                campo: datosUsuarioActual?.campo || 'Sin Campo', 
+                
+                // Ponemos "General" en clase para no dejar vacío, ya que no usamos párvulos
+                clase: 'General' 
             });
-            alert("Alumno registrado");
+            alert("Alumno registrado en " + datosUsuarioActual?.campo);
             setModalAlumno(false);
             setEdadCalculada(null);
         } catch (error) { alert("Error al registrar"); }
     };
 
-    // --- NUEVO: GUARDAR ASISTENCIA ---
+    // --- GUARDAR ASISTENCIA (Vinculada solo al CAMPO) ---
     const handleGuardarAsistencia = async (registros) => {
-        // Calculamos totales
         const presentes = registros.filter(r => r.estado === 'Presente').length;
         const ausentes = registros.filter(r => r.estado === 'Ausente').length;
         const permisos = registros.filter(r => r.estado === 'Permiso').length;
-
-        const fechaHoy = new Date().toLocaleDateString('en-CA'); // YYYY-MM-DD
+        const fechaHoy = new Date().toLocaleDateString('en-CA');
 
         try {
             await AlumnosService.guardarAsistencia({
                 fecha: fechaHoy,
-                clase: datosUsuarioActual.clase,
+                
+                // EL DATO CRÍTICO: CAMPO
+                campo: datosUsuarioActual.campo,
+                
+                clase: 'General', // No usamos clase específica
                 maestro: datosUsuarioActual.nombre,
-                registros: registros, // Detalle de cada niño
-                totales: { presentes, ausentes, permisos }, // Resumen
+                registros: registros,
+                totales: { presentes, ausentes, permisos },
                 timestamp: Date.now()
             });
-            alert("¡Asistencia guardada correctamente!");
-            return true; // Éxito
+            alert("¡Asistencia del campo " + datosUsuarioActual.campo + " guardada!");
+            return true;
         } catch (error) {
             alert("Error al guardar asistencia");
             console.error(error);
@@ -164,6 +189,7 @@ function App() {
                 <div>
                     <p className="text-[10px] font-black uppercase tracking-widest text-indigo-500">Gestión Ministerial</p>
                     <h1 className="text-xl font-black text-slate-800">{usuario === 'ADMIN' ? 'Panel Director' : usuario}</h1>
+                    {!usuario === 'ADMIN' && datosUsuarioActual && <p className="text-[9px] text-slate-400 font-bold uppercase">{datosUsuarioActual.campo}</p>}
                 </div>
                 <button onClick={() => { setUsuario(null); AuthService.cerrarSesion(); }} className="w-10 h-10 bg-slate-50 text-slate-400 rounded-xl hover:text-rose-500 transition-all"><i className="fas fa-sign-out-alt"></i></button>
             </header>
@@ -172,28 +198,27 @@ function App() {
                 <DashboardView 
                     maestros={maestros}
                     alumnos={alumnos}
-                    asistenciaHoy={asistenciaHoy} // PASAMOS EL RESUMEN DE HOY
+                    asistenciaHoy={asistenciaHoy}
                     usuario={usuario}
-                    
                     onApprove={MaestrosService.aprobar}
                     onDelete={setIdBorrar}
                     onEdit={(m) => { setMaestroEdicion(m); setModalAbierto(true); }}
                     onToggleModal={() => { setMaestroEdicion(null); setModalAbierto(true); }}
                     onOpenAlumnoModal={() => { setEdadCalculada(null); setModalAlumno(true); }}
-                    
-                    onSaveAsistencia={handleGuardarAsistencia} // NUEVA FUNCIÓN
+                    onSaveAsistencia={handleGuardarAsistencia}
                 />
             </main>
 
-            {/* MODALES (Código igual al anterior, resumido aquí) */}
-            {modalAbierto && (/* ... Modal Admin ... */ 
+            {/* MODALES */}
+            {modalAbierto && (
                 <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-md flex items-center justify-center z-50 p-4 animate-in fade-in">
                     <div className="bg-white w-full max-w-md rounded-[32px] p-8 shadow-2xl animate-in slide-in-from-bottom max-h-[90vh] overflow-y-auto">
                         <h2 className="text-2xl font-black text-slate-800 mb-6">{maestroEdicion ? 'Editar' : 'Inscribir'}</h2>
                         <form onSubmit={handleGuardar} className="space-y-4">
                             <input type="text" name="nombre" required defaultValue={maestroEdicion?.nombre || ''} className="w-full p-4 bg-slate-50 rounded-2xl outline-none" placeholder="Nombre" />
-                            <select name="clase" defaultValue={maestroEdicion?.clase || 'Párvulos'} className="w-full p-4 bg-slate-50 rounded-2xl outline-none bg-white border border-slate-100">
-                                {['Cuna', 'Párvulos', 'Principiantes', 'Primarios', 'Intermedios', 'Jóvenes', 'Adultos', 'Logística', 'Dirección'].map(c => <option key={c} value={c}>{c}</option>)}
+                            <select name="clase" defaultValue={maestroEdicion?.clase || 'MAESTRO'} className="w-full p-4 bg-slate-50 rounded-2xl outline-none bg-white border border-slate-100">
+                                {/* Mantenemos estos roles para el PERSONAL, pero no afectan a los alumnos */}
+                                {['MAESTRO', 'AUXILIAR', 'LOGISTICA', 'Dirección'].map(c => <option key={c} value={c}>{c}</option>)}
                             </select>
                             <select name="campo" defaultValue={maestroEdicion?.campo || ''} className="w-full p-4 bg-slate-50 rounded-2xl outline-none bg-white border border-slate-100">
                                 <option value="">-- Ninguno --</option>
@@ -209,11 +234,12 @@ function App() {
                 </div>
             )}
             
-            {modalAlumno && (/* ... Modal Alumno ... */
+            {modalAlumno && (
                 <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-md flex items-center justify-center z-50 p-4 animate-in fade-in">
                     <div className="bg-white w-full max-w-md rounded-[32px] p-8 shadow-2xl animate-in slide-in-from-bottom">
                         <div className="w-16 h-16 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mx-auto mb-4 text-3xl"><i className="fas fa-child"></i></div>
                         <h2 className="text-2xl font-black text-slate-800 mb-2 text-center">Registrar Niño</h2>
+                        <p className="text-center text-xs text-slate-400 mb-4">Se agregará al campo: <b>{datosUsuarioActual?.campo}</b></p>
                         <form onSubmit={handleGuardarAlumno} className="space-y-4">
                             <input type="text" name="nombre" required placeholder="Nombre Completo" className="w-full p-4 bg-slate-50 rounded-2xl outline-none focus:ring-2 focus:ring-emerald-500 text-lg" />
                             <input type="date" name="fechaNacimiento" required onChange={(e) => setEdadCalculada(calcularEdad(e.target.value))} className="w-full p-4 bg-slate-50 rounded-2xl outline-none focus:ring-2 focus:ring-emerald-500 text-slate-600 text-lg" />
@@ -232,7 +258,7 @@ function App() {
                 </div>
             )}
             
-            {idBorrar && (/* ... Modal Borrar ... */
+            {idBorrar && (
                 <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-[60] p-6 animate-in fade-in">
                     <div className="bg-white rounded-[32px] p-8 w-full max-w-xs text-center shadow-2xl animate-in zoom-in-95">
                         <h3 className="text-xl font-black text-slate-800 mb-4">¿Eliminar?</h3>
