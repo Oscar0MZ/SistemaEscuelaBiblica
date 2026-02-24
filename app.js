@@ -4,15 +4,17 @@ const { AuthService, MaestrosService, AlumnosService, LoginView, DashboardView }
 function App() {
     const [usuario, setUsuario] = useState(null);
     const [datosUsuarioActual, setDatosUsuarioActual] = useState(null);
-    const [maestros, setMaestros] = useState([]);
+    
+    // Listas de datos
+    const [maestros, setMaestros] = useState([]); // Lista para Admin
+    const [alumnos, setAlumnos] = useState([]);   // Lista para Maestros (NUEVO)
     
     // Modales
-    const [modalAbierto, setModalAbierto] = useState(false); // Admin
-    const [modalAlumno, setModalAlumno] = useState(false);   // Maestros
+    const [modalAbierto, setModalAbierto] = useState(false);
+    const [modalAlumno, setModalAlumno] = useState(false);
     
-    // Datos temporales para el formulario de alumno
+    // Datos temporales
     const [edadCalculada, setEdadCalculada] = useState(null);
-
     const [maestroEdicion, setMaestroEdicion] = useState(null);
     const [idBorrar, setIdBorrar] = useState(null);
 
@@ -27,6 +29,7 @@ function App() {
         if (sesion) setUsuario(sesion);
     }, []);
 
+    // 1. Cargar Maestros (Para el Admin o para validar logins)
     useEffect(() => {
         if (MaestrosService) {
             const unsubscribe = MaestrosService.suscribir(setMaestros);
@@ -34,7 +37,16 @@ function App() {
         }
     }, []);
 
-    // Login logic
+    // 2. NUEVO: Cargar Alumnos (Solo si soy Maestro/Auxiliar y ya cargué mis datos)
+    useEffect(() => {
+        if (usuario && usuario !== 'ADMIN' && datosUsuarioActual && AlumnosService) {
+            // Suscribirse a los niños de MI clase
+            const unsubscribe = AlumnosService.suscribirPorClase(datosUsuarioActual.clase, setAlumnos);
+            return () => unsubscribe();
+        }
+    }, [usuario, datosUsuarioActual]);
+
+    // Login Logic
     const handleLogin = async (rol, clave, nombre, campo) => {
         if (!AuthService.verificar(rol, clave)) {
             return { exito: false, mensaje: "Clave incorrecta." };
@@ -60,6 +72,7 @@ function App() {
                 const datos = doc.data();
                 if (datos.estado === 'Activo') {
                     setUsuario(rol);
+                    // IMPORTANTE: Guardamos los datos para saber qué clase cargar
                     setDatosUsuarioActual({ ...datos, id: doc.id });
                     AuthService.guardarSesion(rol);
                     return { exito: true };
@@ -72,7 +85,6 @@ function App() {
         }
     };
 
-    // Guardar Maestro (Admin)
     const handleGuardar = async (e) => {
         e.preventDefault();
         const formData = new FormData(e.target);
@@ -85,7 +97,6 @@ function App() {
         } catch (err) { alert("Error al guardar"); }
     };
 
-    // Calcular edad en tiempo real al cambiar la fecha
     const calcularEdad = (fecha) => {
         if (!fecha) return null;
         const hoy = new Date();
@@ -98,7 +109,6 @@ function App() {
         return edad;
     };
 
-    // Guardar Alumno (Maestros)
     const handleGuardarAlumno = async (e) => {
         e.preventDefault();
         const formData = new FormData(e.target);
@@ -120,7 +130,7 @@ function App() {
             });
             alert("¡Alumno registrado con éxito!");
             setModalAlumno(false);
-            setEdadCalculada(null); // Resetear
+            setEdadCalculada(null);
         } catch (error) {
             alert("Error al registrar alumno");
         }
@@ -143,6 +153,7 @@ function App() {
             <main className="flex-1 overflow-y-auto p-5 pb-24 bg-slate-50/50 scroll-smooth">
                 <DashboardView 
                     maestros={maestros}
+                    alumnos={alumnos} // <--- PASAMOS LA LISTA DE ALUMNOS AQUÍ
                     usuario={usuario}
                     onApprove={MaestrosService.aprobar}
                     onDelete={setIdBorrar}
@@ -152,33 +163,21 @@ function App() {
                 />
             </main>
 
-            {/* MODAL ADMIN (GESTIÓN MAESTROS) */}
+            {/* MODALES (Igual que antes) */}
             {modalAbierto && (
                 <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-md flex items-center justify-center z-50 p-4 animate-in fade-in">
                     <div className="bg-white w-full max-w-md rounded-[32px] p-8 shadow-2xl animate-in slide-in-from-bottom max-h-[90vh] overflow-y-auto">
                         <h2 className="text-2xl font-black text-slate-800 mb-6">{maestroEdicion ? 'Editar' : 'Inscribir'}</h2>
                         <form onSubmit={handleGuardar} className="space-y-4">
-                            <div className="space-y-1">
-                                <label className="text-xs font-bold text-slate-400 ml-3 uppercase">Nombre</label>
-                                <input type="text" name="nombre" required defaultValue={maestroEdicion?.nombre || ''} className="w-full p-4 bg-slate-50 rounded-2xl outline-none focus:ring-2 focus:ring-indigo-500" />
-                            </div>
-                            <div className="space-y-1">
-                                <label className="text-xs font-bold text-slate-400 ml-3 uppercase">Rol / Clase</label>
-                                <select name="clase" defaultValue={maestroEdicion?.clase || 'Párvulos'} className="w-full p-4 bg-slate-50 rounded-2xl outline-none bg-white border border-slate-100">
-                                    {['Cuna', 'Párvulos', 'Principiantes', 'Primarios', 'Intermedios', 'Jóvenes', 'Adultos', 'Logística', 'Dirección'].map(c => <option key={c} value={c}>{c}</option>)}
-                                </select>
-                            </div>
-                            <div className="space-y-1">
-                                <label className="text-xs font-bold text-slate-400 ml-3 uppercase">Campo</label>
-                                <select name="campo" defaultValue={maestroEdicion?.campo || ''} className="w-full p-4 bg-slate-50 rounded-2xl outline-none bg-white border border-slate-100">
-                                    <option value="">-- Ninguno --</option>
-                                    {camposDisponibles.map(c => <option key={c} value={c}>{c}</option>)}
-                                </select>
-                            </div>
-                            <div className="space-y-1">
-                                <label className="text-xs font-bold text-slate-400 ml-3 uppercase">WhatsApp</label>
-                                <input type="tel" name="telefono" defaultValue={maestroEdicion?.telefono || ''} className="w-full p-4 bg-slate-50 rounded-2xl outline-none" />
-                            </div>
+                            <input type="text" name="nombre" required defaultValue={maestroEdicion?.nombre || ''} className="w-full p-4 bg-slate-50 rounded-2xl outline-none" placeholder="Nombre" />
+                            <select name="clase" defaultValue={maestroEdicion?.clase || 'Párvulos'} className="w-full p-4 bg-slate-50 rounded-2xl outline-none bg-white border border-slate-100">
+                                {['Cuna', 'Párvulos', 'Principiantes', 'Primarios', 'Intermedios', 'Jóvenes', 'Adultos', 'Logística', 'Dirección'].map(c => <option key={c} value={c}>{c}</option>)}
+                            </select>
+                            <select name="campo" defaultValue={maestroEdicion?.campo || ''} className="w-full p-4 bg-slate-50 rounded-2xl outline-none bg-white border border-slate-100">
+                                <option value="">-- Ninguno --</option>
+                                {camposDisponibles.map(c => <option key={c} value={c}>{c}</option>)}
+                            </select>
+                            <input type="tel" name="telefono" defaultValue={maestroEdicion?.telefono || ''} className="w-full p-4 bg-slate-50 rounded-2xl outline-none" placeholder="WhatsApp" />
                             <div className="pt-4 flex flex-col space-y-3">
                                 <button type="submit" className="w-full py-4 bg-indigo-600 text-white font-black rounded-2xl shadow-xl">Guardar</button>
                                 <button type="button" onClick={() => setModalAbierto(false)} className="text-slate-400 font-bold text-xs uppercase">Cancelar</button>
@@ -188,52 +187,35 @@ function App() {
                 </div>
             )}
 
-            {/* MODAL ALUMNO (MAESTROS) */}
             {modalAlumno && (
                 <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-md flex items-center justify-center z-50 p-4 animate-in fade-in">
                     <div className="bg-white w-full max-w-md rounded-[32px] p-8 shadow-2xl animate-in slide-in-from-bottom">
-                        <div className="w-16 h-16 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mx-auto mb-4 text-3xl">
-                            <i className="fas fa-child"></i>
-                        </div>
+                        <div className="w-16 h-16 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mx-auto mb-4 text-3xl"><i className="fas fa-child"></i></div>
                         <h2 className="text-2xl font-black text-slate-800 mb-2 text-center">Registrar Niño</h2>
-                        <p className="text-slate-400 text-xs text-center mb-6">Ingresa los datos para la base de datos.</p>
-                        
                         <form onSubmit={handleGuardarAlumno} className="space-y-4">
-                            {/* NOMBRE */}
                             <div className="space-y-1">
                                 <label className="text-xs font-bold text-slate-400 ml-3 uppercase">Nombre Completo</label>
-                                <input type="text" name="nombre" required placeholder="Ej. Carlitos Pérez"
-                                    className="w-full p-4 bg-slate-50 rounded-2xl outline-none focus:ring-2 focus:ring-emerald-500 text-lg" />
+                                <input type="text" name="nombre" required placeholder="Ej. Carlitos Pérez" className="w-full p-4 bg-slate-50 rounded-2xl outline-none focus:ring-2 focus:ring-emerald-500 text-lg" />
                             </div>
-                            
-                            {/* FECHA DE NACIMIENTO */}
                             <div className="space-y-1">
                                 <label className="text-xs font-bold text-slate-400 ml-3 uppercase">Fecha de Nacimiento</label>
-                                <input type="date" name="fechaNacimiento" required 
-                                    onChange={(e) => setEdadCalculada(calcularEdad(e.target.value))}
-                                    className="w-full p-4 bg-slate-50 rounded-2xl outline-none focus:ring-2 focus:ring-emerald-500 text-slate-600 text-lg" />
+                                <input type="date" name="fechaNacimiento" required onChange={(e) => setEdadCalculada(calcularEdad(e.target.value))} className="w-full p-4 bg-slate-50 rounded-2xl outline-none focus:ring-2 focus:ring-emerald-500 text-slate-600 text-lg" />
                             </div>
-
-                            {/* EDAD CALCULADA (VISUAL) */}
                             {edadCalculada !== null && (
                                 <div className="bg-emerald-50 p-4 rounded-2xl border border-emerald-100 flex items-center justify-between animate-in zoom-in">
-                                    <span className="text-emerald-800 text-xs font-bold uppercase">Edad Calculada:</span>
+                                    <span className="text-emerald-800 text-xs font-bold uppercase">Edad:</span>
                                     <span className="text-2xl font-black text-emerald-600">{edadCalculada} Años</span>
                                 </div>
                             )}
-
                             <div className="pt-2 flex flex-col space-y-3">
-                                <button type="submit" className="w-full py-4 bg-emerald-500 text-white font-black rounded-2xl shadow-xl shadow-emerald-200 active:scale-95 transition-all">
-                                    Guardar Registro
-                                </button>
-                                <button type="button" onClick={() => setModalAlumno(false)} className="text-slate-400 font-bold text-xs uppercase tracking-widest hover:text-rose-500 transition-colors">Cancelar</button>
+                                <button type="submit" className="w-full py-4 bg-emerald-500 text-white font-black rounded-2xl shadow-xl shadow-emerald-200">Registrar Alumno</button>
+                                <button type="button" onClick={() => setModalAlumno(false)} className="text-slate-400 font-bold text-xs uppercase tracking-widest">Cancelar</button>
                             </div>
                         </form>
                     </div>
                 </div>
             )}
 
-            {/* MODAL BORRAR (ADMIN) */}
             {idBorrar && (
                 <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-[60] p-6 animate-in fade-in">
                     <div className="bg-white rounded-[32px] p-8 w-full max-w-xs text-center shadow-2xl animate-in zoom-in-95">
