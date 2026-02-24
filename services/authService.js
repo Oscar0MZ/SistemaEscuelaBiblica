@@ -1,29 +1,23 @@
-import { db } from "../config/firebase.js";
+// services/authService.js
+const CLAVES = {
+    ADMIN: "1234",
+    MAESTRO: "2222",
+    AUXILIAR: "3333",
+    LOGISTICA: "4444"
+};
 
-import {
-collection,
-query,
-where,
-getDocs
-} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+export const verificarCredenciales = (rol, clave) => {
+    return CLAVES[rol] === clave;
+};
 
+export const obtenerSesion = () => {
+    return localStorage.getItem('rol_dominical');
+};
 
-export const loginUsuario = async (rol, password) => {
+export const guardarSesion = (rol) => {
+    localStorage.setItem('rol_dominical', rol);
+};
 
-const q = query(
-collection(db, "usuarios"),
-where("rol", "==", rol),
-where("password", "==", password)
-);
-
-const snapshot = await getDocs(q);
-
-if (!snapshot.empty) {
-
-return snapshot.docs[0].data();
-
-}
-
-return null;
-
+export const limpiarSesion = () => {
+    localStorage.removeItem('rol_dominical');
 };
