@@ -1,178 +1,31 @@
 <!DOCTYPE html>
-<html lang="es">
+<html>
 <head>
-  <meta charset="UTF-8">
-  <title>Escuela Bíblica Dominical - Login</title>
-  <style>
-
-    body{
-      font-family: Arial;
-      background:#f4f6f8;
-      display:flex;
-      justify-content:center;
-      align-items:center;
-      height:100vh;
-    }
-
-    .container{
-      background:white;
-      padding:30px;
-      border-radius:10px;
-      width:350px;
-      box-shadow:0 0 10px rgba(0,0,0,0.2);
-    }
-
-    h2{
-      text-align:center;
-      margin-bottom:20px;
-    }
-
-    input, select, button{
-      width:100%;
-      padding:10px;
-      margin-top:10px;
-      border-radius:5px;
-      border:1px solid #ccc;
-      font-size:14px;
-    }
-
-    button{
-      background:#007bff;
-      color:white;
-      border:none;
-      cursor:pointer;
-      margin-top:15px;
-    }
-
-    button:hover{
-      background:#0056b3;
-    }
-
-    .hidden{
-      display:none;
-    }
-
-  </style>
+  <title>Sistema Escuela Bíblica</title>
 </head>
 <body>
 
-<div class="container">
+  <h2>Iniciar Sesión</h2>
 
-  <h2>Escuela Bíblica Dominical</h2>
+  <input type="text" id="loginNombre" placeholder="Nombre">
+  <br><br>
 
-  <!-- LOGIN -->
-  <div id="loginDiv">
+  <select id="loginRol">
+    <option value="">Seleccione Rol</option>
+    <option value="Administrador">Administrador</option>
+    <option value="Maestro">Maestro</option>
+    <option value="Auxiliar">Auxiliar</option>
+    <option value="Logistica">Logistica</option>
+  </select>
 
-    <input type="text" id="loginNombre" placeholder="Nombre completo">
+  <br><br>
 
-    <select id="loginRol" onchange="mostrarCampoLogin()">
-      <option value="">Seleccione rol</option>
-      <option value="Administrador">Administrador</option>
-      <option value="Maestro">Maestro</option>
-      <option value="Auxiliar">Auxiliar</option>
-      <option value="Logistica">Logística</option>
-    </select>
+  <input type="password" id="loginPassword" placeholder="Contraseña">
+  <br><br>
 
-    <select id="loginCampo" class="hidden">
-      <option value="">Seleccione campo</option>
-      <option value="La Isla">La Isla</option>
-      <option value="Las Delicias">Las Delicias</option>
-      <option value="El Amatal">El Amatal</option>
-      <option value="Buenos Aires">Buenos Aires</option>
-      <option value="Corozal 1">Corozal 1</option>
-      <option value="El Porvenir">El Porvenir</option>
-      <option value="El Cauloté">El Cauloté</option>
-      <option value="Corozal 2">Corozal 2</option>
-      <option value="Valle Encantado">Valle Encantado</option>
-      <option value="La Playa">La Playa</option>
-    </select>
+  <button onclick="login()">Ingresar</button>
 
-    <input type="password" id="loginPassword" placeholder="Contraseña">
-
-    <button onclick="login()">Ingresar</button>
-
-    <button onclick="mostrarRegistro()">Registrarse</button>
-
-  </div>
-
-  <!-- REGISTRO -->
-  <div id="registroDiv" class="hidden">
-
-    <input type="text" id="registroNombre" placeholder="Nombre completo">
-
-    <select id="registroRol" onchange="mostrarCampoRegistro()">
-      <option value="">Seleccione rol</option>
-      <option value="Administrador">Administrador</option>
-      <option value="Maestro">Maestro</option>
-      <option value="Auxiliar">Auxiliar</option>
-      <option value="Logistica">Logística</option>
-    </select>
-
-    <select id="registroCampo" class="hidden">
-      <option value="">Seleccione campo</option>
-      <option value="La Isla">La Isla</option>
-      <option value="Las Delicias">Las Delicias</option>
-      <option value="El Amatal">El Amatal</option>
-      <option value="Buenos Aires">Buenos Aires</option>
-      <option value="Corozal 1">Corozal 1</option>
-      <option value="El Porvenir">El Porvenir</option>
-      <option value="El Cauloté">El Cauloté</option>
-      <option value="Corozal 2">Corozal 2</option>
-      <option value="Valle Encantado">Valle Encantado</option>
-      <option value="La Playa">La Playa</option>
-    </select>
-
-    <input type="password" id="registroPassword" placeholder="Contraseña">
-
-    <button onclick="registrar()">Crear cuenta</button>
-
-    <button onclick="mostrarLogin()">Volver</button>
-
-  </div>
-
-</div>
-
-<script type="module" src="../app.js"></script>
-
-<script>
-
-function mostrarRegistro(){
-  document.getElementById("loginDiv").classList.add("hidden");
-  document.getElementById("registroDiv").classList.remove("hidden");
-}
-
-function mostrarLogin(){
-  document.getElementById("registroDiv").classList.add("hidden");
-  document.getElementById("loginDiv").classList.remove("hidden");
-}
-
-function mostrarCampoRegistro(){
-
-  const rol = document.getElementById("registroRol").value;
-  const campo = document.getElementById("registroCampo");
-
-  if(rol === "Maestro" || rol === "Auxiliar"){
-    campo.classList.remove("hidden");
-  }else{
-    campo.classList.add("hidden");
-  }
-
-}
-
-function mostrarCampoLogin(){
-
-  const rol = document.getElementById("loginRol").value;
-  const campo = document.getElementById("loginCampo");
-
-  if(rol === "Maestro" || rol === "Auxiliar"){
-    campo.classList.remove("hidden");
-  }else{
-    campo.classList.add("hidden");
-  }
-
-}
-
-</script>
+  <script type="module" src="app.js"></script>
 
 </body>
 </html>
