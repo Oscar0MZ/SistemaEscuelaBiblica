@@ -1,221 +1,150 @@
-// Firebase config
+// ===============================
+// 🔥 IMPORTS FIREBASE
+// ===============================
+
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
 
 import {
-getFirestore,
-collection,
-addDoc,
-getDocs,
-query,
-where,
-doc,
-updateDoc
-
+  getFirestore,
+  collection,
+  addDoc,
+  getDocs,
+  query,
+  where
 } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 
 
-// CONFIGURACIÓN FIREBASE
+// ===============================
+// 🔥 CONFIGURACIÓN FIREBASE
+// ===============================
+
 const firebaseConfig = {
-
-apiKey: "TU API KEY",
-authDomain: "TU AUTH DOMAIN",
-projectId: "TU PROJECT ID",
-storageBucket: "TU STORAGE",
-messagingSenderId: "TU SENDER ID",
-appId: "TU APP ID"
-
+  apiKey: "TU_API_KEY",
+  authDomain: "TU_AUTH_DOMAIN",
+  projectId: "TU_PROJECT_ID",
+  storageBucket: "TU_STORAGE_BUCKET",
+  messagingSenderId: "TU_SENDER_ID",
+  appId: "TU_APP_ID"
 };
 
 
-// iniciar firebase
+// Inicializar Firebase
 const app = initializeApp(firebaseConfig);
-
 const db = getFirestore(app);
 
 
-// REGISTRAR USUARIO
-window.registrar = async function(){
+// ===============================
+// 🔐 REGISTRAR USUARIO
+// ===============================
 
-const nombre = document.getElementById("registroNombre").value;
+window.registrar = async function () {
 
-const rol = document.getElementById("registroRol").value;
+  const nombre = document.getElementById("registroNombre").value.trim();
+  const rol = document.getElementById("registroRol").value;
+  const campo = document.getElementById("registroCampo").value;
+  const password = document.getElementById("registroPassword").value;
 
-const campo = document.getElementById("registroCampo").value;
+  if (!nombre || !rol || !password) {
+    alert("Complete todos los campos");
+    return;
+  }
 
-const password = document.getElementById("registroPassword").value;
+  try {
 
+    // Verificar si ya existe
+    const q = query(
+      collection(db, "usuarios"),
+      where("nombre", "==", nombre)
+    );
 
-if(nombre=="" || rol=="" || password==""){
+    const snapshot = await getDocs(q);
 
-alert("Complete todos los campos");
+    if (!snapshot.empty) {
+      alert("Este usuario ya existe");
+      return;
+    }
 
-return;
+    // Estado por defecto
+    let estado = "Pendiente";
 
-}
+    if (rol === "Administrador") {
+      estado = "Activo";
+    }
 
+    await addDoc(collection(db, "usuarios"), {
+      nombre: nombre,
+      rol: rol,
+      campo: campo || "",
+      password: password,
+      estado: estado,
+      fecha: new Date()
+    });
 
-// administrador se aprueba solo
-let aprobado = false;
+    alert("Cuenta creada correctamente");
 
-if(rol=="Administrador"){
+  } catch (error) {
 
-aprobado=true;
+    console.error(error);
+    alert("Error al registrar usuario");
 
-}
-
-
-await addDoc(collection(db,"usuarios"),{
-
-nombre,
-rol,
-campo,
-password,
-aprobado
-
-});
-
-
-alert("Usuario registrado, espere aprobación");
-
-mostrarLogin();
-
-};
-
-
-
-// LOGIN
-window.login = async function(){
-
-const nombre = document.getElementById("loginNombre").value;
-
-const rol = document.getElementById("loginRol").value;
-
-const campo = document.getElementById("loginCampo").value;
-
-const password = document.getElementById("loginPassword").value;
-
-
-const q = query(
-
-collection(db,"usuarios"),
-
-where("nombre","==",nombre),
-
-where("rol","==",rol),
-
-where("password","==",password)
-
-);
-
-
-const querySnapshot = await getDocs(q);
-
-
-if(querySnapshot.empty){
-
-alert("Usuario no existe");
-
-return;
-
-}
-
-
-querySnapshot.forEach((doc)=>{
-
-const data = doc.data();
-
-if(!data.aprobado){
-
-alert("Usuario pendiente de aprobación");
-
-return;
-
-}
-
-
-// guardar sesión
-localStorage.setItem("usuario",JSON.stringify({
-
-id:doc.id,
-nombre:data.nombre,
-rol:data.rol,
-campo:data.campo
-
-}));
-
-
-// redirigir
-window.location.href="/views/sistema.html";
-
-
-});
+  }
 
 };
 
 
+// ===============================
+// 🔑 LOGIN
+// ===============================
 
+window.login = async function () {
 
-// PANEL ADMIN APROBAR USUARIOS
-window.cargarPendientes = async function(){
+  const nombre = document.getElementById("loginNombre").value.trim();
+  const password = document.getElementById("loginPassword").value;
 
-const q = query(
+  try {
 
-collection(db,"usuarios"),
+    const q = query(
+      collection(db, "usuarios"),
+      where("nombre", "==", nombre),
+      where("password", "==", password)
+    );
 
-where("aprobado","==",false)
+    const snapshot = await getDocs(q);
 
-);
+    if (snapshot.empty) {
+      alert("Usuario o contraseña incorrectos");
+      return;
+    }
 
+    snapshot.forEach((doc) => {
 
-const querySnapshot = await getDocs(q);
+      const data = doc.data();
 
+      if (data.estado !== "Activo") {
+        alert("Usuario pendiente de aprobación");
+        return;
+      }
 
-const div = document.getElementById("pendientes");
+      // Guardar sesión
+      localStorage.setItem("usuarioActivo", JSON.stringify({
+        id: doc.id,
+        nombre: data.nombre,
+        rol: data.rol,
+        campo: data.campo
+      }));
 
+      alert("Bienvenido " + data.nombre);
 
-div.innerHTML="";
+      // Redirigir al sistema
+      window.location.href = "views/sistema.html";
 
+    });
 
-querySnapshot.forEach((documento)=>{
+  } catch (error) {
 
-const data = documento.data();
+    console.error(error);
+    alert("Error al iniciar sesión");
 
-div.innerHTML += `
-
-<div>
-
-${data.nombre} - ${data.rol}
-
-<button onclick="aprobar('${documento.id}')">
-
-Aprobar
-
-</button>
-
-</div>
-
-`;
-
-});
-
-};
-
-
-
-
-// aprobar usuario
-window.aprobar = async function(id){
-
-const ref = doc(db,"usuarios",id);
-
-await updateDoc(ref,{
-
-aprobado:true
-
-});
-
-alert("Usuario aprobado");
-
-cargarPendientes();
+  }
 
 };
