@@ -1,43 +1,16 @@
-// ===============================
-// LOGIN SIMPLE CON ROLES FIJOS
-// ===============================
+import { renderLogin } from "./views/loginView.js";
+import { renderDashboard } from "./views/dashboardView.js";
 
-window.login = function () {
+const app = document.getElementById("app");
 
-  const nombre = document.getElementById("loginNombre").value.trim();
-  const rol = document.getElementById("loginRol").value;
-  const password = document.getElementById("loginPassword").value;
+const usuario = localStorage.getItem("usuario");
 
-  if (!nombre || !rol || !password) {
-    alert("Complete todos los campos");
-    return;
-  }
+if (!usuario) {
 
-  // Credenciales fijas
-  const usuarios = [
-    { nombre: "admin", rol: "Administrador", password: "admin123" },
-    { nombre: "maestro", rol: "Maestro", password: "maestro123" },
-    { nombre: "auxiliar", rol: "Auxiliar", password: "auxiliar123" },
-    { nombre: "logistica", rol: "Logistica", password: "logistica123" }
-  ];
+app.innerHTML = renderLogin();
 
-  const usuarioValido = usuarios.find(u =>
-    u.nombre === nombre &&
-    u.rol === rol &&
-    u.password === password
-  );
+} else {
 
-  if (!usuarioValido) {
-    alert("Credenciales incorrectas");
-    return;
-  }
+app.innerHTML = renderDashboard();
 
-  // Guardar sesión
-  localStorage.setItem("usuarioActivo", JSON.stringify(usuarioValido));
-
-  alert("Bienvenido " + usuarioValido.rol);
-
-  // Redirección
-  window.location.href = "views/sistema.html";
-
-};
+}
