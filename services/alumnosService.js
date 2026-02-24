@@ -1,7 +1,7 @@
 // services/alumnosService.js
 
 window.AlumnosService = {
-    // 1. Guardar Alumno (Registro)
+    // 1. Guardar Alumno
     registrar: async (datosAlumno) => {
         try {
             await window.db.collection('alumnos').add({
@@ -15,35 +15,38 @@ window.AlumnosService = {
         }
     },
 
-    // 2. Escuchar lista de alumnos por clase
-    suscribirPorClase: (clase, callback) => {
+    // 2. CORREGIDO: Escuchar lista filtrando SOLO POR CAMPO
+    // Esto asegura que cada lugar sea independiente
+    suscribirPorCampo: (campo, callback) => {
         return window.db.collection('alumnos')
-            .where('clase', '==', clase)
+            .where('campo', '==', campo) // <--- ÚNICO FILTRO
             .onSnapshot((snapshot) => {
                 const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                // Ordenar alfabéticamente
                 data.sort((a, b) => a.nombre.localeCompare(b.nombre));
                 callback(data);
             });
     },
 
-    // 3. NUEVO: Guardar Asistencia
+    // 3. CORREGIDO: Asistencia por CAMPO (General del lugar)
     guardarAsistencia: async (datos) => {
-        // Creamos un ID único: FECHA + CLASE (Ej: "2023-10-27_Párvulos")
-        // Así evitamos duplicados y podemos editarla si nos equivocamos.
-        const idDoc = `${datos.fecha}_${datos.clase}`;
+        // ID Único: FECHA + CAMPO (Ej: "2023-10-27_LaIsla")
+        // Quitamos espacios del nombre del campo para el ID
+        const idDoc = `${datos.fecha}_${datos.campo.replace(/\s+/g, '')}`; 
+        
         await window.db.collection('asistencias').doc(idDoc).set(datos);
     },
 
-    // 4. NUEVO: Escuchar Asistencia de HOY
-    suscribirAsistenciaHoy: (clase, callback) => {
-        const hoy = new Date().toLocaleDateString('en-CA'); // Formato YYYY-MM-DD
-        const idDoc = `${hoy}_${clase}`;
+    // 4. CORREGIDO: Escuchar Asistencia de HOY por CAMPO
+    suscribirAsistenciaHoy: (campo, callback) => {
+        const hoy = new Date().toLocaleDateString('en-CA');
+        const idDoc = `${hoy}_${campo.replace(/\s+/g, '')}`;
         
         return window.db.collection('asistencias').doc(idDoc).onSnapshot((doc) => {
             if (doc.exists) {
                 callback(doc.data());
             } else {
-                callback(null); // No se ha tomado lista hoy
+                callback(null);
             }
         });
     }
