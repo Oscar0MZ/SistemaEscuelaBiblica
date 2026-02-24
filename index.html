@@ -1,747 +1,259 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Gestión Escuela Dominical - Control</title>
-    
-    <meta name="theme-color" content="#4f46e5">
-    <link rel="icon" href="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA1MTIgNTEyIj48cmVjdCB3aWR0aD0iNTEyIiBoZWlnaHQ9IjUxMiIgcng9IjEwMCIgZmlsbD0iIzRmNDZlNSIvPjx0ZXh0IHg9IjUwJSIgeT0iNTAlIiBkb21pbmFudC1iYXNlbGluZT0ibWlkZGxlIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBmb250LXNpemU9IjI1NiI+8J+SmDwvdGV4dD48L3N2Zz4=">
 
-    <script src="https://cdn.tailwindcss.com"></script>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
 
-    <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
-    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
-    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<title>Sistema Escuela Bíblica Dominical</title>
 
-    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
-    
-    <script type="text/javascript" src="https://cdn.jsdelivr.net/npm/@emailjs/browser@3/dist/email.min.js"></script>
+<style>
+
+body{
+font-family: Arial;
+background:#f4f6f8;
+margin:0;
+padding:0;
+}
+
+.container{
+max-width:500px;
+margin:auto;
+margin-top:30px;
+background:white;
+padding:20px;
+border-radius:10px;
+box-shadow:0px 0px 10px rgba(0,0,0,0.1);
+}
+
+input, select, button{
+
+width:100%;
+padding:10px;
+margin-top:10px;
+border-radius:5px;
+border:1px solid #ccc;
+
+}
+
+button{
+background:#2c7be5;
+color:white;
+border:none;
+cursor:pointer;
+}
+
+button:hover{
+background:#1a5bb8;
+}
+
+.hidden{
+display:none;
+}
+
+.menu button{
+margin-top:5px;
+}
+
+</style>
+
 </head>
-<body class="bg-slate-50 text-slate-800 antialiased h-screen overflow-hidden">
-    <div id="root" class="h-full"></div>
+<body>
 
-    <script type="text/babel">
-        const { useState, useEffect } = React;
 
-        // Configuración de EmailJS
-        emailjs.init("7l-eHxFpu6r0bbHUV"); 
+<!-- LOGIN -->
 
-        const firebaseConfig = {
-            apiKey: "AIzaSyBHzlxpJNejD9_dsx6atUtfVo15ORsfGzc",
-            authDomain: "escuela-dominical-bcc99.firebaseapp.com",
-            projectId: "escuela-dominical-bcc99",
-            storageBucket: "escuela-dominical-bcc99.firebasestorage.app",
-            messagingSenderId: "1039366920419",
-            appId: "1:1039366920419:web:09f7c09e2370d3718b8dd6",
-            measurementId: "G-0KCFGX6CMD"
-        };
+<div class="container" id="loginContainer">
 
-        if (!firebase.apps.length) {
-            firebase.initializeApp(firebaseConfig);
-        }
-        const db = firebase.firestore();
+<h2>Escuela Bíblica Dominical</h2>
 
-        const CLAVES = {
-            ADMIN: "1234",
-            MAESTRO: "2222",
-            AUXILIAR: "3333",
-            LOGISTICA: "4444"
-        };
+<input type="email" id="email" placeholder="Correo">
 
-        const CAMPOS = [
-            "La Isla", 
-            "Las Delicias", 
-            "El Amatal", 
-            "El Manguito", 
-            "Buenos Aires", 
-            "Corozal Número 1", 
-            "El Porvenir", 
-            "El Coulote", 
-            "Corozal Número 2", 
-            "Vaya encantado", 
-            "La Playa"
-        ];
+<input type="password" id="password" placeholder="Contraseña">
 
-        function App() {
-            const [usuario, setUsuario] = useState(null);
-            const [maestros, setMaestros] = useState([]);
-            const [cargando, setCargando] = useState(true);
-            const [tabActiva, setTabActiva] = useState('inicio');
-            const [busqueda, setBusqueda] = useState('');
-            
-            const [modalFormularioAbierto, setModalFormularioAbierto] = useState(false);
-            const [maestroEnEdicion, setMaestroEnEdicion] = useState(null);
-            const [idMaestroAEliminar, setIdMaestroAEliminar] = useState(null);
-            
-            // ESTADOS PARA ASISTENCIA Y MENÚ
-            const [menuAbierto, setMenuAbierto] = useState(false);
-            const [ninos, setNinos] = useState([]);
-            const [fechaAsistencia, setFechaAsistencia] = useState(new Date().toISOString().split('T')[0]);
-            const [registrosAsistencia, setRegistrosAsistencia] = useState({});
-            const [modalNinoAbierto, setModalNinoAbierto] = useState(false);
-            const [nuevoNinoNombre, setNuevoNinoNombre] = useState('');
-            
-            // Estados para el Login
-            const [rolLogin, setRolLogin] = useState('');
-            const [claveLogin, setClaveLogin] = useState('');
-            const [nombreLogin, setNombreLogin] = useState('');
-            const [campoLogin, setCampoLogin] = useState('');
-            const [mensajeLogin, setMensajeLogin] = useState({ texto: '', tipo: '' });
+<select id="rol">
+<option value="">Seleccione rol</option>
+<option value="maestro">Maestro</option>
+<option value="auxiliar">Auxiliar</option>
+<option value="logistica">Logística</option>
+</select>
 
-            // Recuperar sesión
-            useEffect(() => {
-                const sesionGuardada = localStorage.getItem('usuario_dominical_v2');
-                if (sesionGuardada) {
-                    try {
-                        setUsuario(JSON.parse(sesionGuardada));
-                    } catch (e) {
-                        localStorage.removeItem('usuario_dominical_v2');
-                    }
-                }
-            }, []);
+<input type="text" id="nombreCompleto" placeholder="Nombre completo">
 
-            // Escuchar cambios en Firestore
-            useEffect(() => {
-                const unsubscribe = db.collection('maestros').onSnapshot((snapshot) => {
-                    const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-                    data.sort((a, b) => a.nombre.localeCompare(b.nombre));
-                    setMaestros(data);
-                    setCargando(false);
-                }, (error) => {
-                    console.error("Error Firestore:", error);
-                });
-                return () => unsubscribe();
-            }, []);
+<select id="campo">
+<option value="">Seleccione campo</option>
+<option>La Isla</option>
+<option>Las Delicias</option>
+<option>El Amatal</option>
+<option>Buenos Aires</option>
+<option>Corozal 1</option>
+<option>El Porvenir</option>
+<option>El Cauloté</option>
+<option>Corozal 2</option>
+<option>Valle Encantado</option>
+<option>La Playa</option>
+</select>
 
-            // Escuchar la lista de niños del campo del maestro
-            useEffect(() => {
-                if (usuario && tabActiva === 'asistencia' && usuario.campo) {
-                    const unsubscribe = db.collection('ninos')
-                        .where('campo', '==', usuario.campo)
-                        .where('clase', '==', usuario.clase || 'MAESTRO')
-                        .onSnapshot(snapshot => {
-                            const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-                            data.sort((a,b) => a.nombre.localeCompare(b.nombre));
-                            setNinos(data);
-                        });
-                    return () => unsubscribe();
-                }
-            }, [usuario, tabActiva]);
+<button id="btnLogin">Entrar</button>
 
-            // Escuchar las asistencias de la fecha seleccionada
-            useEffect(() => {
-                if (usuario && tabActiva === 'asistencia' && fechaAsistencia && usuario.campo) {
-                    const docId = `${fechaAsistencia}-${usuario.campo}-${usuario.clase}`.replace(/[^a-zA-Z0-9-]/g, '');
-                    const unsubscribe = db.collection('asistencias').doc(docId)
-                        .onSnapshot(doc => {
-                            if (doc.exists) {
-                                setRegistrosAsistencia(doc.data().registros || {});
-                            } else {
-                                setRegistrosAsistencia({});
-                            }
-                        });
-                    return () => unsubscribe();
-                }
-            }, [usuario, tabActiva, fechaAsistencia]);
+<button id="btnRegistro">Registrarse</button>
 
-            const enviarNotificacionCorreo = (datos) => {
-                const SERVICE_ID = "service_475d2ya"; 
-                const TEMPLATE_ID = "template_516xc7k";
+</div>
 
-                if (SERVICE_ID && TEMPLATE_ID) {
-                    const rolYCampo = datos.campo ? `${datos.clase || datos.rol} en ${datos.campo}` : (datos.clase || datos.rol);
-                    
-                    emailjs.send(SERVICE_ID, TEMPLATE_ID, {
-                        to_name: "Director",
-                        from_name: datos.registradoPor || datos.nombre || "Sistema",
-                        new_member: datos.nombre,
-                        role: rolYCampo
-                    }).then(() => {
-                        console.log("Notificación enviada con éxito");
-                    }).catch((err) => {
-                        console.error("Error EmailJS:", err);
-                    });
-                }
-            };
 
-            const manejarLogin = async (e) => {
-                e.preventDefault();
-                setMensajeLogin({ texto: '', tipo: '' });
+<!-- MENU PRINCIPAL -->
 
-                if (claveLogin !== CLAVES[rolLogin]) {
-                    setMensajeLogin({ texto: 'Clave incorrecta.', tipo: 'error' });
-                    return;
-                }
+<div class="container hidden" id="menuContainer">
 
-                if (rolLogin === 'ADMIN') {
-                    const adminUser = { rol: 'ADMIN', nombre: 'Director', estado: 'Activo' };
-                    setUsuario(adminUser);
-                    localStorage.setItem('usuario_dominical_v2', JSON.stringify(adminUser));
-                    return;
-                }
+<h2>Panel Principal</h2>
 
-                // Lógica de registro/espera para Maestros, Auxiliares y Logística
-                try {
-                    const snapshot = await db.collection('maestros')
-                        .where('nombre', '==', nombreLogin)
-                        .where('campo', '==', campoLogin)
-                        .where('rol', '==', rolLogin)
-                        .get();
+<div id="resumen">
 
-                    if (snapshot.empty) {
-                        // Nuevo registro, se va a estado Pendiente
-                        const nuevoUsuario = {
-                            nombre: nombreLogin,
-                            campo: campoLogin,
-                            rol: rolLogin,
-                            clase: rolLogin, // Para compatibilidad con las listas
-                            estado: 'Pendiente',
-                            createdAt: Date.now(),
-                            registradoPor: nombreLogin
-                        };
-                        await db.collection('maestros').add(nuevoUsuario);
-                        enviarNotificacionCorreo(nuevoUsuario);
-                        
-                        setMensajeLogin({ texto: 'Inscripción enviada. Esperando aprobación del Administrador.', tipo: 'info' });
-                        setClaveLogin(''); 
-                    } else {
-                        // El usuario ya existe, comprobamos si ya está aprobado
-                        const userData = snapshot.docs[0].data();
-                        if (userData.estado === 'Activo') {
-                            const userObj = { id: snapshot.docs[0].id, ...userData };
-                            setUsuario(userObj);
-                            localStorage.setItem('usuario_dominical_v2', JSON.stringify(userObj));
-                        } else {
-                            setMensajeLogin({ texto: 'Tu acceso aún está esperando la aprobación del Administrador.', tipo: 'error' });
-                        }
-                    }
-                } catch (error) {
-                    console.error("Error en login:", error);
-                    setMensajeLogin({ texto: 'Error de conexión. Intente nuevamente.', tipo: 'error' });
-                }
-            };
+<h3>Resumen de asistencia</h3>
 
-            const cerrarSesion = () => {
-                setUsuario(null);
-                localStorage.removeItem('usuario_dominical_v2');
-                setTabActiva('inicio');
-                setRolLogin('');
-                setClaveLogin('');
-                setNombreLogin('');
-                setCampoLogin('');
-                setMensajeLogin({ texto: '', tipo: '' });
-            };
+<p>Presentes: <span id="presentes">0</span></p>
 
-            const guardarMaestro = async (datosMaestro) => {
-                try {
-                    if (maestroEnEdicion) {
-                        await db.collection('maestros').doc(maestroEnEdicion.id).update(datosMaestro);
-                    } else {
-                        const esAdminLocal = usuario?.rol === 'ADMIN';
-                        const nuevoRegistro = { 
-                            ...datosMaestro, 
-                            rol: datosMaestro.clase,
-                            estado: esAdminLocal ? 'Activo' : 'Pendiente',
-                            createdAt: Date.now(),
-                            registradoPor: usuario?.nombre || 'Desconocido'
-                        };
-                        await db.collection('maestros').add(nuevoRegistro);
-                        
-                        if (!esAdminLocal) {
-                            enviarNotificacionCorreo(nuevoRegistro);
-                        }
-                    }
-                    setModalFormularioAbierto(false);
-                    setMaestroEnEdicion(null);
-                } catch (error) {
-                    console.error("Error al guardar:", error);
-                }
-            };
+<p>Ausentes: <span id="ausentes">0</span></p>
 
-            const aprobarMaestro = async (id) => {
-                await db.collection('maestros').doc(id).update({ estado: 'Activo' });
-            };
+<p>Permiso: <span id="permiso">0</span></p>
 
-            const marcarAsistencia = (ninoId, estado) => {
-                const nuevosRegistros = { ...registrosAsistencia, [ninoId]: estado };
-                setRegistrosAsistencia(nuevosRegistros); 
-                
-                const docId = `${fechaAsistencia}-${usuario.campo}-${usuario.clase}`.replace(/[^a-zA-Z0-9-]/g, '');
-                db.collection('asistencias').doc(docId).set({
-                    fecha: fechaAsistencia,
-                    campo: usuario.campo,
-                    clase: usuario.clase || 'MAESTRO',
-                    registros: nuevosRegistros,
-                    actualizadoPor: usuario.nombre,
-                    timestamp: Date.now()
-                }, { merge: true });
-            };
+</div>
 
-            const guardarNino = async (e) => {
-                e.preventDefault();
-                if(!nuevoNinoNombre.trim()) return;
-                
-                await db.collection('ninos').add({
-                    nombre: nuevoNinoNombre,
-                    campo: usuario.campo,
-                    clase: usuario.clase || 'MAESTRO',
-                    creadoPor: usuario.nombre,
-                    timestamp: Date.now()
-                });
-                
-                setNuevoNinoNombre('');
-                setModalNinoAbierto(false);
-            };
 
-            const esAdmin = usuario !== null && usuario.rol === 'ADMIN';
-            
-            const maestrosVisibles = maestros.filter(m => {
-                const coincideBusqueda = m.nombre.toLowerCase().includes(busqueda.toLowerCase());
-                if (esAdmin) return coincideBusqueda; 
-                return coincideBusqueda && m.estado === 'Activo'; 
-            });
+<div class="menu">
 
-            const pendientes = maestros.filter(m => m.estado === 'Pendiente');
+<button onclick="mostrarAgregarAlumno()">
 
-            if (!usuario) {
-                return (
-                    <div className="flex items-center justify-center h-full bg-indigo-600 p-6">
-                        <div className="bg-white rounded-[40px] p-8 w-full max-w-sm shadow-2xl overflow-y-auto max-h-[90vh]">
-                            <div className="text-center mb-6">
-                                <div className="bg-indigo-100 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4 text-indigo-600">
-                                    <i className="fas fa-church text-2xl"></i>
-                                </div>
-                                <h2 className="text-xl font-bold text-slate-800">Control Escolar</h2>
-                                <p className="text-slate-500 text-xs mt-1">Ingresa tus credenciales</p>
-                            </div>
-                            
-                            <form onSubmit={manejarLogin} className="space-y-4">
-                                <select 
-                                    required
-                                    className="w-full p-4 bg-slate-50 border border-slate-100 rounded-2xl focus:ring-2 focus:ring-indigo-500 outline-none font-medium appearance-none"
-                                    value={rolLogin}
-                                    onChange={(e) => {
-                                        const nuevoRol = e.target.value;
-                                        setRolLogin(nuevoRol);
-                                        if (nuevoRol === 'LOGISTICA' || nuevoRol === 'ADMIN') {
-                                            setCampoLogin('');
-                                        }
-                                    }}
-                                >
-                                    <option value="">¿Quién eres?</option>
-                                    <option value="ADMIN">Director (Admin)</option>
-                                    <option value="MAESTRO">Maestro</option>
-                                    <option value="AUXILIAR">Auxiliar</option>
-                                    <option value="LOGISTICA">Logística</option>
-                                </select>
+Agregar Alumno
 
-                                {rolLogin !== 'ADMIN' && rolLogin !== '' && (
-                                    <>
-                                        <input 
-                                            type="text"
-                                            required
-                                            placeholder="Nombre Completo"
-                                            className="w-full p-4 bg-slate-50 border border-slate-100 rounded-2xl focus:ring-2 focus:ring-indigo-500 outline-none font-medium text-center"
-                                            value={nombreLogin}
-                                            onChange={(e) => setNombreLogin(e.target.value)}
-                                        />
-                                        
-                                        {(rolLogin === 'MAESTRO' || rolLogin === 'AUXILIAR') && (
-                                            <select 
-                                                required
-                                                className="w-full p-4 bg-slate-50 border border-slate-100 rounded-2xl focus:ring-2 focus:ring-indigo-500 outline-none font-medium appearance-none text-center"
-                                                value={campoLogin}
-                                                onChange={(e) => setCampoLogin(e.target.value)}
-                                            >
-                                                <option value="">Seleccione su campo...</option>
-                                                {CAMPOS.map(c => <option key={c} value={c}>{c}</option>)}
-                                            </select>
-                                        )}
-                                    </>
-                                )}
+</button>
 
-                                <input 
-                                    type="password"
-                                    required
-                                    placeholder="Clave numérica"
-                                    className="w-full p-4 bg-slate-50 border border-slate-100 rounded-2xl focus:ring-2 focus:ring-indigo-500 outline-none text-center text-xl tracking-[0.5em]"
-                                    value={claveLogin}
-                                    onChange={(e) => setClaveLogin(e.target.value)}
-                                />
-                                
-                                {mensajeLogin.texto && (
-                                    <p className={`text-xs text-center font-bold px-2 ${mensajeLogin.tipo === 'error' ? 'text-rose-500' : 'text-emerald-600'}`}>
-                                        {mensajeLogin.texto}
-                                    </p>
-                                )}
-                                
-                                <button type="submit" className="w-full bg-indigo-600 text-white py-4 rounded-2xl font-bold shadow-lg active:scale-95 transition-all">
-                                    Ingresar al Sistema
-                                </button>
-                            </form>
-                        </div>
-                    </div>
-                );
-            }
 
-            return (
-                <div className="flex flex-col h-screen max-w-md mx-auto bg-white shadow-2xl">
-                    <header className="bg-white p-5 flex justify-between items-center border-b border-slate-100">
-                        <div className="flex items-center space-x-3">
-                            <button onClick={() => setMenuAbierto(true)} className="w-10 h-10 bg-slate-50 rounded-xl text-slate-600 flex items-center justify-center hover:bg-indigo-50 hover:text-indigo-600 transition-colors">
-                                <i className="fas fa-bars"></i>
-                            </button>
-                            <div>
-                                <p className="text-[10px] font-black uppercase tracking-widest text-indigo-500">Gestión Ministerial</p>
-                                <h1 className="text-xl font-black text-slate-800">
-                                    {esAdmin ? 'Panel Director' : `Hola, ${usuario.nombre.split(' ')[0]}`}
-                                </h1>
-                            </div>
-                        </div>
-                        <button onClick={cerrarSesion} className="w-10 h-10 bg-slate-50 rounded-xl text-slate-400 flex items-center justify-center active:bg-rose-50 active:text-rose-500 transition-colors">
-                            <i className="fas fa-sign-out-alt"></i>
-                        </button>
-                    </header>
+<button onclick="mostrarAsistencia()">
 
-                    <main className="flex-1 overflow-y-auto p-5 pb-24 bg-slate-50/50">
-                        {/* PESTAÑA INICIO */}
-                        {tabActiva === 'inicio' && (
-                            <div className="space-y-4 animate-in fade-in duration-300">
-                                <div className="bg-indigo-600 p-6 rounded-[32px] text-white shadow-xl shadow-indigo-200">
-                                    <h2 className="text-2xl font-black mb-1">Bendiciones,</h2>
-                                    <p className="text-indigo-100">{usuario.nombre}</p>
-                                </div>
-                                <div className="grid grid-cols-2 gap-4">
-                                    <div className="bg-white p-5 rounded-3xl shadow-sm border border-slate-100 flex flex-col items-center justify-center text-center">
-                                        <div className="w-12 h-12 bg-indigo-50 text-indigo-500 rounded-full flex items-center justify-center mb-3 text-xl">
-                                            <i className="fas fa-users"></i>
-                                        </div>
-                                        <span className="text-2xl font-black text-slate-800">{maestros.filter(m => m.estado === 'Activo').length}</span>
-                                        <span className="text-[10px] font-bold text-slate-400 uppercase">Miembros Activos</span>
-                                    </div>
-                                    <div className="bg-white p-5 rounded-3xl shadow-sm border border-slate-100 flex flex-col items-center justify-center text-center">
-                                        <div className="w-12 h-12 bg-emerald-50 text-emerald-500 rounded-full flex items-center justify-center mb-3 text-xl">
-                                            <i className="fas fa-church"></i>
-                                        </div>
-                                        <span className="text-2xl font-black text-slate-800">{CAMPOS.length}</span>
-                                        <span className="text-[10px] font-bold text-slate-400 uppercase">Campos</span>
-                                    </div>
-                                </div>
-                            </div>
-                        )}
+Pasar Asistencia
 
-                        {/* PESTAÑA DIRECTORIO (LISTA) */}
-                        {tabActiva === 'lista' && (
-                            <div className="space-y-4 animate-in fade-in duration-300">
-                                <div className="flex justify-between items-center mb-2">
-                                    <h2 className="text-xl font-black text-slate-800">Directorio Escolar</h2>
-                                    {esAdmin && (
-                                        <button onClick={() => { setMaestroEnEdicion(null); setModalFormularioAbierto(true); }} className="bg-indigo-600 text-white w-10 h-10 rounded-full flex items-center justify-center shadow-lg active:scale-95 transition-transform">
-                                            <i className="fas fa-plus"></i>
-                                        </button>
-                                    )}
-                                </div>
+</button>
 
-                                <div className="relative">
-                                    <i className="fas fa-search absolute left-4 top-1/2 -translate-y-1/2 text-slate-400"></i>
-                                    <input 
-                                        type="text" 
-                                        placeholder="Buscar por nombre..." 
-                                        value={busqueda}
-                                        onChange={(e) => setBusqueda(e.target.value)}
-                                        className="w-full pl-12 pr-4 py-4 bg-white border border-slate-100 rounded-2xl shadow-sm focus:ring-2 focus:ring-indigo-500 outline-none text-sm font-medium"
-                                    />
-                                </div>
 
-                                {esAdmin && pendientes.length > 0 && (
-                                    <div className="bg-rose-50 border border-rose-100 p-4 rounded-2xl mb-4">
-                                        <h3 className="text-rose-600 font-bold text-sm mb-3 flex items-center">
-                                            <i className="fas fa-exclamation-circle mr-2"></i> Solicitudes Pendientes ({pendientes.length})
-                                        </h3>
-                                        <div className="space-y-3">
-                                            {pendientes.map(p => (
-                                                <div key={p.id} className="bg-white p-3 rounded-xl shadow-sm flex items-center justify-between">
-                                                    <div>
-                                                        <p className="font-bold text-sm text-slate-800">{p.nombre}</p>
-                                                        <p className="text-xs text-slate-500">{p.clase} • {p.campo}</p>
-                                                    </div>
-                                                    <div className="flex gap-2">
-                                                        <button onClick={() => aprobarMaestro(p.id)} className="w-8 h-8 bg-emerald-100 text-emerald-600 rounded-lg flex items-center justify-center active:scale-95"><i className="fas fa-check"></i></button>
-                                                        <button onClick={() => setIdMaestroAEliminar(p.id)} className="w-8 h-8 bg-rose-100 text-rose-600 rounded-lg flex items-center justify-center active:scale-95"><i className="fas fa-times"></i></button>
-                                                    </div>
-                                                </div>
-                                            ))}
-                                        </div>
-                                    </div>
-                                )}
+<button onclick="cerrarSesion()">
 
-                                <div className="space-y-3">
-                                    {maestrosVisibles.map(m => (
-                                        <div key={m.id} className="bg-white p-4 rounded-[24px] shadow-sm border border-slate-100 flex items-center justify-between group">
-                                            <div className="flex items-center space-x-4">
-                                                <div className="w-12 h-12 rounded-full bg-indigo-50 text-indigo-500 flex items-center justify-center font-black text-lg">
-                                                    {m.nombre.charAt(0)}
-                                                </div>
-                                                <div>
-                                                    <h3 className="font-bold text-slate-800 text-sm">{m.nombre}</h3>
-                                                    <p className="text-xs text-slate-500 font-medium">{m.clase} <span className="opacity-50">•</span> {m.campo || 'General'}</p>
-                                                </div>
-                                            </div>
-                                            {esAdmin && (
-                                                <div className="flex gap-2 transition-opacity">
-                                                    <button onClick={() => { setMaestroEnEdicion(m); setModalFormularioAbierto(true); }} className="w-8 h-8 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg flex items-center justify-center transition-colors"><i className="fas fa-edit"></i></button>
-                                                    <button onClick={() => setIdMaestroAEliminar(m.id)} className="w-8 h-8 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg flex items-center justify-center transition-colors"><i className="fas fa-trash"></i></button>
-                                                </div>
-                                            )}
-                                        </div>
-                                    ))}
-                                    
-                                    {maestrosVisibles.length === 0 && (
-                                        <div className="text-center py-20 text-slate-300">
-                                            <i className="fas fa-user-slash text-4xl mb-4"></i>
-                                            <p className="text-sm font-medium">No se encontraron resultados</p>
-                                        </div>
-                                    )}
-                                </div>
-                            </div>
-                        )}
+Cerrar Sesión
 
-                        {/* PESTAÑA ASISTENCIA */}
-                        {tabActiva === 'asistencia' && (
-                            <div className="space-y-4 animate-in fade-in duration-300">
-                                <div className="bg-indigo-600 p-5 rounded-[32px] text-white shadow-xl shadow-indigo-100 flex flex-col items-center text-center">
-                                    <p className="text-[10px] font-bold uppercase opacity-80 mb-1">Control de Asistencia</p>
-                                    <h2 className="text-xl font-black">{usuario.campo}</h2>
-                                    <p className="text-xs opacity-80 mt-1"><i className="fas fa-layer-group mr-1"></i> {usuario.clase}</p>
-                                </div>
+</button>
 
-                                <div className="bg-white p-4 rounded-3xl shadow-sm border border-slate-100 flex flex-col space-y-4">
-                                    <div className="flex justify-between items-center">
-                                        <label className="text-xs font-bold text-slate-500 uppercase">Fecha de clase</label>
-                                        <input 
-                                            type="date" 
-                                            value={fechaAsistencia}
-                                            onChange={(e) => setFechaAsistencia(e.target.value)}
-                                            className="bg-slate-50 border border-slate-100 rounded-xl px-3 py-2 text-sm font-bold text-slate-700 outline-none focus:ring-2 focus:ring-indigo-500"
-                                        />
-                                    </div>
-                                    <button 
-                                        onClick={() => setModalNinoAbierto(true)}
-                                        className="w-full py-3 bg-indigo-50 text-indigo-600 font-bold rounded-xl text-sm active:bg-indigo-100 transition-colors flex justify-center items-center"
-                                    >
-                                        <i className="fas fa-user-plus mr-2"></i> Agregar Nuevo Niño(a)
-                                    </button>
-                                </div>
+</div>
 
-                                <div className="space-y-3">
-                                    <h3 className="font-bold text-slate-700 text-sm px-2 pt-2">Lista de Estudiantes ({ninos.length})</h3>
-                                    
-                                    {ninos.map(nino => {
-                                        const estado = registrosAsistencia[nino.id];
-                                        return (
-                                            <div key={nino.id} className="bg-white p-4 rounded-[24px] shadow-sm border border-slate-100 flex flex-col space-y-3">
-                                                <p className="font-bold text-slate-800 text-base ml-1">{nino.nombre}</p>
-                                                <div className="flex bg-slate-50 p-1.5 rounded-2xl gap-1">
-                                                    <button 
-                                                        onClick={() => marcarAsistencia(nino.id, 'presente')}
-                                                        className={`flex-1 py-2.5 rounded-xl text-[11px] font-bold transition-all flex flex-col items-center justify-center gap-1 ${estado === 'presente' ? 'bg-emerald-500 text-white shadow-md scale-105' : 'text-slate-400 hover:bg-slate-200'}`}
-                                                    >
-                                                        <i className="fas fa-check-circle text-sm"></i> Presente
-                                                    </button>
-                                                    <button 
-                                                        onClick={() => marcarAsistencia(nino.id, 'ausente')}
-                                                        className={`flex-1 py-2.5 rounded-xl text-[11px] font-bold transition-all flex flex-col items-center justify-center gap-1 ${estado === 'ausente' ? 'bg-rose-500 text-white shadow-md scale-105' : 'text-slate-400 hover:bg-slate-200'}`}
-                                                    >
-                                                        <i className="fas fa-times-circle text-sm"></i> Ausente
-                                                    </button>
-                                                    <button 
-                                                        onClick={() => marcarAsistencia(nino.id, 'permiso')}
-                                                        className={`flex-1 py-2.5 rounded-xl text-[11px] font-bold transition-all flex flex-col items-center justify-center gap-1 ${estado === 'permiso' ? 'bg-amber-500 text-white shadow-md scale-105' : 'text-slate-400 hover:bg-slate-200'}`}
-                                                    >
-                                                        <i className="fas fa-hand-paper text-sm"></i> Permiso
-                                                    </button>
-                                                </div>
-                                            </div>
-                                        );
-                                    })}
+</div>
 
-                                    {ninos.length === 0 && (
-                                        <div className="text-center py-12 text-slate-400">
-                                            <i className="fas fa-clipboard-list text-4xl mb-3 opacity-50"></i>
-                                            <p className="text-sm font-medium">Aún no hay niños en tu lista.</p>
-                                            <p className="text-xs mt-1">Usa el botón de arriba para agregarlos.</p>
-                                        </div>
-                                    )}
-                                </div>
-                            </div>
-                        )}
-                    </main>
 
-                    <nav className="bg-white border-t border-slate-100 fixed bottom-0 w-full max-w-md h-20 flex justify-around items-center px-4 z-40">
-                        <button onClick={() => setTabActiva('inicio')} className={`flex flex-col items-center flex-1 transition-all ${tabActiva === 'inicio' ? 'text-indigo-600 scale-110' : 'text-slate-300'}`}>
-                            <i className="fas fa-home text-xl"></i>
-                            <span className="text-[9px] font-black uppercase mt-1">Inicio</span>
-                        </button>
-                        <button onClick={() => setTabActiva('lista')} className={`flex flex-col items-center flex-1 transition-all ${tabActiva === 'lista' ? 'text-indigo-600 scale-110' : 'text-slate-300'}`}>
-                            <div className="relative">
-                                <i className="fas fa-users text-xl"></i>
-                                {esAdmin && pendientes.length > 0 && <span className="absolute -top-1 -right-1 w-2 h-2 bg-rose-500 rounded-full border-2 border-white"></span>}
-                            </div>
-                            <span className="text-[9px] font-black uppercase mt-1">Directorio</span>
-                        </button>
-                        {(usuario.rol === 'MAESTRO' || usuario.rol === 'AUXILIAR') && usuario.campo && (
-                            <button onClick={() => setTabActiva('asistencia')} className={`flex flex-col items-center flex-1 transition-all ${tabActiva === 'asistencia' ? 'text-indigo-600 scale-110' : 'text-slate-300'}`}>
-                                <i className="fas fa-clipboard-check text-xl"></i>
-                                <span className="text-[9px] font-black uppercase mt-1">Asistencia</span>
-                            </button>
-                        )}
-                    </nav>
+<!-- AGREGAR ALUMNO -->
 
-                    {/* MENÚ LATERAL (SIDEBAR) */}
-                    {menuAbierto && (
-                        <div className="fixed inset-0 z-[70] flex">
-                            <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={() => setMenuAbierto(false)}></div>
-                            <div className="relative w-[80%] max-w-sm bg-white h-full shadow-2xl flex flex-col animate-in slide-in-from-left duration-300">
-                                <div className="p-6 bg-indigo-600 text-white relative">
-                                    <button onClick={() => setMenuAbierto(false)} className="absolute top-4 right-4 w-8 h-8 flex items-center justify-center bg-white/20 rounded-full hover:bg-white/40">
-                                        <i className="fas fa-times"></i>
-                                    </button>
-                                    <div className="w-16 h-16 bg-white/20 rounded-full flex items-center justify-center text-2xl font-black mb-4">
-                                        {usuario.nombre.charAt(0)}
-                                    </div>
-                                    <h2 className="font-black text-xl leading-tight">{usuario.nombre}</h2>
-                                    <p className="text-[10px] font-bold opacity-80 uppercase tracking-wider mt-1">{usuario.rol}</p>
-                                </div>
-                                
-                                <div className="flex-1 overflow-y-auto p-4 space-y-2">
-                                    <button onClick={() => { setTabActiva('inicio'); setMenuAbierto(false); }} className={`w-full text-left px-5 py-4 rounded-2xl font-bold flex items-center ${tabActiva === 'inicio' ? 'bg-indigo-50 text-indigo-600' : 'text-slate-600 hover:bg-slate-50'}`}>
-                                        <i className="fas fa-home w-6"></i> Inicio
-                                    </button>
-                                    <button onClick={() => { setTabActiva('lista'); setMenuAbierto(false); }} className={`w-full text-left px-5 py-4 rounded-2xl font-bold flex items-center ${tabActiva === 'lista' ? 'bg-indigo-50 text-indigo-600' : 'text-slate-600 hover:bg-slate-50'}`}>
-                                        <i className="fas fa-users w-6"></i> Directorio Escolar
-                                    </button>
-                                    
-                                    {(usuario.rol === 'MAESTRO' || usuario.rol === 'AUXILIAR') && usuario.campo && (
-                                        <div className="pt-4 mt-4 border-t border-slate-100">
-                                            <p className="text-[10px] font-black uppercase text-slate-400 mb-2 ml-2">Tus Herramientas</p>
-                                            <button onClick={() => { setTabActiva('asistencia'); setMenuAbierto(false); }} className={`w-full text-left px-5 py-4 rounded-2xl font-bold flex items-center border border-indigo-100 ${tabActiva === 'asistencia' ? 'bg-indigo-600 text-white shadow-md' : 'bg-indigo-50/50 text-indigo-700 hover:bg-indigo-50'}`}>
-                                                <i className="fas fa-clipboard-check w-6"></i> 
-                                                <div className="ml-2">
-                                                    <span className="block">Asistencia</span>
-                                                    <span className="text-[9px] uppercase opacity-80 font-black">Campo {usuario.campo}</span>
-                                                </div>
-                                            </button>
-                                        </div>
-                                    )}
-                                </div>
-                                
-                                <div className="p-4 border-t border-slate-100">
-                                    <button onClick={() => { cerrarSesion(); setMenuAbierto(false); }} className="w-full py-4 text-rose-500 font-bold rounded-2xl bg-rose-50 flex items-center justify-center">
-                                        <i className="fas fa-sign-out-alt mr-2"></i> Cerrar Sesión
-                                    </button>
-                                </div>
-                            </div>
-                        </div>
-                    )}
+<div class="container hidden" id="alumnoContainer">
 
-                    {/* MODAL AGREGAR NIÑO */}
-                    {modalNinoAbierto && (
-                        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-md flex items-end sm:items-center justify-center z-[60]">
-                            <div className="bg-white w-full max-w-md rounded-t-[40px] sm:rounded-[40px] p-8 pb-12 shadow-2xl animate-in slide-in-from-bottom duration-300">
-                                <div className="w-12 h-1.5 bg-slate-100 rounded-full mx-auto mb-6 sm:hidden"></div>
-                                <h2 className="text-2xl font-black text-slate-800 mb-2">Inscribir Niño(a)</h2>
-                                <p className="text-xs text-slate-500 mb-6">Se agregará a tu lista de <strong className="text-indigo-600">{usuario.clase}</strong> en <strong className="text-indigo-600">{usuario.campo}</strong>.</p>
-                                <form onSubmit={guardarNino} className="space-y-4">
-                                    <div className="space-y-1">
-                                        <label className="text-[10px] font-bold text-slate-400 uppercase ml-4">Nombre Completo del Estudiante</label>
-                                        <input 
-                                            type="text" 
-                                            required 
-                                            placeholder="Ej. Pedrito López" 
-                                            value={nuevoNinoNombre}
-                                            onChange={(e) => setNuevoNinoNombre(e.target.value)}
-                                            className="w-full p-4 bg-slate-50 border border-transparent rounded-2xl outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white transition-all text-center font-bold text-slate-700" 
-                                        />
-                                    </div>
-                                    <div className="pt-4 flex flex-col space-y-3">
-                                        <button type="submit" className="w-full py-5 bg-indigo-600 text-white font-black rounded-2xl shadow-xl active:scale-95 transition-all flex justify-center items-center">
-                                            <i className="fas fa-save mr-2"></i> Guardar Niño
-                                        </button>
-                                        <button type="button" onClick={() => setModalNinoAbierto(false)} className="w-full py-2 text-slate-400 font-bold text-[10px] uppercase tracking-widest transition-colors hover:text-rose-500">Cancelar</button>
-                                    </div>
-                                </form>
-                            </div>
-                        </div>
-                    )}
+<h3>Agregar Alumno</h3>
 
-                    {/* MODAL FORMULARIO INTERNO */}
-                    {modalFormularioAbierto && (
-                        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-md flex items-end sm:items-center justify-center z-50">
-                            <div className="bg-white w-full max-w-md rounded-t-[40px] sm:rounded-[40px] p-8 pb-12 shadow-2xl animate-in slide-in-from-bottom duration-300">
-                                <div className="w-12 h-1.5 bg-slate-100 rounded-full mx-auto mb-6 sm:hidden"></div>
-                                <h2 className="text-2xl font-black text-slate-800 mb-6">{maestroEnEdicion ? 'Editar Registro' : 'Inscribir Nuevo'}</h2>
-                                <form onSubmit={(e) => {
-                                    e.preventDefault();
-                                    const formData = new FormData(e.target);
-                                    guardarMaestro(Object.fromEntries(formData.entries()));
-                                }} className="space-y-4">
-                                    <div className="space-y-1">
-                                        <label className="text-[10px] font-bold text-slate-400 uppercase ml-4">Nombre Completo</label>
-                                        <input type="text" name="nombre" placeholder="Ej. Juan Pérez" required defaultValue={maestroEnEdicion?.nombre || ''} className="w-full p-4 bg-slate-50 border border-transparent rounded-2xl outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white transition-all" />
-                                    </div>
-                                    <div className="space-y-1">
-                                        <label className="text-[10px] font-bold text-slate-400 uppercase ml-4">Clase / Ministerio</label>
-                                        <select name="clase" defaultValue={maestroEnEdicion?.clase || 'Párvulos'} className="w-full p-4 bg-slate-50 border border-transparent rounded-2xl outline-none focus:ring-2 focus:ring-indigo-500 appearance-none">
-                                            {['Cuna', 'Párvulos', 'Principiantes', 'Primarios', 'Intermedios', 'Jóvenes', 'Adultos', 'MAESTRO', 'AUXILIAR', 'LOGISTICA'].map(c => <option key={c} value={c}>{c}</option>)}
-                                        </select>
-                                    </div>
-                                    <div className="space-y-1">
-                                        <label className="text-[10px] font-bold text-slate-400 uppercase ml-4">Campo (Opcional para Logística)</label>
-                                        <select name="campo" defaultValue={maestroEnEdicion?.campo || ''} className="w-full p-4 bg-slate-50 border border-transparent rounded-2xl outline-none focus:ring-2 focus:ring-indigo-500 appearance-none">
-                                            <option value="">Ninguno / No aplica</option>
-                                            {CAMPOS.map(c => <option key={c} value={c}>{c}</option>)}
-                                        </select>
-                                    </div>
-                                    <div className="space-y-1">
-                                        <label className="text-[10px] font-bold text-slate-400 uppercase ml-4">WhatsApp (Opcional)</label>
-                                        <input type="tel" name="telefono" placeholder="Ej. 12345678" defaultValue={maestroEnEdicion?.telefono || ''} className="w-full p-4 bg-slate-50 border border-transparent rounded-2xl outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white transition-all" />
-                                    </div>
-                                    <div className="pt-4 flex flex-col space-y-3">
-                                        <button type="submit" className="w-full py-5 bg-indigo-600 text-white font-black rounded-2xl shadow-xl active:scale-95 transition-all">
-                                            {esAdmin ? 'Confirmar Cambios' : 'Enviar para Aprobación'}
-                                        </button>
-                                        <button type="button" onClick={() => setModalFormularioAbierto(false)} className="w-full py-2 text-slate-400 font-bold text-[10px] uppercase tracking-widest transition-colors hover:text-rose-500">Cancelar</button>
-                                    </div>
-                                </form>
-                            </div>
-                        </div>
-                    )}
+<input id="nombreAlumno" placeholder="Nombre">
 
-                    {/* MODAL ELIMINAR */}
-                    {idMaestroAEliminar && (
-                        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-[60] p-6">
-                            <div className="bg-white rounded-[40px] p-8 w-full max-w-xs text-center shadow-2xl">
-                                <div className="w-16 h-16 bg-rose-50 text-rose-500 rounded-full flex items-center justify-center mx-auto mb-4">
-                                    <i className="fas fa-trash-alt text-2xl"></i>
-                                </div>
-                                <h3 className="text-xl font-black text-slate-800">¿Borrar registro?</h3>
-                                <p className="text-slate-400 text-xs mb-8 mt-2 leading-relaxed">Esta acción es permanente y los datos se borrarán de la base de datos en la nube.</p>
-                                <div className="space-y-3">
-                                    <button onClick={async () => { await db.collection('maestros').doc(idMaestroAEliminar).delete(); setIdMaestroAEliminar(null); }} className="w-full py-4 bg-rose-500 text-white font-bold rounded-2xl shadow-lg shadow-rose-100 active:scale-95 transition-all">Sí, eliminar ahora</button>
-                                    <button onClick={() => setIdMaestroAEliminar(null)} className="w-full py-2 text-slate-300 font-bold uppercase text-[10px] tracking-widest">Mantener registro</button>
-                                </div>
-                            </div>
-                        </div>
-                    )}
-                </div>
-            );
-        }
+<input id="edadAlumno" type="number" placeholder="Edad">
 
-        const root = ReactDOM.createRoot(document.getElementById('root'));
-        root.render(<App />);
-    </script>
+<input id="fechaAlumno" type="date">
+
+<select id="campoAlumno">
+
+<option value="">Seleccione campo</option>
+
+<option>La Isla</option>
+<option>Las Delicias</option>
+<option>El Amatal</option>
+<option>Buenos Aires</option>
+<option>Corozal 1</option>
+<option>El Porvenir</option>
+<option>El Cauloté</option>
+<option>Corozal 2</option>
+<option>Valle Encantado</option>
+<option>La Playa</option>
+
+</select>
+
+<button id="btnGuardarAlumno">
+
+Guardar Alumno
+
+</button>
+
+<button onclick="volverMenu()">
+
+Volver
+
+</button>
+
+</div>
+
+
+<!-- ASISTENCIA -->
+
+<div class="container hidden" id="asistenciaContainer">
+
+<h3>Pasar Asistencia</h3>
+
+<button id="btnPasarAsistencia">
+
+Registrar Asistencia
+
+</button>
+
+<button onclick="volverMenu()">
+
+Volver
+
+</button>
+
+</div>
+
+
+<script type="module" src="./app.js"></script>
+
+
+<script>
+
+function mostrarAgregarAlumno(){
+
+ocultarTodo()
+document.getElementById("alumnoContainer").classList.remove("hidden")
+
+}
+
+function mostrarAsistencia(){
+
+ocultarTodo()
+document.getElementById("asistenciaContainer").classList.remove("hidden")
+
+}
+
+function volverMenu(){
+
+ocultarTodo()
+document.getElementById("menuContainer").classList.remove("hidden")
+
+}
+
+function cerrarSesion(){
+
+location.reload()
+
+}
+
+function ocultarTodo(){
+
+document.getElementById("menuContainer").classList.add("hidden")
+document.getElementById("alumnoContainer").classList.add("hidden")
+document.getElementById("asistenciaContainer").classList.add("hidden")
+
+}
+
+</script>
+
+
 </body>
 </html>
