@@ -1,17 +1,18 @@
 const { useState, useEffect } = React;
-
-// IMPORTANTE: Ahora traemos también 'AlumnosService'
 const { AuthService, MaestrosService, AlumnosService, LoginView, DashboardView } = window;
 
 function App() {
     const [usuario, setUsuario] = useState(null);
     const [datosUsuarioActual, setDatosUsuarioActual] = useState(null);
-    
     const [maestros, setMaestros] = useState([]);
     
-    const [modalAbierto, setModalAbierto] = useState(false);
-    const [modalAlumno, setModalAlumno] = useState(false);
+    // Modales
+    const [modalAbierto, setModalAbierto] = useState(false); // Admin
+    const [modalAlumno, setModalAlumno] = useState(false);   // Maestros
     
+    // Datos temporales para el formulario de alumno
+    const [edadCalculada, setEdadCalculada] = useState(null);
+
     const [maestroEdicion, setMaestroEdicion] = useState(null);
     const [idBorrar, setIdBorrar] = useState(null);
 
@@ -33,17 +34,16 @@ function App() {
         }
     }, []);
 
+    // Login logic
     const handleLogin = async (rol, clave, nombre, campo) => {
         if (!AuthService.verificar(rol, clave)) {
             return { exito: false, mensaje: "Clave incorrecta." };
         }
-
         if (rol === 'ADMIN') {
             setUsuario(rol);
             AuthService.guardarSesion(rol);
             return { exito: true };
         }
-
         try {
             const snapshot = await window.db.collection('maestros')
                 .where('nombre', '==', nombre.trim())
@@ -52,37 +52,27 @@ function App() {
 
             if (snapshot.empty) {
                 await MaestrosService.guardar({
-                    nombre: nombre.trim(),
-                    clase: rol,
-                    campo: campo || '',
-                    telefono: ''
+                    nombre: nombre.trim(), clase: rol, campo: campo || '', telefono: ''
                 }, null, 'SISTEMA_AUTO');
-
-                return { 
-                    exito: true, 
-                    mensaje: "Solicitud enviada al Director. Espera aprobación." 
-                };
+                return { exito: true, mensaje: "Solicitud enviada al Director. Espera aprobación." };
             } else {
                 const doc = snapshot.docs[0];
-                const datosUsuario = doc.data();
-                if (datosUsuario.estado === 'Activo') {
+                const datos = doc.data();
+                if (datos.estado === 'Activo') {
                     setUsuario(rol);
-                    setDatosUsuarioActual({ ...datosUsuario, id: doc.id });
+                    setDatosUsuarioActual({ ...datos, id: doc.id });
                     AuthService.guardarSesion(rol);
                     return { exito: true };
                 } else {
-                    return { 
-                        exito: true, 
-                        mensaje: "Tu cuenta aún está pendiente de aprobación." 
-                    };
+                    return { exito: true, mensaje: "Tu cuenta aún está pendiente de aprobación." };
                 }
             }
         } catch (error) {
-            console.error(error);
             return { exito: false, mensaje: "Error de conexión." };
         }
     };
 
+    // Guardar Maestro (Admin)
     const handleGuardar = async (e) => {
         e.preventDefault();
         const formData = new FormData(e.target);
@@ -92,40 +82,45 @@ function App() {
             if (nuevo && usuario !== 'ADMIN') MaestrosService.notificar(nuevo);
             setModalAbierto(false);
             setMaestroEdicion(null);
-        } catch (err) {
-            alert("Error al guardar maestro");
-        }
+        } catch (err) { alert("Error al guardar"); }
     };
 
-    // --- AQUÍ USAMOS EL NUEVO ARCHIVO DE ALUMNOS ---
-    const handleGuardarAlumno = async (e) => {
-        e.preventDefault();
-        const formData = new FormData(e.target);
-        const nombreNino = formData.get('nombre');
-        const fechaNacimiento = formData.get('fechaNacimiento');
-
-        // Cálculo de edad preciso
+    // Calcular edad en tiempo real al cambiar la fecha
+    const calcularEdad = (fecha) => {
+        if (!fecha) return null;
         const hoy = new Date();
-        const cumple = new Date(fechaNacimiento);
+        const cumple = new Date(fecha);
         let edad = hoy.getFullYear() - cumple.getFullYear();
         const m = hoy.getMonth() - cumple.getMonth();
         if (m < 0 || (m === 0 && hoy.getDate() < cumple.getDate())) {
             edad--;
         }
+        return edad;
+    };
+
+    // Guardar Alumno (Maestros)
+    const handleGuardarAlumno = async (e) => {
+        e.preventDefault();
+        const formData = new FormData(e.target);
+        const nombreNino = formData.get('nombre');
+        const fechaNacimiento = formData.get('fechaNacimiento');
+        const edad = calcularEdad(fechaNacimiento);
+
+        if (!nombreNino || !fechaNacimiento) return;
 
         try {
-            // Usamos AlumnosService.registrar (del archivo nuevo)
             await AlumnosService.registrar({
                 nombre: nombreNino,
                 fechaNacimiento: fechaNacimiento,
-                edad: edad, // Guardamos la edad calculada
+                edad: edad,
                 maestroResponsable: datosUsuarioActual?.nombre || 'Desconocido',
                 clase: datosUsuarioActual?.clase || usuario,
                 campo: datosUsuarioActual?.campo || '',
                 registradoPorId: datosUsuarioActual?.id || 'auto'
             });
-            alert("Alumno registrado correctamente");
+            alert("¡Alumno registrado con éxito!");
             setModalAlumno(false);
+            setEdadCalculada(null); // Resetear
         } catch (error) {
             alert("Error al registrar alumno");
         }
@@ -153,92 +148,84 @@ function App() {
                     onDelete={setIdBorrar}
                     onEdit={(m) => { setMaestroEdicion(m); setModalAbierto(true); }}
                     onToggleModal={() => { setMaestroEdicion(null); setModalAbierto(true); }}
-                    onOpenAlumnoModal={() => setModalAlumno(true)}
+                    onOpenAlumnoModal={() => { setEdadCalculada(null); setModalAlumno(true); }}
                 />
             </main>
 
-            {/* MODAL ADMIN */}
+            {/* MODAL ADMIN (GESTIÓN MAESTROS) */}
             {modalAbierto && (
-                <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-md flex items-center justify-center z-50 p-4 animate-in fade-in duration-200">
-                    <div className="bg-white w-full max-w-md rounded-[32px] p-8 shadow-2xl animate-in slide-in-from-bottom duration-300 max-h-[90vh] overflow-y-auto">
-                        <h2 className="text-2xl font-black text-slate-800 mb-6">
-                            {maestroEdicion ? 'Editar Registro' : 'Inscribir Manualmente'}
-                        </h2>
+                <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-md flex items-center justify-center z-50 p-4 animate-in fade-in">
+                    <div className="bg-white w-full max-w-md rounded-[32px] p-8 shadow-2xl animate-in slide-in-from-bottom max-h-[90vh] overflow-y-auto">
+                        <h2 className="text-2xl font-black text-slate-800 mb-6">{maestroEdicion ? 'Editar' : 'Inscribir'}</h2>
                         <form onSubmit={handleGuardar} className="space-y-4">
                             <div className="space-y-1">
                                 <label className="text-xs font-bold text-slate-400 ml-3 uppercase">Nombre</label>
-                                <input type="text" name="nombre" required 
-                                    defaultValue={maestroEdicion?.nombre || ''} 
-                                    className="w-full p-4 bg-slate-50 rounded-2xl outline-none focus:ring-2 focus:ring-indigo-500 transition-all" />
+                                <input type="text" name="nombre" required defaultValue={maestroEdicion?.nombre || ''} className="w-full p-4 bg-slate-50 rounded-2xl outline-none focus:ring-2 focus:ring-indigo-500" />
                             </div>
-                            
                             <div className="space-y-1">
                                 <label className="text-xs font-bold text-slate-400 ml-3 uppercase">Rol / Clase</label>
-                                <select name="clase" defaultValue={maestroEdicion?.clase || 'Párvulos'} 
-                                    className="w-full p-4 bg-slate-50 rounded-2xl outline-none focus:ring-2 focus:ring-indigo-500 bg-white border border-slate-100">
-                                    {['Cuna', 'Párvulos', 'Principiantes', 'Primarios', 'Intermedios', 'Jóvenes', 'Adultos', 'Logística', 'Dirección'].map(c => 
-                                        <option key={c} value={c}>{c}</option>
-                                    )}
+                                <select name="clase" defaultValue={maestroEdicion?.clase || 'Párvulos'} className="w-full p-4 bg-slate-50 rounded-2xl outline-none bg-white border border-slate-100">
+                                    {['Cuna', 'Párvulos', 'Principiantes', 'Primarios', 'Intermedios', 'Jóvenes', 'Adultos', 'Logística', 'Dirección'].map(c => <option key={c} value={c}>{c}</option>)}
                                 </select>
                             </div>
-
                             <div className="space-y-1">
-                                <label className="text-xs font-bold text-slate-400 ml-3 uppercase">Campo Asignado</label>
-                                <select name="campo" defaultValue={maestroEdicion?.campo || ''} 
-                                    className="w-full p-4 bg-slate-50 rounded-2xl outline-none focus:ring-2 focus:ring-indigo-500 bg-white border border-slate-100">
-                                    <option value="">-- Ninguno / No aplica --</option>
-                                    {camposDisponibles.map(c => (
-                                        <option key={c} value={c}>{c}</option>
-                                    ))}
+                                <label className="text-xs font-bold text-slate-400 ml-3 uppercase">Campo</label>
+                                <select name="campo" defaultValue={maestroEdicion?.campo || ''} className="w-full p-4 bg-slate-50 rounded-2xl outline-none bg-white border border-slate-100">
+                                    <option value="">-- Ninguno --</option>
+                                    {camposDisponibles.map(c => <option key={c} value={c}>{c}</option>)}
                                 </select>
                             </div>
-                            
                             <div className="space-y-1">
                                 <label className="text-xs font-bold text-slate-400 ml-3 uppercase">WhatsApp</label>
-                                <input type="tel" name="telefono" 
-                                    defaultValue={maestroEdicion?.telefono || ''} 
-                                    className="w-full p-4 bg-slate-50 rounded-2xl outline-none focus:ring-2 focus:ring-indigo-500 transition-all" />
+                                <input type="tel" name="telefono" defaultValue={maestroEdicion?.telefono || ''} className="w-full p-4 bg-slate-50 rounded-2xl outline-none" />
                             </div>
-
                             <div className="pt-4 flex flex-col space-y-3">
-                                <button type="submit" className="w-full py-4 bg-indigo-600 text-white font-black rounded-2xl shadow-xl active:scale-95 transition-all">Guardar Cambios</button>
-                                <button type="button" onClick={() => setModalAbierto(false)} className="text-slate-400 font-bold text-xs uppercase tracking-widest hover:text-rose-500 transition-colors">Cancelar</button>
+                                <button type="submit" className="w-full py-4 bg-indigo-600 text-white font-black rounded-2xl shadow-xl">Guardar</button>
+                                <button type="button" onClick={() => setModalAbierto(false)} className="text-slate-400 font-bold text-xs uppercase">Cancelar</button>
                             </div>
                         </form>
                     </div>
                 </div>
             )}
 
-            {/* MODAL ALUMNOS (Usando el nuevo servicio) */}
+            {/* MODAL ALUMNO (MAESTROS) */}
             {modalAlumno && (
-                <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-md flex items-center justify-center z-50 p-4 animate-in fade-in duration-200">
-                    <div className="bg-white w-full max-w-md rounded-[32px] p-8 shadow-2xl animate-in slide-in-from-bottom duration-300">
+                <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-md flex items-center justify-center z-50 p-4 animate-in fade-in">
+                    <div className="bg-white w-full max-w-md rounded-[32px] p-8 shadow-2xl animate-in slide-in-from-bottom">
                         <div className="w-16 h-16 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mx-auto mb-4 text-3xl">
                             <i className="fas fa-child"></i>
                         </div>
-                        <h2 className="text-2xl font-black text-slate-800 mb-2 text-center">Nuevo Alumno</h2>
-                        <p className="text-slate-400 text-xs text-center mb-6">Ingresa los datos del niño para tu lista.</p>
+                        <h2 className="text-2xl font-black text-slate-800 mb-2 text-center">Registrar Niño</h2>
+                        <p className="text-slate-400 text-xs text-center mb-6">Ingresa los datos para la base de datos.</p>
                         
                         <form onSubmit={handleGuardarAlumno} className="space-y-4">
+                            {/* NOMBRE */}
                             <div className="space-y-1">
                                 <label className="text-xs font-bold text-slate-400 ml-3 uppercase">Nombre Completo</label>
                                 <input type="text" name="nombre" required placeholder="Ej. Carlitos Pérez"
-                                    className="w-full p-4 bg-slate-50 rounded-2xl outline-none focus:ring-2 focus:ring-emerald-500 transition-all" />
+                                    className="w-full p-4 bg-slate-50 rounded-2xl outline-none focus:ring-2 focus:ring-emerald-500 text-lg" />
                             </div>
                             
+                            {/* FECHA DE NACIMIENTO */}
                             <div className="space-y-1">
                                 <label className="text-xs font-bold text-slate-400 ml-3 uppercase">Fecha de Nacimiento</label>
                                 <input type="date" name="fechaNacimiento" required 
-                                    className="w-full p-4 bg-slate-50 rounded-2xl outline-none focus:ring-2 focus:ring-emerald-500 transition-all text-slate-600" />
+                                    onChange={(e) => setEdadCalculada(calcularEdad(e.target.value))}
+                                    className="w-full p-4 bg-slate-50 rounded-2xl outline-none focus:ring-2 focus:ring-emerald-500 text-slate-600 text-lg" />
                             </div>
 
-                            <div className="bg-emerald-50 p-4 rounded-2xl text-emerald-700 text-xs font-medium border border-emerald-100 flex items-start">
-                                <i className="fas fa-info-circle mt-0.5 mr-2"></i>
-                                La edad se calculará automáticamente y se guardará en el expediente.
-                            </div>
+                            {/* EDAD CALCULADA (VISUAL) */}
+                            {edadCalculada !== null && (
+                                <div className="bg-emerald-50 p-4 rounded-2xl border border-emerald-100 flex items-center justify-between animate-in zoom-in">
+                                    <span className="text-emerald-800 text-xs font-bold uppercase">Edad Calculada:</span>
+                                    <span className="text-2xl font-black text-emerald-600">{edadCalculada} Años</span>
+                                </div>
+                            )}
 
                             <div className="pt-2 flex flex-col space-y-3">
-                                <button type="submit" className="w-full py-4 bg-emerald-500 text-white font-black rounded-2xl shadow-xl shadow-emerald-200 active:scale-95 transition-all">Registrar Alumno</button>
+                                <button type="submit" className="w-full py-4 bg-emerald-500 text-white font-black rounded-2xl shadow-xl shadow-emerald-200 active:scale-95 transition-all">
+                                    Guardar Registro
+                                </button>
                                 <button type="button" onClick={() => setModalAlumno(false)} className="text-slate-400 font-bold text-xs uppercase tracking-widest hover:text-rose-500 transition-colors">Cancelar</button>
                             </div>
                         </form>
@@ -246,13 +233,13 @@ function App() {
                 </div>
             )}
 
-            {/* MODAL BORRAR */}
+            {/* MODAL BORRAR (ADMIN) */}
             {idBorrar && (
-                <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-[60] p-6 animate-in fade-in duration-200">
-                    <div className="bg-white rounded-[32px] p-8 w-full max-w-xs text-center shadow-2xl animate-in zoom-in-95 duration-200">
+                <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-[60] p-6 animate-in fade-in">
+                    <div className="bg-white rounded-[32px] p-8 w-full max-w-xs text-center shadow-2xl animate-in zoom-in-95">
                         <h3 className="text-xl font-black text-slate-800 mb-4">¿Eliminar?</h3>
                         <button onClick={async () => { await MaestrosService.eliminar(idBorrar); setIdBorrar(null); }} className="w-full py-3 bg-rose-500 text-white font-bold rounded-2xl mb-2">Sí, borrar</button>
-                        <button onClick={() => setIdBorrar(null)} className="w-full py-2 text-slate-400 font-bold text-xs uppercase tracking-widest">Cancelar</button>
+                        <button onClick={() => setIdBorrar(null)} className="w-full py-2 text-slate-400 font-bold text-xs uppercase">Cancelar</button>
                     </div>
                 </div>
             )}
