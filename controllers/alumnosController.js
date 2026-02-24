@@ -1,15 +1,22 @@
-import { guardarAlumno, obtenerAlumnos } from "../services/alumnosService.js";
+import Alumno from "../models/alumno.js";
 
-export const crearAlumno = async (nombre, edad, genero) => {
-  const alumno = {
-    nombre,
-    edad,
-    genero
-  };
+import {
+  guardarAlumno,
+  obtenerAlumnos
+} from "../services/alumnosService.js";
+
+
+export async function crearAlumno(nombre, edad, genero) {
+
+  const alumno = new Alumno(nombre, edad, genero);
 
   await guardarAlumno(alumno);
-};
 
-export const listarAlumnos = async () => {
+}
+
+
+export async function listarAlumnos() {
+
   return await obtenerAlumnos();
-};
+
+}
