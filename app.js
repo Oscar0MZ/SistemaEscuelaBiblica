@@ -1,10 +1,12 @@
-import "./views/alumnosView.js";
-import { crearAlumno, listarAlumnos } from "./controllers/alumnosController.js";
+import { iniciarVistaAlumnos } from "./views/alumnosView.js";
+import { iniciarVistaAsistencia } from "./views/asistenciaView.js";
 
-// Crear alumno
-await crearAlumno("Juan", 10, "Masculino");
+window.addEventListener("DOMContentLoaded", () => {
 
-// Listar alumnos
-const alumnos = await listarAlumnos();
+    if (document.getElementById("btnGuardarAlumno"))
+        iniciarVistaAlumnos();
 
-console.log(alumnos);
+    if (document.getElementById("btnPasarAsistencia"))
+        iniciarVistaAsistencia();
+
+});
