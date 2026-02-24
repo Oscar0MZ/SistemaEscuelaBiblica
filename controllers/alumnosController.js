@@ -1,22 +1,13 @@
-import Alumno from "../models/alumno.js";
+import { crearAlumno, obtenerAlumnos } from "../services/alumnosService.js";
 
-import {
-  guardarAlumno,
-  obtenerAlumnos
-} from "../services/alumnosService.js";
+export async function registrarAlumno(datos) {
 
-
-export async function crearAlumno(nombre, edad, genero) {
-
-  const alumno = new Alumno(nombre, edad, genero);
-
-  await guardarAlumno(alumno);
+    await crearAlumno(datos);
 
 }
 
-
 export async function listarAlumnos() {
 
-  return await obtenerAlumnos();
+    return await obtenerAlumnos();
 
 }
