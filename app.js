@@ -10,25 +10,31 @@ import {
   addDoc,
   getDocs,
   query,
-  where
+  where,
+  updateDoc,
+  doc
 } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 
 
 // ===============================
-// 🔥 CONFIGURACIÓN FIREBASE
+// 🔥 CONFIGURACIÓN REAL
 // ===============================
 
 const firebaseConfig = {
-  apiKey: "TU_API_KEY",
-  authDomain: "TU_AUTH_DOMAIN",
-  projectId: "TU_PROJECT_ID",
-  storageBucket: "TU_STORAGE_BUCKET",
-  messagingSenderId: "TU_SENDER_ID",
-  appId: "TU_APP_ID"
+  apiKey: "AIzaSyBHzlxpJNejD9_dsx6atUtfVo15ORsfGzc",
+  authDomain: "escuela-dominical-bcc99.firebaseapp.com",
+  projectId: "escuela-dominical-bcc99",
+  storageBucket: "escuela-dominical-bcc99.firebasestorage.app",
+  messagingSenderId: "1039366920419",
+  appId: "1:1039366920419:web:09f7c09e2370d3718b8dd6",
+  measurementId: "G-0KCFGX6CMD"
 };
 
 
-// Inicializar Firebase
+// ===============================
+// 🔥 INICIALIZAR FIREBASE
+// ===============================
+
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 
@@ -41,7 +47,7 @@ window.registrar = async function () {
 
   const nombre = document.getElementById("registroNombre").value.trim();
   const rol = document.getElementById("registroRol").value;
-  const campo = document.getElementById("registroCampo").value;
+  const campo = document.getElementById("registroCampo")?.value || "";
   const password = document.getElementById("registroPassword").value;
 
   if (!nombre || !rol || !password) {
@@ -64,7 +70,7 @@ window.registrar = async function () {
       return;
     }
 
-    // Estado por defecto
+    // Administrador entra activo, demás pendientes
     let estado = "Pendiente";
 
     if (rol === "Administrador") {
@@ -72,12 +78,14 @@ window.registrar = async function () {
     }
 
     await addDoc(collection(db, "usuarios"), {
+
       nombre: nombre,
       rol: rol,
-      campo: campo || "",
+      campo: campo,
       password: password,
       estado: estado,
       fecha: new Date()
+
     });
 
     alert("Cuenta creada correctamente");
@@ -85,7 +93,7 @@ window.registrar = async function () {
   } catch (error) {
 
     console.error(error);
-    alert("Error al registrar usuario");
+    alert("Error al registrar");
 
   }
 
@@ -100,6 +108,11 @@ window.login = async function () {
 
   const nombre = document.getElementById("loginNombre").value.trim();
   const password = document.getElementById("loginPassword").value;
+
+  if (!nombre || !password) {
+    alert("Ingrese nombre y contraseña");
+    return;
+  }
 
   try {
 
@@ -116,26 +129,30 @@ window.login = async function () {
       return;
     }
 
-    snapshot.forEach((doc) => {
+    snapshot.forEach((documento) => {
 
-      const data = doc.data();
+      const data = documento.data();
 
       if (data.estado !== "Activo") {
+
         alert("Usuario pendiente de aprobación");
         return;
+
       }
 
       // Guardar sesión
       localStorage.setItem("usuarioActivo", JSON.stringify({
-        id: doc.id,
+
+        id: documento.id,
         nombre: data.nombre,
         rol: data.rol,
         campo: data.campo
+
       }));
 
       alert("Bienvenido " + data.nombre);
 
-      // Redirigir al sistema
+      // Redirigir
       window.location.href = "views/sistema.html";
 
     });
@@ -146,5 +163,66 @@ window.login = async function () {
     alert("Error al iniciar sesión");
 
   }
+
+};
+
+
+// ===============================
+// 👨‍💼 VER USUARIOS PENDIENTES (ADMIN)
+// ===============================
+
+window.cargarPendientes = async function () {
+
+  const contenedor = document.getElementById("listaPendientes");
+
+  if (!contenedor) return;
+
+  contenedor.innerHTML = "";
+
+  const q = query(
+    collection(db, "usuarios"),
+    where("estado", "==", "Pendiente")
+  );
+
+  const snapshot = await getDocs(q);
+
+  snapshot.forEach((docu) => {
+
+    const data = docu.data();
+
+    contenedor.innerHTML += `
+
+      <div>
+
+        ${data.nombre} - ${data.rol}
+
+        <button onclick="aprobarUsuario('${docu.id}')">
+        Aprobar
+        </button>
+
+      </div>
+
+    `;
+
+  });
+
+};
+
+
+// ===============================
+// ✅ APROBAR USUARIO
+// ===============================
+
+window.aprobarUsuario = async function (id) {
+
+  await updateDoc(doc(db, "usuarios", id), {
+
+    estado: "Activo"
+
+  });
+
+  alert("Usuario aprobado");
+
+  cargarPendientes();
 
 };
