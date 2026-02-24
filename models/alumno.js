@@ -1,10 +1,13 @@
-class Alumno {
-  constructor(id, nombre, edad, genero) {
-    this.id = id;
-    this.nombre = nombre;
-    this.edad = edad;
-    this.genero = genero;
-  }
-}
+export class Alumno {
 
-export default Alumno;
+    constructor(id, nombre, edad, fechaNacimiento, campo) {
+
+        this.id = id;
+        this.nombre = nombre;
+        this.edad = edad;
+        this.fechaNacimiento = fechaNacimiento;
+        this.campo = campo;
+
+    }
+
+}
