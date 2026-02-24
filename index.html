@@ -1,259 +1,178 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
+  <meta charset="UTF-8">
+  <title>Escuela Bíblica Dominical - Login</title>
+  <style>
 
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+    body{
+      font-family: Arial;
+      background:#f4f6f8;
+      display:flex;
+      justify-content:center;
+      align-items:center;
+      height:100vh;
+    }
 
-<title>Sistema Escuela Bíblica Dominical</title>
+    .container{
+      background:white;
+      padding:30px;
+      border-radius:10px;
+      width:350px;
+      box-shadow:0 0 10px rgba(0,0,0,0.2);
+    }
 
-<style>
+    h2{
+      text-align:center;
+      margin-bottom:20px;
+    }
 
-body{
-font-family: Arial;
-background:#f4f6f8;
-margin:0;
-padding:0;
-}
+    input, select, button{
+      width:100%;
+      padding:10px;
+      margin-top:10px;
+      border-radius:5px;
+      border:1px solid #ccc;
+      font-size:14px;
+    }
 
-.container{
-max-width:500px;
-margin:auto;
-margin-top:30px;
-background:white;
-padding:20px;
-border-radius:10px;
-box-shadow:0px 0px 10px rgba(0,0,0,0.1);
-}
+    button{
+      background:#007bff;
+      color:white;
+      border:none;
+      cursor:pointer;
+      margin-top:15px;
+    }
 
-input, select, button{
+    button:hover{
+      background:#0056b3;
+    }
 
-width:100%;
-padding:10px;
-margin-top:10px;
-border-radius:5px;
-border:1px solid #ccc;
+    .hidden{
+      display:none;
+    }
 
-}
-
-button{
-background:#2c7be5;
-color:white;
-border:none;
-cursor:pointer;
-}
-
-button:hover{
-background:#1a5bb8;
-}
-
-.hidden{
-display:none;
-}
-
-.menu button{
-margin-top:5px;
-}
-
-</style>
-
+  </style>
 </head>
 <body>
 
+<div class="container">
 
-<!-- LOGIN -->
+  <h2>Escuela Bíblica Dominical</h2>
 
-<div class="container" id="loginContainer">
+  <!-- LOGIN -->
+  <div id="loginDiv">
 
-<h2>Escuela Bíblica Dominical</h2>
+    <input type="text" id="loginNombre" placeholder="Nombre completo">
 
-<input type="email" id="email" placeholder="Correo">
+    <select id="loginRol" onchange="mostrarCampoLogin()">
+      <option value="">Seleccione rol</option>
+      <option value="Administrador">Administrador</option>
+      <option value="Maestro">Maestro</option>
+      <option value="Auxiliar">Auxiliar</option>
+      <option value="Logistica">Logística</option>
+    </select>
 
-<input type="password" id="password" placeholder="Contraseña">
+    <select id="loginCampo" class="hidden">
+      <option value="">Seleccione campo</option>
+      <option value="La Isla">La Isla</option>
+      <option value="Las Delicias">Las Delicias</option>
+      <option value="El Amatal">El Amatal</option>
+      <option value="Buenos Aires">Buenos Aires</option>
+      <option value="Corozal 1">Corozal 1</option>
+      <option value="El Porvenir">El Porvenir</option>
+      <option value="El Cauloté">El Cauloté</option>
+      <option value="Corozal 2">Corozal 2</option>
+      <option value="Valle Encantado">Valle Encantado</option>
+      <option value="La Playa">La Playa</option>
+    </select>
 
-<select id="rol">
-<option value="">Seleccione rol</option>
-<option value="maestro">Maestro</option>
-<option value="auxiliar">Auxiliar</option>
-<option value="logistica">Logística</option>
-</select>
+    <input type="password" id="loginPassword" placeholder="Contraseña">
 
-<input type="text" id="nombreCompleto" placeholder="Nombre completo">
+    <button onclick="login()">Ingresar</button>
 
-<select id="campo">
-<option value="">Seleccione campo</option>
-<option>La Isla</option>
-<option>Las Delicias</option>
-<option>El Amatal</option>
-<option>Buenos Aires</option>
-<option>Corozal 1</option>
-<option>El Porvenir</option>
-<option>El Cauloté</option>
-<option>Corozal 2</option>
-<option>Valle Encantado</option>
-<option>La Playa</option>
-</select>
+    <button onclick="mostrarRegistro()">Registrarse</button>
 
-<button id="btnLogin">Entrar</button>
+  </div>
 
-<button id="btnRegistro">Registrarse</button>
+  <!-- REGISTRO -->
+  <div id="registroDiv" class="hidden">
 
-</div>
+    <input type="text" id="registroNombre" placeholder="Nombre completo">
 
+    <select id="registroRol" onchange="mostrarCampoRegistro()">
+      <option value="">Seleccione rol</option>
+      <option value="Administrador">Administrador</option>
+      <option value="Maestro">Maestro</option>
+      <option value="Auxiliar">Auxiliar</option>
+      <option value="Logistica">Logística</option>
+    </select>
 
-<!-- MENU PRINCIPAL -->
+    <select id="registroCampo" class="hidden">
+      <option value="">Seleccione campo</option>
+      <option value="La Isla">La Isla</option>
+      <option value="Las Delicias">Las Delicias</option>
+      <option value="El Amatal">El Amatal</option>
+      <option value="Buenos Aires">Buenos Aires</option>
+      <option value="Corozal 1">Corozal 1</option>
+      <option value="El Porvenir">El Porvenir</option>
+      <option value="El Cauloté">El Cauloté</option>
+      <option value="Corozal 2">Corozal 2</option>
+      <option value="Valle Encantado">Valle Encantado</option>
+      <option value="La Playa">La Playa</option>
+    </select>
 
-<div class="container hidden" id="menuContainer">
+    <input type="password" id="registroPassword" placeholder="Contraseña">
 
-<h2>Panel Principal</h2>
+    <button onclick="registrar()">Crear cuenta</button>
 
-<div id="resumen">
+    <button onclick="mostrarLogin()">Volver</button>
 
-<h3>Resumen de asistencia</h3>
-
-<p>Presentes: <span id="presentes">0</span></p>
-
-<p>Ausentes: <span id="ausentes">0</span></p>
-
-<p>Permiso: <span id="permiso">0</span></p>
-
-</div>
-
-
-<div class="menu">
-
-<button onclick="mostrarAgregarAlumno()">
-
-Agregar Alumno
-
-</button>
-
-
-<button onclick="mostrarAsistencia()">
-
-Pasar Asistencia
-
-</button>
-
-
-<button onclick="cerrarSesion()">
-
-Cerrar Sesión
-
-</button>
+  </div>
 
 </div>
 
-</div>
-
-
-<!-- AGREGAR ALUMNO -->
-
-<div class="container hidden" id="alumnoContainer">
-
-<h3>Agregar Alumno</h3>
-
-<input id="nombreAlumno" placeholder="Nombre">
-
-<input id="edadAlumno" type="number" placeholder="Edad">
-
-<input id="fechaAlumno" type="date">
-
-<select id="campoAlumno">
-
-<option value="">Seleccione campo</option>
-
-<option>La Isla</option>
-<option>Las Delicias</option>
-<option>El Amatal</option>
-<option>Buenos Aires</option>
-<option>Corozal 1</option>
-<option>El Porvenir</option>
-<option>El Cauloté</option>
-<option>Corozal 2</option>
-<option>Valle Encantado</option>
-<option>La Playa</option>
-
-</select>
-
-<button id="btnGuardarAlumno">
-
-Guardar Alumno
-
-</button>
-
-<button onclick="volverMenu()">
-
-Volver
-
-</button>
-
-</div>
-
-
-<!-- ASISTENCIA -->
-
-<div class="container hidden" id="asistenciaContainer">
-
-<h3>Pasar Asistencia</h3>
-
-<button id="btnPasarAsistencia">
-
-Registrar Asistencia
-
-</button>
-
-<button onclick="volverMenu()">
-
-Volver
-
-</button>
-
-</div>
-
-
-<script type="module" src="./app.js"></script>
-
+<script type="module" src="../app.js"></script>
 
 <script>
 
-function mostrarAgregarAlumno(){
+function mostrarRegistro(){
+  document.getElementById("loginDiv").classList.add("hidden");
+  document.getElementById("registroDiv").classList.remove("hidden");
+}
 
-ocultarTodo()
-document.getElementById("alumnoContainer").classList.remove("hidden")
+function mostrarLogin(){
+  document.getElementById("registroDiv").classList.add("hidden");
+  document.getElementById("loginDiv").classList.remove("hidden");
+}
+
+function mostrarCampoRegistro(){
+
+  const rol = document.getElementById("registroRol").value;
+  const campo = document.getElementById("registroCampo");
+
+  if(rol === "Maestro" || rol === "Auxiliar"){
+    campo.classList.remove("hidden");
+  }else{
+    campo.classList.add("hidden");
+  }
 
 }
 
-function mostrarAsistencia(){
+function mostrarCampoLogin(){
 
-ocultarTodo()
-document.getElementById("asistenciaContainer").classList.remove("hidden")
+  const rol = document.getElementById("loginRol").value;
+  const campo = document.getElementById("loginCampo");
 
-}
-
-function volverMenu(){
-
-ocultarTodo()
-document.getElementById("menuContainer").classList.remove("hidden")
-
-}
-
-function cerrarSesion(){
-
-location.reload()
-
-}
-
-function ocultarTodo(){
-
-document.getElementById("menuContainer").classList.add("hidden")
-document.getElementById("alumnoContainer").classList.add("hidden")
-document.getElementById("asistenciaContainer").classList.add("hidden")
+  if(rol === "Maestro" || rol === "Auxiliar"){
+    campo.classList.remove("hidden");
+  }else{
+    campo.classList.add("hidden");
+  }
 
 }
 
 </script>
-
 
 </body>
 </html>
