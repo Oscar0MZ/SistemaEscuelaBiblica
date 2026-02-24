@@ -1,23 +1,37 @@
 import { db } from "../config/firebase.js";
-import { collection, addDoc, getDocs } from "firebase/firestore";
+
+import {
+  collection,
+  addDoc,
+  getDocs
+} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+
 
 const alumnosCollection = collection(db, "alumnos");
 
-export const guardarAlumno = async (alumno) => {
-  await addDoc(alumnosCollection, alumno);
-};
 
-export const obtenerAlumnos = async () => {
+export async function guardarAlumno(alumno) {
+
+  await addDoc(alumnosCollection, alumno);
+
+}
+
+
+export async function obtenerAlumnos() {
+
   const snapshot = await getDocs(alumnosCollection);
 
-  const alumnos = [];
+  const lista = [];
 
   snapshot.forEach(doc => {
-    alumnos.push({
+
+    lista.push({
       id: doc.id,
       ...doc.data()
     });
+
   });
 
-  return alumnos;
-};
+  return lista;
+
+}
