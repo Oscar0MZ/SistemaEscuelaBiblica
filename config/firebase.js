@@ -1,9 +1,6 @@
 // config/firebase.js
-import firebase from 'firebase/compat/app';
-import 'firebase/compat/firestore';
-
 const firebaseConfig = {
-    apiKey: "AIzaSyBHzlxpJNejD9_dsx6atUtfVo15ORsfGzc", // RECUERDA CAMBIAR POR TUS KEYS REALES
+    apiKey: "AIzaSyBHzlxpJNejD9_dsx6atUtfVo15ORsfGzc", // REEMPLAZA CON TU API KEY REAL
     authDomain: "escuela-dominical-bcc99.firebaseapp.com",
     projectId: "escuela-dominical-bcc99",
     storageBucket: "escuela-dominical-bcc99.firebasestorage.app",
@@ -16,6 +13,5 @@ if (!firebase.apps.length) {
     firebase.initializeApp(firebaseConfig);
 }
 
-const db = firebase.firestore();
-
-export { db };
+// Hacemos la base de datos disponible para todos los archivos
+window.db = firebase.firestore();
