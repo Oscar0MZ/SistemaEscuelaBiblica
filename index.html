@@ -1,26 +1,443 @@
 <!DOCTYPE html>
-<html>
+<html lang="es">
 <head>
-  <meta charset="UTF-8">
-  <title>Sistema Escuela Bíblica</title>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Gestión Escuela Dominical</title>
+
+<meta name="theme-color" content="#4f46e5">
+
+<!-- Tailwind -->
+<script src="https://cdn.tailwindcss.com"></script>
+
+<!-- FontAwesome -->
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
+<!-- React -->
+<script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+<!-- Firebase -->
+<script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
+
+<!-- EmailJS -->
+<script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@3/dist/email.min.js"></script>
+
 </head>
-<body>
 
-  <h2>Registro de Alumno</h2>
+<body class="bg-slate-50">
 
-  <input type="text" id="nombre" placeholder="Nombre">
-  <input type="number" id="edad" placeholder="Edad">
-  <input type="text" id="genero" placeholder="Género">
+<div id="root"></div>
 
-  <br><br>
+<script type="text/babel">
 
-  <button id="btnGuardar">Guardar</button>
-  <button id="btnListar">Listar alumnos</button>
+const { useState, useEffect } = React;
 
-  <h3>Lista:</h3>
-  <ul id="listaAlumnos"></ul>
+/* EMAILJS */
+emailjs.init("7l-eHxFpu6r0bbHUV");
 
-  <script type="module" src="./app.js"></script>
+/* FIREBASE */
+const firebaseConfig = {
+apiKey: "AIzaSyBHzlxpJNejD9_dsx6atUtfVo15ORsfGzc",
+authDomain: "escuela-dominical-bcc99.firebaseapp.com",
+projectId: "escuela-dominical-bcc99",
+storageBucket: "escuela-dominical-bcc99.firebasestorage.app",
+messagingSenderId: "1039366920419",
+appId: "1:1039366920419:web:09f7c09e2370d3718b8dd6"
+};
+
+if (!firebase.apps.length)
+firebase.initializeApp(firebaseConfig);
+
+const db = firebase.firestore();
+
+/* CLAVES */
+const CLAVES = {
+ADMIN: "1234",
+MAESTRO: "2222",
+AUXILIAR: "3333",
+LOGISTICA: "4444"
+};
+
+/* APP */
+function App(){
+
+const [usuario,setUsuario]=useState(null);
+const [maestros,setMaestros]=useState([]);
+const [busqueda,setBusqueda]=useState("");
+
+const [modal,setModal]=useState(false);
+const [editar,setEditar]=useState(null);
+const [eliminar,setEliminar]=useState(null);
+
+const [rol,setRol]=useState("");
+const [clave,setClave]=useState("");
+const [error,setError]=useState("");
+
+/* RECUPERAR SESION */
+useEffect(()=>{
+const guardado=localStorage.getItem("rol_dominical");
+if(guardado) setUsuario(guardado);
+},[]);
+
+/* FIRESTORE TIEMPO REAL */
+useEffect(()=>{
+
+return db.collection("maestros")
+.onSnapshot(snapshot=>{
+
+const datos=snapshot.docs.map(doc=>({
+id:doc.id,
+...doc.data()
+}));
+
+datos.sort((a,b)=>a.nombre.localeCompare(b.nombre));
+
+setMaestros(datos);
+
+});
+
+},[]);
+
+/* LOGIN */
+function login(e){
+
+e.preventDefault();
+
+if(CLAVES[rol]===clave){
+
+setUsuario(rol);
+localStorage.setItem("rol_dominical",rol);
+
+}else{
+
+setError("Clave incorrecta");
+
+}
+
+}
+
+/* LOGOUT */
+function logout(){
+
+setUsuario(null);
+localStorage.removeItem("rol_dominical");
+
+}
+
+/* EMAIL */
+function enviarCorreo(datos){
+
+emailjs.send(
+"service_475d2ya",
+"template_516xc7k",
+{
+from_name:datos.registradoPor,
+new_member:datos.nombre,
+role:datos.clase
+}
+);
+
+}
+
+/* GUARDAR */
+async function guardar(datos){
+
+if(editar){
+
+await db.collection("maestros")
+.doc(editar.id)
+.update(datos);
+
+}else{
+
+const nuevo={
+...datos,
+estado:usuario==="ADMIN"?"Activo":"Pendiente",
+registradoPor:usuario,
+createdAt:Date.now()
+};
+
+await db.collection("maestros").add(nuevo);
+
+if(usuario!=="ADMIN")
+enviarCorreo(nuevo);
+
+}
+
+setModal(false);
+setEditar(null);
+
+}
+
+/* APROBAR */
+async function aprobar(id){
+
+await db.collection("maestros")
+.doc(id)
+.update({estado:"Activo"});
+
+}
+
+/* ELIMINAR */
+async function borrar(id){
+
+await db.collection("maestros")
+.doc(id)
+.delete();
+
+setEliminar(null);
+
+}
+
+/* FILTRO */
+const visibles=maestros.filter(m=>{
+
+if(usuario==="ADMIN")
+return m.nombre.toLowerCase().includes(busqueda.toLowerCase());
+
+return(
+m.estado==="Activo" &&
+m.nombre.toLowerCase().includes(busqueda.toLowerCase())
+);
+
+});
+
+/* LOGIN SCREEN */
+if(!usuario)
+return(
+
+<div class="flex h-screen items-center justify-center bg-indigo-600">
+
+<form onSubmit={login}
+class="bg-white p-8 rounded-2xl w-80">
+
+<h2 class="text-xl font-bold mb-4 text-center">
+Control Escolar
+</h2>
+
+<select
+required
+value={rol}
+onChange={e=>setRol(e.target.value)}
+class="w-full border p-3 rounded mb-3">
+
+<option value="">Rol</option>
+<option value="ADMIN">Director</option>
+<option value="MAESTRO">Maestro</option>
+<option value="AUXILIAR">Auxiliar</option>
+<option value="LOGISTICA">Logística</option>
+
+</select>
+
+<input
+type="password"
+placeholder="Clave"
+required
+value={clave}
+onChange={e=>setClave(e.target.value)}
+class="w-full border p-3 rounded mb-3"
+/>
+
+<p class="text-red-500 text-sm">{error}</p>
+
+<button class="w-full bg-indigo-600 text-white p-3 rounded">
+Entrar
+</button>
+
+</form>
+
+</div>
+
+);
+
+/* PANEL */
+
+return(
+
+<div class="max-w-md mx-auto bg-white min-h-screen">
+
+<header class="flex justify-between p-4 border">
+
+<h1 class="font-bold">
+Panel {usuario}
+</h1>
+
+<button onClick={logout}>
+Salir
+</button>
+
+</header>
+
+<div class="p-4">
+
+<input
+placeholder="Buscar"
+value={busqueda}
+onChange={e=>setBusqueda(e.target.value)}
+class="w-full border p-3 rounded mb-4"
+/>
+
+<button
+onClick={()=>{
+setEditar(null);
+setModal(true);
+}}
+class="bg-indigo-600 text-white p-3 rounded mb-4 w-full">
+
+Nuevo
+
+</button>
+
+{visibles.map(m=>(
+
+<div key={m.id}
+class="border p-3 rounded mb-2">
+
+<b>{m.nombre}</b>
+
+<p>{m.clase}</p>
+
+<p>{m.estado}</p>
+
+{m.telefono&&(
+<a
+href={"https://wa.me/"+m.telefono}
+target="_blank">
+WhatsApp
+</a>
+)}
+
+{usuario==="ADMIN"&&(
+
+<div>
+
+<button
+onClick={()=>{
+setEditar(m);
+setModal(true);
+}}>
+Editar
+</button>
+
+<button
+onClick={()=>setEliminar(m.id)}>
+Eliminar
+</button>
+
+{m.estado==="Pendiente"&&(
+
+<button
+onClick={()=>aprobar(m.id)}>
+Aprobar
+</button>
+
+)}
+
+</div>
+
+)}
+
+</div>
+
+))}
+
+</div>
+
+{/* MODAL */}
+
+{modal&&(
+
+<div class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center">
+
+<form
+onSubmit={e=>{
+e.preventDefault();
+guardar(Object.fromEntries(
+new FormData(e.target)
+));
+}}
+class="bg-white p-6 rounded">
+
+<input
+name="nombre"
+defaultValue={editar?.nombre}
+placeholder="Nombre"
+required
+class="border p-2 mb-2 w-full"
+/>
+
+<input
+name="telefono"
+defaultValue={editar?.telefono}
+placeholder="Telefono"
+class="border p-2 mb-2 w-full"
+/>
+
+<select
+name="clase"
+defaultValue={editar?.clase}
+class="border p-2 mb-2 w-full">
+
+<option>Cuna</option>
+<option>Párvulos</option>
+<option>Primarios</option>
+<option>Jóvenes</option>
+<option>Adultos</option>
+
+</select>
+
+<button class="bg-indigo-600 text-white p-2 w-full">
+Guardar
+</button>
+
+</form>
+
+</div>
+
+)}
+
+{/* ELIMINAR */}
+
+{eliminar&&(
+
+<div class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center">
+
+<div class="bg-white p-6 rounded">
+
+<p>¿Eliminar?</p>
+
+<button
+onClick={()=>borrar(eliminar)}
+class="bg-red-600 text-white p-2">
+Sí
+</button>
+
+<button
+onClick={()=>setEliminar(null)}>
+No
+</button>
+
+</div>
+
+</div>
+
+)}
+
+</div>
+
+);
+
+}
+
+/* RENDER */
+ReactDOM.createRoot(
+document.getElementById("root")
+).render(<App/>);
+
+</script>
 
 </body>
 </html>
