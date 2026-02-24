@@ -1,21 +1,21 @@
 // config/firebase.js
-
-import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-import {
-getFirestore
-} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+import firebase from 'firebase/compat/app';
+import 'firebase/compat/firestore';
 
 const firebaseConfig = {
-
-apiKey: "TU_API_KEY",
-authDomain: "TU_AUTH_DOMAIN",
-projectId: "TU_PROJECT_ID",
-storageBucket: "TU_STORAGE_BUCKET",
-messagingSenderId: "TU_MSG_ID",
-appId: "TU_APP_ID"
-
+    apiKey: "AIzaSyBHzlxpJNejD9_dsx6atUtfVo15ORsfGzc", // RECUERDA CAMBIAR POR TUS KEYS REALES
+    authDomain: "escuela-dominical-bcc99.firebaseapp.com",
+    projectId: "escuela-dominical-bcc99",
+    storageBucket: "escuela-dominical-bcc99.firebasestorage.app",
+    messagingSenderId: "1039366920419",
+    appId: "1:1039366920419:web:09f7c09e2370d3718b8dd6",
+    measurementId: "G-0KCFGX6CMD"
 };
 
-const app = initializeApp(firebaseConfig);
+if (!firebase.apps.length) {
+    firebase.initializeApp(firebaseConfig);
+}
 
-export const db = getFirestore(app);
+const db = firebase.firestore();
+
+export { db };
