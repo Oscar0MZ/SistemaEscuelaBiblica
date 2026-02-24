@@ -1,3 +1,4 @@
+import "./views/alumnosView.js";
 import { crearAlumno, listarAlumnos } from "./controllers/alumnosController.js";
 
 // Crear alumno
