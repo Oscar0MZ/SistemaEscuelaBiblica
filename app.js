@@ -5,18 +5,19 @@ function App() {
     const [usuario, setUsuario] = useState(null);
     const [datosUsuarioActual, setDatosUsuarioActual] = useState(null);
     
-    // Listas de datos
-    const [maestros, setMaestros] = useState([]); // Lista para Admin
-    const [alumnos, setAlumnos] = useState([]);   // Lista para Maestros (NUEVO)
+    // Datos
+    const [maestros, setMaestros] = useState([]);
+    const [alumnos, setAlumnos] = useState([]);
+    const [asistenciaHoy, setAsistenciaHoy] = useState(null); // NUEVO: Resumen de hoy
     
-    // Modales
+    // Modales y Edición
     const [modalAbierto, setModalAbierto] = useState(false);
     const [modalAlumno, setModalAlumno] = useState(false);
-    
-    // Datos temporales
-    const [edadCalculada, setEdadCalculada] = useState(null);
     const [maestroEdicion, setMaestroEdicion] = useState(null);
     const [idBorrar, setIdBorrar] = useState(null);
+    
+    // Auxiliar para edad
+    const [edadCalculada, setEdadCalculada] = useState(null);
 
     const camposDisponibles = [
         "La Isla", "Las Delicias", "El Amatal", "El Manguito", 
@@ -29,7 +30,7 @@ function App() {
         if (sesion) setUsuario(sesion);
     }, []);
 
-    // 1. Cargar Maestros (Para el Admin o para validar logins)
+    // Cargar Maestros (Admin)
     useEffect(() => {
         if (MaestrosService) {
             const unsubscribe = MaestrosService.suscribir(setMaestros);
@@ -37,20 +38,25 @@ function App() {
         }
     }, []);
 
-    // 2. NUEVO: Cargar Alumnos (Solo si soy Maestro/Auxiliar y ya cargué mis datos)
+    // Cargar Alumnos y Asistencia de Hoy (Maestros)
     useEffect(() => {
         if (usuario && usuario !== 'ADMIN' && datosUsuarioActual && AlumnosService) {
-            // Suscribirse a los niños de MI clase
-            const unsubscribe = AlumnosService.suscribirPorClase(datosUsuarioActual.clase, setAlumnos);
-            return () => unsubscribe();
+            // 1. Alumnos
+            const unsubAlumnos = AlumnosService.suscribirPorClase(datosUsuarioActual.clase, setAlumnos);
+            
+            // 2. Asistencia de Hoy
+            const unsubAsistencia = AlumnosService.suscribirAsistenciaHoy(datosUsuarioActual.clase, setAsistenciaHoy);
+
+            return () => {
+                unsubAlumnos();
+                unsubAsistencia();
+            };
         }
     }, [usuario, datosUsuarioActual]);
 
-    // Login Logic
+    // --- LOGINS Y REGISTROS (Sin cambios mayores) ---
     const handleLogin = async (rol, clave, nombre, campo) => {
-        if (!AuthService.verificar(rol, clave)) {
-            return { exito: false, mensaje: "Clave incorrecta." };
-        }
+        if (!AuthService.verificar(rol, clave)) return { exito: false, mensaje: "Clave incorrecta." };
         if (rol === 'ADMIN') {
             setUsuario(rol);
             AuthService.guardarSesion(rol);
@@ -58,31 +64,24 @@ function App() {
         }
         try {
             const snapshot = await window.db.collection('maestros')
-                .where('nombre', '==', nombre.trim())
-                .where('clase', '==', rol)
-                .get();
+                .where('nombre', '==', nombre.trim()).where('clase', '==', rol).get();
 
             if (snapshot.empty) {
-                await MaestrosService.guardar({
-                    nombre: nombre.trim(), clase: rol, campo: campo || '', telefono: ''
-                }, null, 'SISTEMA_AUTO');
-                return { exito: true, mensaje: "Solicitud enviada al Director. Espera aprobación." };
+                await MaestrosService.guardar({ nombre: nombre.trim(), clase: rol, campo: campo || '', telefono: '' }, null, 'SISTEMA_AUTO');
+                return { exito: true, mensaje: "Solicitud enviada al Director." };
             } else {
                 const doc = snapshot.docs[0];
                 const datos = doc.data();
                 if (datos.estado === 'Activo') {
                     setUsuario(rol);
-                    // IMPORTANTE: Guardamos los datos para saber qué clase cargar
                     setDatosUsuarioActual({ ...datos, id: doc.id });
                     AuthService.guardarSesion(rol);
                     return { exito: true };
                 } else {
-                    return { exito: true, mensaje: "Tu cuenta aún está pendiente de aprobación." };
+                    return { exito: true, mensaje: "Tu cuenta aún no ha sido aprobada." };
                 }
             }
-        } catch (error) {
-            return { exito: false, mensaje: "Error de conexión." };
-        }
+        } catch (error) { return { exito: false, mensaje: "Error de conexión." }; }
     };
 
     const handleGuardar = async (e) => {
@@ -103,9 +102,7 @@ function App() {
         const cumple = new Date(fecha);
         let edad = hoy.getFullYear() - cumple.getFullYear();
         const m = hoy.getMonth() - cumple.getMonth();
-        if (m < 0 || (m === 0 && hoy.getDate() < cumple.getDate())) {
-            edad--;
-        }
+        if (m < 0 || (m === 0 && hoy.getDate() < cumple.getDate())) edad--;
         return edad;
     };
 
@@ -114,25 +111,48 @@ function App() {
         const formData = new FormData(e.target);
         const nombreNino = formData.get('nombre');
         const fechaNacimiento = formData.get('fechaNacimiento');
-        const edad = calcularEdad(fechaNacimiento);
-
         if (!nombreNino || !fechaNacimiento) return;
 
         try {
             await AlumnosService.registrar({
                 nombre: nombreNino,
                 fechaNacimiento: fechaNacimiento,
-                edad: edad,
-                maestroResponsable: datosUsuarioActual?.nombre || 'Desconocido',
-                clase: datosUsuarioActual?.clase || usuario,
-                campo: datosUsuarioActual?.campo || '',
-                registradoPorId: datosUsuarioActual?.id || 'auto'
+                edad: calcularEdad(fechaNacimiento),
+                maestroResponsable: datosUsuarioActual?.nombre,
+                clase: datosUsuarioActual?.clase,
+                campo: datosUsuarioActual?.campo,
+                registradoPorId: datosUsuarioActual?.id
             });
-            alert("¡Alumno registrado con éxito!");
+            alert("Alumno registrado");
             setModalAlumno(false);
             setEdadCalculada(null);
+        } catch (error) { alert("Error al registrar"); }
+    };
+
+    // --- NUEVO: GUARDAR ASISTENCIA ---
+    const handleGuardarAsistencia = async (registros) => {
+        // Calculamos totales
+        const presentes = registros.filter(r => r.estado === 'Presente').length;
+        const ausentes = registros.filter(r => r.estado === 'Ausente').length;
+        const permisos = registros.filter(r => r.estado === 'Permiso').length;
+
+        const fechaHoy = new Date().toLocaleDateString('en-CA'); // YYYY-MM-DD
+
+        try {
+            await AlumnosService.guardarAsistencia({
+                fecha: fechaHoy,
+                clase: datosUsuarioActual.clase,
+                maestro: datosUsuarioActual.nombre,
+                registros: registros, // Detalle de cada niño
+                totales: { presentes, ausentes, permisos }, // Resumen
+                timestamp: Date.now()
+            });
+            alert("¡Asistencia guardada correctamente!");
+            return true; // Éxito
         } catch (error) {
-            alert("Error al registrar alumno");
+            alert("Error al guardar asistencia");
+            console.error(error);
+            return false;
         }
     };
 
@@ -143,28 +163,30 @@ function App() {
             <header className="bg-white p-5 flex justify-between items-center border-b border-slate-100 z-10 relative">
                 <div>
                     <p className="text-[10px] font-black uppercase tracking-widest text-indigo-500">Gestión Ministerial</p>
-                    <h1 className="text-xl font-black text-slate-800">{usuario === 'ADMIN' ? 'Panel Director' : `${usuario}`}</h1>
+                    <h1 className="text-xl font-black text-slate-800">{usuario === 'ADMIN' ? 'Panel Director' : usuario}</h1>
                 </div>
-                <button onClick={() => { setUsuario(null); AuthService.cerrarSesion(); }} className="w-10 h-10 bg-slate-50 text-slate-400 rounded-xl hover:text-rose-500 hover:bg-rose-50 transition-all">
-                    <i className="fas fa-sign-out-alt"></i>
-                </button>
+                <button onClick={() => { setUsuario(null); AuthService.cerrarSesion(); }} className="w-10 h-10 bg-slate-50 text-slate-400 rounded-xl hover:text-rose-500 transition-all"><i className="fas fa-sign-out-alt"></i></button>
             </header>
 
             <main className="flex-1 overflow-y-auto p-5 pb-24 bg-slate-50/50 scroll-smooth">
                 <DashboardView 
                     maestros={maestros}
-                    alumnos={alumnos} // <--- PASAMOS LA LISTA DE ALUMNOS AQUÍ
+                    alumnos={alumnos}
+                    asistenciaHoy={asistenciaHoy} // PASAMOS EL RESUMEN DE HOY
                     usuario={usuario}
+                    
                     onApprove={MaestrosService.aprobar}
                     onDelete={setIdBorrar}
                     onEdit={(m) => { setMaestroEdicion(m); setModalAbierto(true); }}
                     onToggleModal={() => { setMaestroEdicion(null); setModalAbierto(true); }}
                     onOpenAlumnoModal={() => { setEdadCalculada(null); setModalAlumno(true); }}
+                    
+                    onSaveAsistencia={handleGuardarAsistencia} // NUEVA FUNCIÓN
                 />
             </main>
 
-            {/* MODALES (Igual que antes) */}
-            {modalAbierto && (
+            {/* MODALES (Código igual al anterior, resumido aquí) */}
+            {modalAbierto && (/* ... Modal Admin ... */ 
                 <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-md flex items-center justify-center z-50 p-4 animate-in fade-in">
                     <div className="bg-white w-full max-w-md rounded-[32px] p-8 shadow-2xl animate-in slide-in-from-bottom max-h-[90vh] overflow-y-auto">
                         <h2 className="text-2xl font-black text-slate-800 mb-6">{maestroEdicion ? 'Editar' : 'Inscribir'}</h2>
@@ -186,21 +208,15 @@ function App() {
                     </div>
                 </div>
             )}
-
-            {modalAlumno && (
+            
+            {modalAlumno && (/* ... Modal Alumno ... */
                 <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-md flex items-center justify-center z-50 p-4 animate-in fade-in">
                     <div className="bg-white w-full max-w-md rounded-[32px] p-8 shadow-2xl animate-in slide-in-from-bottom">
                         <div className="w-16 h-16 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mx-auto mb-4 text-3xl"><i className="fas fa-child"></i></div>
                         <h2 className="text-2xl font-black text-slate-800 mb-2 text-center">Registrar Niño</h2>
                         <form onSubmit={handleGuardarAlumno} className="space-y-4">
-                            <div className="space-y-1">
-                                <label className="text-xs font-bold text-slate-400 ml-3 uppercase">Nombre Completo</label>
-                                <input type="text" name="nombre" required placeholder="Ej. Carlitos Pérez" className="w-full p-4 bg-slate-50 rounded-2xl outline-none focus:ring-2 focus:ring-emerald-500 text-lg" />
-                            </div>
-                            <div className="space-y-1">
-                                <label className="text-xs font-bold text-slate-400 ml-3 uppercase">Fecha de Nacimiento</label>
-                                <input type="date" name="fechaNacimiento" required onChange={(e) => setEdadCalculada(calcularEdad(e.target.value))} className="w-full p-4 bg-slate-50 rounded-2xl outline-none focus:ring-2 focus:ring-emerald-500 text-slate-600 text-lg" />
-                            </div>
+                            <input type="text" name="nombre" required placeholder="Nombre Completo" className="w-full p-4 bg-slate-50 rounded-2xl outline-none focus:ring-2 focus:ring-emerald-500 text-lg" />
+                            <input type="date" name="fechaNacimiento" required onChange={(e) => setEdadCalculada(calcularEdad(e.target.value))} className="w-full p-4 bg-slate-50 rounded-2xl outline-none focus:ring-2 focus:ring-emerald-500 text-slate-600 text-lg" />
                             {edadCalculada !== null && (
                                 <div className="bg-emerald-50 p-4 rounded-2xl border border-emerald-100 flex items-center justify-between animate-in zoom-in">
                                     <span className="text-emerald-800 text-xs font-bold uppercase">Edad:</span>
@@ -215,8 +231,8 @@ function App() {
                     </div>
                 </div>
             )}
-
-            {idBorrar && (
+            
+            {idBorrar && (/* ... Modal Borrar ... */
                 <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-[60] p-6 animate-in fade-in">
                     <div className="bg-white rounded-[32px] p-8 w-full max-w-xs text-center shadow-2xl animate-in zoom-in-95">
                         <h3 className="text-xl font-black text-slate-800 mb-4">¿Eliminar?</h3>
