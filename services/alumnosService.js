@@ -1,12 +1,29 @@
 // services/alumnosService.js
 
 window.AlumnosService = {
-    // 1. Registrar
+    // 1. Registrar Alumno (CON VALIDACIÓN DE DUPLICADOS)
     registrar: async (datosAlumno) => {
         try {
-            await window.db.collection('alumnos').add({ ...datosAlumno, createdAt: Date.now() });
+            // A) Verificar si ya existe en el mismo campo
+            const busqueda = await window.db.collection('alumnos')
+                .where('campo', '==', datosAlumno.campo)
+                .where('nombre', '==', datosAlumno.nombre.trim()) // Buscamos nombre exacto
+                .get();
+
+            if (!busqueda.empty) {
+                throw new Error("DUPLICADO");
+            }
+
+            // B) Si no existe, lo guardamos
+            await window.db.collection('alumnos').add({
+                ...datosAlumno,
+                createdAt: Date.now()
+            });
             return true;
-        } catch (error) { console.error(error); throw error; }
+        } catch (error) {
+            console.error("Error en servicio:", error);
+            throw error;
+        }
     },
 
     // 2. Actualizar
@@ -44,7 +61,7 @@ window.AlumnosService = {
         await window.db.collection('asistencias').doc(idDoc).set(datos);
     },
 
-    // 7. Suscribir Asistencia HOY (Maestros)
+    // 7. Suscribir Asistencia HOY
     suscribirAsistenciaHoy: (campo, callback) => {
         const hoy = new Date().toLocaleDateString('en-CA');
         const idDoc = `${hoy}_${campo.replace(/\s+/g, '')}`;
@@ -53,18 +70,14 @@ window.AlumnosService = {
         });
     },
 
-    // 8. NUEVO: SEMANA ACUMULATIVA (Lunes a Domingo)
+    // 8. Suscribir Semana (Admin)
     suscribirAsistenciaSemanal: (callback) => {
         const hoy = new Date();
-        const diaSemana = hoy.getDay(); // 0=Dom, 1=Lun...
-        
-        // Calcular el LUNES de esta semana
-        // Si hoy es domingo (0), el lunes fue hace 6 días. Si es lunes (1), es hoy (0 días atrás).
+        const diaSemana = hoy.getDay(); 
         const distanciaAlLunes = diaSemana === 0 ? 6 : diaSemana - 1;
         const lunes = new Date(hoy);
         lunes.setDate(hoy.getDate() - distanciaAlLunes);
 
-        // Generar array con las 7 fechas de la semana (Lun a Dom)
         const fechasSemana = [];
         for (let i = 0; i < 7; i++) {
             const dia = new Date(lunes);
@@ -72,10 +85,9 @@ window.AlumnosService = {
             fechasSemana.push(dia.toLocaleDateString('en-CA'));
         }
 
-        const inicioSemanaStr = fechasSemana[0]; // Lunes
-        const finSemanaStr = fechasSemana[6];    // Domingo
+        const inicioSemanaStr = fechasSemana[0]; 
+        const finSemanaStr = fechasSemana[6];    
 
-        // Consultamos cualquier asistencia que coincida con CUALQUIER día de esta semana
         return window.db.collection('asistencias')
             .where('fecha', 'in', fechasSemana)
             .onSnapshot((snapshot) => {
