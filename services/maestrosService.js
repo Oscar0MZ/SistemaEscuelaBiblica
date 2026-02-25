@@ -1,7 +1,7 @@
 // services/maestrosService.js
 
 window.MaestrosService = {
-    // 1. Escuchar la base de datos (Colección 'maestros')
+    // 1. Escuchar la lista completa (Para el Admin)
     suscribir: (callback) => {
         return window.db.collection('maestros').onSnapshot((snapshot) => {
             const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
@@ -10,7 +10,15 @@ window.MaestrosService = {
         });
     },
 
-    // 2. Guardar o Editar
+    // 2. NUEVO: Vigilar estado de UN solo usuario (Para expulsarlo si lo borran)
+    vigilarUsuario: (id, callback) => {
+        return window.db.collection('maestros').doc(id).onSnapshot((doc) => {
+            // Si el documento existe, devolvemos los datos. Si no existe (fue borrado), devolvemos null.
+            callback(doc.exists ? doc.data() : null);
+        });
+    },
+
+    // 3. Guardar
     guardar: async (datos, id = null, usuarioActual) => {
         try {
             if (id) {
@@ -31,17 +39,17 @@ window.MaestrosService = {
         }
     },
 
-    // 3. Eliminar
+    // 4. Eliminar
     eliminar: async (id) => {
         await window.db.collection('maestros').doc(id).delete();
     },
 
-    // 4. Aprobar
+    // 5. Aprobar
     aprobar: async (id) => {
         await window.db.collection('maestros').doc(id).update({ estado: 'Activo' });
     },
 
-    // 5. Notificar por correo
+    // 6. Notificar
     notificar: (datos) => {
         if (window.emailjs) {
             window.emailjs.send("service_475d2ya", "template_516xc7k", {
