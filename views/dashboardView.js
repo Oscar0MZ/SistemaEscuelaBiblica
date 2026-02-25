@@ -14,8 +14,9 @@ function DashboardView({
     const [vistaActual, setVistaActual] = useState('inicio'); 
     const [listaAsistencia, setListaAsistencia] = useState({});
 
-    // ESTADO PARA COLAPSAR/EXPANDIR LA POBLACIÓN (Solo Admin)
+    // ESTADOS PARA COLAPSAR/EXPANDIR (Solo Admin)
     const [expandirPoblacion, setExpandirPoblacion] = useState(false);
+    const [expandirPersonal, setExpandirPersonal] = useState(false); // <--- NUEVO ESTADO
 
     React.useEffect(() => {
         if (vistaActual === 'asistencia' && alumnos.length > 0) {
@@ -41,7 +42,7 @@ function DashboardView({
         const activos = maestros.filter(m => m.estado === 'Activo');
         const listaAdminVisible = maestros.filter(m => m.nombre.toLowerCase().includes(busqueda.toLowerCase()) || (m.campo && m.campo.toLowerCase().includes(busqueda.toLowerCase())));
 
-        // Cálculo totales
+        // Cálculo totales alumnos
         const conteoPorCampo = {};
         todosLosAlumnos.forEach(alumno => {
             const campo = alumno.campo || 'Sin Campo';
@@ -51,7 +52,7 @@ function DashboardView({
 
         return (
             <div className="space-y-6 animate-in fade-in duration-500">
-                {/* SOLICITUDES */}
+                {/* 1. SOLICITUDES (Siempre visible si hay pendientes) */}
                 {pendientes.length > 0 && (
                     <div className="bg-amber-50 border border-amber-100 p-5 rounded-[32px]">
                         <h3 className="text-amber-800 font-bold text-sm mb-3"><i className="fas fa-user-clock mr-2"></i> Solicitudes ({pendientes.length})</h3>
@@ -59,31 +60,15 @@ function DashboardView({
                     </div>
                 )}
 
-                {/* --- POBLACIÓN ESTUDIANTIL (TIPO ACORDEÓN) --- */}
+                {/* 2. POBLACIÓN ESTUDIANTIL (ACORDEÓN) */}
                 <div className="bg-white rounded-[32px] border border-slate-100 shadow-sm overflow-hidden transition-all duration-300">
-                    {/* CABECERA CLICKEABLE */}
-                    <button 
-                        onClick={() => setExpandirPoblacion(!expandirPoblacion)}
-                        className="w-full flex items-center justify-between p-6 bg-white hover:bg-slate-50 transition-colors"
-                    >
+                    <button onClick={() => setExpandirPoblacion(!expandirPoblacion)} className="w-full flex items-center justify-between p-6 bg-white hover:bg-slate-50 transition-colors">
                         <div className="flex items-center">
-                            <div className="w-10 h-10 bg-indigo-50 text-indigo-600 rounded-xl flex items-center justify-center mr-3">
-                                <i className="fas fa-chart-pie"></i>
-                            </div>
-                            <div className="text-left">
-                                <h3 className="font-bold text-slate-700 text-sm">Población Estudiantil</h3>
-                                <p className="text-[10px] text-slate-400">{expandirPoblacion ? 'Toca para contraer' : 'Toca para ver detalles'}</p>
-                            </div>
+                            <div className="w-10 h-10 bg-indigo-50 text-indigo-600 rounded-xl flex items-center justify-center mr-3"><i className="fas fa-chart-pie"></i></div>
+                            <div className="text-left"><h3 className="font-bold text-slate-700 text-sm">Población Estudiantil</h3><p className="text-[10px] text-slate-400">{expandirPoblacion ? 'Ocultar detalles' : 'Ver por campos'}</p></div>
                         </div>
-                        <div className="flex items-center space-x-3">
-                            <span className="bg-indigo-600 text-white font-black text-xs px-3 py-1.5 rounded-lg shadow-sm shadow-indigo-200">
-                                Total: {todosLosAlumnos.length}
-                            </span>
-                            <i className={`fas fa-chevron-down text-slate-300 transition-transform duration-300 ${expandirPoblacion ? 'rotate-180' : ''}`}></i>
-                        </div>
+                        <div className="flex items-center space-x-3"><span className="bg-indigo-600 text-white font-black text-xs px-3 py-1.5 rounded-lg shadow-sm shadow-indigo-200">Total: {todosLosAlumnos.length}</span><i className={`fas fa-chevron-down text-slate-300 transition-transform duration-300 ${expandirPoblacion ? 'rotate-180' : ''}`}></i></div>
                     </button>
-                    
-                    {/* CONTENIDO DESPLEGABLE */}
                     {expandirPoblacion && (
                         <div className="p-6 pt-0 animate-in slide-in-from-top-2 duration-200 border-t border-slate-50">
                             <div className="grid grid-cols-2 gap-3 mt-4">
@@ -92,31 +77,67 @@ function DashboardView({
                                         <span className="text-xs font-bold text-slate-600 truncate mr-2 max-w-[80px]">{campo}</span>
                                         <span className="text-sm font-black text-indigo-500">{conteoPorCampo[campo]}</span>
                                     </div>
-                                )) : (
-                                    <p className="col-span-2 text-center text-xs text-slate-400 italic py-2">No hay alumnos registrados.</p>
-                                )}
+                                )) : <p className="col-span-2 text-center text-xs text-slate-400 italic py-2">No hay alumnos registrados.</p>}
                             </div>
                         </div>
                     )}
                 </div>
 
-                {/* PERSONAL Y BOTÓN */}
+                {/* 3. DIRECTORIO DE PERSONAL (NUEVO ACORDEÓN) */}
+                <div className="bg-white rounded-[32px] border border-slate-100 shadow-sm overflow-hidden transition-all duration-300">
+                    <button onClick={() => setExpandirPersonal(!expandirPersonal)} className="w-full flex items-center justify-between p-6 bg-white hover:bg-slate-50 transition-colors">
+                        <div className="flex items-center">
+                            <div className="w-10 h-10 bg-emerald-50 text-emerald-600 rounded-xl flex items-center justify-center mr-3"><i className="fas fa-address-book"></i></div>
+                            <div className="text-left"><h3 className="font-bold text-slate-700 text-sm">Directorio del Personal</h3><p className="text-[10px] text-slate-400">{expandirPersonal ? 'Ocultar lista' : 'Buscar y gestionar'}</p></div>
+                        </div>
+                        <div className="flex items-center space-x-3"><span className="bg-emerald-500 text-white font-black text-xs px-3 py-1.5 rounded-lg shadow-sm shadow-emerald-200">Total: {activos.length}</span><i className={`fas fa-chevron-down text-slate-300 transition-transform duration-300 ${expandirPersonal ? 'rotate-180' : ''}`}></i></div>
+                    </button>
+                    
+                    {expandirPersonal && (
+                        <div className="p-6 pt-0 animate-in slide-in-from-top-2 duration-200 border-t border-slate-50">
+                            {/* Buscador */}
+                            <div className="flex items-center bg-slate-50 rounded-2xl px-4 py-3 my-4">
+                                <i className="fas fa-search text-slate-300 mr-3"></i>
+                                <input type="text" placeholder="Buscar maestro, auxiliar..." className="bg-transparent w-full outline-none text-sm" value={busqueda} onChange={(e) => setBusqueda(e.target.value)} />
+                            </div>
+                            {/* Lista */}
+                            <div className="space-y-4 max-h-[400px] overflow-y-auto pr-2">
+                                {listaAdminVisible.map(m => (
+                                    <div key={m.id} className="flex items-center justify-between p-2 rounded-xl hover:bg-slate-50 transition-colors">
+                                        <div className="flex items-center space-x-4">
+                                            <div className="w-10 h-10 bg-indigo-50 text-indigo-600 rounded-2xl flex items-center justify-center font-bold text-sm">
+                                                {m.nombre.charAt(0)}
+                                            </div>
+                                            <div>
+                                                <p className="font-bold text-slate-700 text-sm">{m.nombre}</p>
+                                                <span className="text-[9px] text-slate-400 font-bold uppercase">{m.clase} - {m.campo || 'N/A'}</span>
+                                            </div>
+                                        </div>
+                                        <div className="flex space-x-1">
+                                            <button onClick={() => onEdit(m)} className="text-indigo-400 w-8 h-8 flex items-center justify-center hover:bg-indigo-50 rounded-lg transition-colors"><i className="fas fa-edit"></i></button>
+                                            <button onClick={() => onDelete(m.id)} className="text-rose-400 w-8 h-8 flex items-center justify-center hover:bg-rose-50 rounded-lg transition-colors"><i className="fas fa-trash"></i></button>
+                                        </div>
+                                    </div>
+                                ))}
+                                {listaAdminVisible.length === 0 && <p className="text-center text-xs text-slate-300 italic">No se encontraron resultados.</p>}
+                            </div>
+                        </div>
+                    )}
+                </div>
+
+                {/* 4. TARJETAS GRANDES (RESUMEN + INSCRIBIR) */}
                 <div className="grid grid-cols-2 gap-4">
+                    {/* Tarjeta Azul: Resumen Visual */}
                     <div className="bg-indigo-600 p-6 rounded-[32px] text-white shadow-xl shadow-indigo-200 flex flex-col justify-between h-40 relative overflow-hidden">
                         <div className="absolute top-0 right-0 w-20 h-20 bg-white opacity-10 rounded-bl-[100px] pointer-events-none"></div>
                         <p className="text-xs font-bold uppercase opacity-70 tracking-widest">Personal Activo</p>
-                        <div><p className="text-5xl font-black tracking-tighter">{activos.length}</p><p className="text-[10px] opacity-70 mt-1">Miembros</p></div>
+                        <div><p className="text-5xl font-black tracking-tighter">{activos.length}</p><p className="text-[10px] opacity-70 mt-1">Miembros Totales</p></div>
                     </div>
+                    {/* Botón Inscribir */}
                     <button onClick={onToggleModal} className="bg-white p-6 rounded-[32px] border border-slate-100 flex flex-col justify-between h-40 text-left shadow-sm group hover:shadow-md transition-all active:scale-95">
                         <div className="w-12 h-12 bg-indigo-50 text-indigo-600 rounded-2xl flex items-center justify-center text-xl group-hover:bg-indigo-600 group-hover:text-white transition-colors"><i className="fas fa-plus"></i></div>
                         <div><p className="font-bold text-slate-700 text-lg leading-tight">Inscribir<br/>Personal</p><p className="text-[10px] text-slate-400 mt-1">Manual</p></div>
                     </button>
-                </div>
-
-                {/* DIRECTORIO DE PERSONAL */}
-                <div className="bg-white p-6 rounded-[32px] shadow-sm border border-slate-100 min-h-[300px]">
-                    <div className="flex items-center bg-slate-50 rounded-2xl px-4 py-3 mb-6"><i className="fas fa-search text-slate-300 mr-3"></i><input type="text" placeholder="Buscar personal..." className="bg-transparent w-full outline-none text-sm" value={busqueda} onChange={(e) => setBusqueda(e.target.value)} /></div>
-                    <div className="space-y-4">{listaAdminVisible.map(m => (<div key={m.id} className="flex items-center justify-between p-2 rounded-xl hover:bg-slate-50"><div className="flex items-center space-x-4"><div className="w-12 h-12 bg-indigo-50 text-indigo-600 rounded-2xl flex items-center justify-center font-bold text-lg">{m.nombre.charAt(0)}</div><div><p className="font-bold text-slate-700">{m.nombre}</p><span className="text-[9px] text-slate-400 font-bold uppercase">{m.clase} - {m.campo || 'N/A'}</span></div></div><div className="flex space-x-1"><button onClick={() => onEdit(m)} className="text-indigo-400 w-8 h-8 flex items-center justify-center hover:bg-indigo-50 rounded-lg transition-colors"><i className="fas fa-edit"></i></button><button onClick={() => onDelete(m.id)} className="text-rose-400 w-8 h-8 flex items-center justify-center hover:bg-rose-50 rounded-lg transition-colors"><i className="fas fa-trash"></i></button></div></div>))}</div>
                 </div>
             </div>
         );
@@ -153,7 +174,6 @@ function DashboardView({
             );
         }
 
-        // PANTALLA GESTIÓN
         return (
             <div className="flex flex-col h-full pt-4 animate-in slide-in-from-right duration-300">
                 <div className="flex items-center space-x-4 mb-6 px-2"><button onClick={() => setVistaActual('inicio')} className="w-10 h-10 bg-white border border-slate-100 rounded-xl text-slate-400 hover:text-indigo-600 flex items-center justify-center"><i className="fas fa-arrow-left"></i></button><div><h2 className="text-xl font-black text-slate-800">Gestionar Alumnos</h2><p className="text-slate-400 text-xs">{alumnos.length} Registrados</p></div></div>
