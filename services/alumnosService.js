@@ -48,7 +48,7 @@ window.AlumnosService = {
             });
     },
 
-    // 5. NUEVO: Escuchar TODOS los alumnos (Para el Director/Admin)
+    // 5. NUEVA: Escuchar TODOS los alumnos (Para el Director/Admin)
     suscribirTodos: (callback) => {
         return window.db.collection('alumnos')
             .onSnapshot((snapshot) => {
