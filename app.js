@@ -5,46 +5,46 @@ function App() {
     const [usuario, setUsuario] = useState(null);
     const [datosUsuarioActual, setDatosUsuarioActual] = useState(null);
     
-    // Datos Generales
     const [maestros, setMaestros] = useState([]);
-    
-    // Datos Alumnos
-    const [alumnos, setAlumnos] = useState([]); // Para maestros (su campo)
-    const [todosLosAlumnos, setTodosLosAlumnos] = useState([]); // Para Admin (todos) <--- ESTO ES CLAVE
-    
+    const [alumnos, setAlumnos] = useState([]);
+    const [todosLosAlumnos, setTodosLosAlumnos] = useState([]);
     const [asistenciaHoy, setAsistenciaHoy] = useState(null);
     
-    // Modales y Edición
+    // Modales
     const [modalAbierto, setModalAbierto] = useState(false);
     const [modalAlumno, setModalAlumno] = useState(false);
     const [maestroEdicion, setMaestroEdicion] = useState(null);
     const [idBorrar, setIdBorrar] = useState(null);
-    
-    // Alumnos Edición
     const [alumnoEdicion, setAlumnoEdicion] = useState(null);
     const [idAlumnoBorrar, setIdAlumnoBorrar] = useState(null);
     const [edadCalculada, setEdadCalculada] = useState(null);
 
     const camposDisponibles = ["La Isla", "Las Delicias", "El Amatal", "El Manguito", "Buenos Aires", "Corozal #1", "El Porvenir", "El Caulote", "Corozal #2", "Valle Encantado", "La Playa"];
 
+    // --- CORRECCIÓN AQUÍ: RECUPERAR DATOS AL CARGAR LA PÁGINA ---
     useEffect(() => {
         const sesion = AuthService.obtenerSesion();
-        if (sesion) setUsuario(sesion);
+        const datosGuardados = AuthService.obtenerDatosUsuario(); // Recuperamos el campo
+        
+        if (sesion) {
+            setUsuario(sesion);
+            if (datosGuardados) {
+                setDatosUsuarioActual(datosGuardados);
+            }
+        }
     }, []);
 
-    // Cargar Maestros (Siempre)
     useEffect(() => { if (MaestrosService) MaestrosService.suscribir(setMaestros); }, []);
 
-    // LÓGICA DE CARGA DE DATOS SEGÚN ROL
+    // Cargar datos según usuario
     useEffect(() => {
         if (!usuario || !AlumnosService) return;
 
         if (usuario === 'ADMIN') {
-            // Si es ADMIN: Cargar TODOS los alumnos para estadísticas
             const unsub = AlumnosService.suscribirTodos(setTodosLosAlumnos);
             return () => unsub();
-        } else if (datosUsuarioActual) {
-            // Si es MAESTRO: Cargar solo SU campo
+        } else if (datosUsuarioActual && datosUsuarioActual.campo) {
+            // Ahora 'datosUsuarioActual.campo' existe incluso al refrescar
             const unsub1 = AlumnosService.suscribirPorCampo(datosUsuarioActual.campo, setAlumnos);
             const unsub2 = AlumnosService.suscribirAsistenciaHoy(datosUsuarioActual.campo, setAsistenciaHoy);
             return () => { unsub1(); unsub2(); };
@@ -53,11 +53,30 @@ function App() {
 
     const handleLogin = async (rol, clave, nombre, campo) => {
         if (!AuthService.verificar(rol, clave)) return { exito: false, mensaje: "Clave incorrecta." };
-        if (rol === 'ADMIN') { setUsuario(rol); AuthService.guardarSesion(rol); return { exito: true }; }
+        if (rol === 'ADMIN') { 
+            setUsuario(rol); 
+            AuthService.guardarSesion(rol, null); // Admin no necesita datos de campo
+            return { exito: true }; 
+        }
         try {
             const snapshot = await window.db.collection('maestros').where('nombre', '==', nombre.trim()).where('clase', '==', rol).get();
-            if (snapshot.empty) { await MaestrosService.guardar({ nombre: nombre.trim(), clase: rol, campo: campo || '', telefono: '' }, null, 'SISTEMA_AUTO'); return { exito: true, mensaje: "Solicitud enviada al Director." }; } 
-            else { const doc = snapshot.docs[0]; const d = doc.data(); if (d.estado === 'Activo') { setUsuario(rol); setDatosUsuarioActual({ ...d, id: doc.id }); AuthService.guardarSesion(rol); return { exito: true }; } else return { exito: true, mensaje: "Pendiente de aprobación." }; }
+            if (snapshot.empty) { 
+                await MaestrosService.guardar({ nombre: nombre.trim(), clase: rol, campo: campo || '', telefono: '' }, null, 'SISTEMA_AUTO'); 
+                return { exito: true, mensaje: "Solicitud enviada al Director." }; 
+            } else { 
+                const doc = snapshot.docs[0]; 
+                const d = doc.data(); 
+                if (d.estado === 'Activo') { 
+                    setUsuario(rol); 
+                    const datosCompletos = { ...d, id: doc.id };
+                    setDatosUsuarioActual(datosCompletos);
+                    
+                    // --- CORRECCIÓN AQUÍ: GUARDAR DATOS COMPLETOS EN MEMORIA ---
+                    AuthService.guardarSesion(rol, datosCompletos); 
+                    
+                    return { exito: true }; 
+                } else return { exito: true, mensaje: "Pendiente de aprobación." }; 
+            }
         } catch (error) { return { exito: false, mensaje: "Error de conexión." }; }
     };
 
@@ -99,7 +118,7 @@ function App() {
             <main className="flex-1 overflow-y-auto p-5 pb-24 bg-slate-50/50 scroll-smooth">
                 <DashboardView 
                     maestros={maestros} alumnos={alumnos} 
-                    todosLosAlumnos={todosLosAlumnos} // <--- AQUÍ SE PASA LA DATA AL DASHBOARD
+                    todosLosAlumnos={todosLosAlumnos}
                     asistenciaHoy={asistenciaHoy} usuario={usuario}
                     onApprove={MaestrosService.aprobar} onDelete={setIdBorrar} onEdit={(m) => { setMaestroEdicion(m); setModalAbierto(true); }} onToggleModal={() => { setMaestroEdicion(null); setModalAbierto(true); }}
                     onSaveAsistencia={handleGuardarAsistencia}
