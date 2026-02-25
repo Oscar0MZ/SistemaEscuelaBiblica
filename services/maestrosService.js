@@ -38,7 +38,7 @@ window.MaestrosService = {
         }
     },
 
-    // 4. ELIMINAR EN CASCADA (CORREGIDO: MAESTRO + ALUMNOS + ASISTENCIA)
+    // 4. ELIMINAR EN CASCADA (CORREGIDO: BORRA TODA LA SEMANA)
     eliminarConAlumnos: async (idMaestro, campoMaestro) => {
         try {
             const batch = window.db.batch();
@@ -50,34 +50,28 @@ window.MaestrosService = {
                     .get();
                 snapshotAlumnos.docs.forEach(doc => batch.delete(doc.ref));
 
-                // B) BORRAR ASISTENCIAS (Sábado y Domingo actual)
-                // Calculamos las fechas igual que en el servicio de alumnos
+                // B) BORRAR ASISTENCIAS (DE LUNES A DOMINGO DE ESTA SEMANA)
+                // Usamos la misma lógica que el dashboard para encontrar los días
                 const hoy = new Date();
-                const diaSemana = hoy.getDay(); 
-                let fechaSabado = new Date(hoy);
-                let fechaDomingo = new Date(hoy);
-
-                if (diaSemana === 0) { // Domingo
-                    fechaSabado.setDate(hoy.getDate() - 1);
-                } else if (diaSemana === 6) { // Sábado
-                    fechaDomingo.setDate(hoy.getDate() + 1);
-                } else {
-                    const distSabado = 6 - diaSemana;
-                    fechaSabado.setDate(hoy.getDate() + distSabado);
-                    fechaDomingo.setDate(hoy.getDate() + distSabado + 1);
-                }
-
-                const sabadoStr = fechaSabado.toLocaleDateString('en-CA');
-                const domingoStr = fechaDomingo.toLocaleDateString('en-CA');
+                const diaSemana = hoy.getDay(); // 0=Dom, 1=Lun...
                 
-                // IDs de documentos de asistencia
-                const campoId = campoMaestro.replace(/\s+/g, '');
-                const idAsistenciaSab = `${sabadoStr}_${campoId}`;
-                const idAsistenciaDom = `${domingoStr}_${campoId}`;
+                // Calcular el Lunes de la semana actual
+                const distanciaAlLunes = diaSemana === 0 ? 6 : diaSemana - 1;
+                const lunes = new Date(hoy);
+                lunes.setDate(hoy.getDate() - distanciaAlLunes);
 
-                // Agregamos al lote de borrado
-                batch.delete(window.db.collection('asistencias').doc(idAsistenciaSab));
-                batch.delete(window.db.collection('asistencias').doc(idAsistenciaDom));
+                const campoId = campoMaestro.replace(/\s+/g, '');
+
+                // Recorremos los 7 días de la semana y borramos la asistencia si existe
+                for (let i = 0; i < 7; i++) {
+                    const dia = new Date(lunes);
+                    dia.setDate(lunes.getDate() + i);
+                    const fechaStr = dia.toLocaleDateString('en-CA');
+                    
+                    const idAsistencia = `${fechaStr}_${campoId}`;
+                    // Intentamos borrar el documento (si no existe, Firestore ignora la orden sin error)
+                    batch.delete(window.db.collection('asistencias').doc(idAsistencia));
+                }
             }
 
             // C) BORRAR MAESTRO
@@ -89,7 +83,6 @@ window.MaestrosService = {
             return true;
         } catch (error) {
             console.error("Error eliminando en cascada:", error);
-            // Fallback: intentar borrar al menos al maestro si falla lo demás
             try {
                 await window.db.collection('maestros').doc(idMaestro).delete();
                 return true;
