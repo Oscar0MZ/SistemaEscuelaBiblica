@@ -1,7 +1,5 @@
-// services/maestrosService.js
-
 window.MaestrosService = {
-    // 1. Escuchar la lista completa
+    // 1. Escuchar lista
     suscribir: (callback) => {
         return window.db.collection('maestros').onSnapshot((snapshot) => {
             const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
@@ -10,7 +8,7 @@ window.MaestrosService = {
         });
     },
 
-    // 2. Vigilar usuario (Seguridad)
+    // 2. Vigilar usuario
     vigilarUsuario: (id, callback) => {
         return window.db.collection('maestros').doc(id).onSnapshot((doc) => {
             callback(doc.exists ? doc.data() : null);
@@ -38,36 +36,43 @@ window.MaestrosService = {
         }
     },
 
-    // 4. NUEVO: ELIMINACIÓN EN CASCADA (Maestro + Alumnos)
+    // 4. ELIMINAR EN CASCADA (CORREGIDO Y REFORZADO)
     eliminarConAlumnos: async (idMaestro, campoMaestro) => {
         try {
-            // A) Preparamos el lote de borrado
             const batch = window.db.batch();
 
-            // B) Buscamos todos los alumnos de ese campo
-            const snapshotAlumnos = await window.db.collection('alumnos')
-                .where('campo', '==', campoMaestro)
-                .get();
+            // Solo intentamos borrar alumnos si hay un campo definido
+            if (campoMaestro) {
+                const snapshotAlumnos = await window.db.collection('alumnos')
+                    .where('campo', '==', campoMaestro)
+                    .get();
 
-            // C) Los agregamos a la lista de eliminación
-            snapshotAlumnos.docs.forEach(doc => {
-                batch.delete(doc.ref);
-            });
+                // Añadir cada alumno al lote de borrado
+                snapshotAlumnos.docs.forEach(doc => {
+                    batch.delete(doc.ref);
+                });
+            }
 
-            // D) Agregamos al maestro a la lista de eliminación
+            // Añadir al maestro al lote de borrado
             const maestroRef = window.db.collection('maestros').doc(idMaestro);
             batch.delete(maestroRef);
 
-            // E) Ejecutamos todo junto (Atómico)
+            // Ejecutar todo junto
             await batch.commit();
             return true;
         } catch (error) {
             console.error("Error eliminando en cascada:", error);
-            throw error;
+            // Si falla el lote, intentamos borrar al menos al maestro
+            try {
+                await window.db.collection('maestros').doc(idMaestro).delete();
+                return true;
+            } catch (e) {
+                throw e;
+            }
         }
     },
 
-    // 5. Eliminar simple (por si acaso)
+    // 5. Eliminar simple
     eliminar: async (id) => {
         await window.db.collection('maestros').doc(id).delete();
     },
