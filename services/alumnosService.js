@@ -15,7 +15,7 @@ window.AlumnosService = {
         }
     },
 
-    // 2. Actualizar Alumno
+    // 2. Actualizar
     actualizar: async (id, datosAlumno) => {
         try {
             await window.db.collection('alumnos').doc(id).update(datosAlumno);
@@ -26,7 +26,7 @@ window.AlumnosService = {
         }
     },
 
-    // 3. Eliminar Alumno
+    // 3. Eliminar
     eliminar: async (id) => {
         try {
             await window.db.collection('alumnos').doc(id).delete();
@@ -37,7 +37,7 @@ window.AlumnosService = {
         }
     },
 
-    // 4. Escuchar lista por CAMPO (Para Maestros)
+    // 4. Suscribir por Campo (Maestros)
     suscribirPorCampo: (campo, callback) => {
         return window.db.collection('alumnos')
             .where('campo', '==', campo)
@@ -48,7 +48,7 @@ window.AlumnosService = {
             });
     },
 
-    // 5. NUEVA: Escuchar TODOS los alumnos (Para el Director/Admin)
+    // 5. Suscribir TODOS (Admin - Población)
     suscribirTodos: (callback) => {
         return window.db.collection('alumnos')
             .onSnapshot((snapshot) => {
@@ -57,13 +57,13 @@ window.AlumnosService = {
             });
     },
 
-    // 6. Asistencia
+    // 6. Guardar Asistencia
     guardarAsistencia: async (datos) => {
         const idDoc = `${datos.fecha}_${datos.campo.replace(/\s+/g, '')}`; 
         await window.db.collection('asistencias').doc(idDoc).set(datos);
     },
 
-    // 7. Escuchar Asistencia Hoy
+    // 7. Suscribir Asistencia Hoy (Maestros - Un solo campo)
     suscribirAsistenciaHoy: (campo, callback) => {
         const hoy = new Date().toLocaleDateString('en-CA');
         const idDoc = `${hoy}_${campo.replace(/\s+/g, '')}`;
@@ -74,5 +74,17 @@ window.AlumnosService = {
                 callback(null);
             }
         });
+    },
+
+    // 8. NUEVO: Suscribir TODAS las Asistencias de Hoy (Admin - Resumen Global)
+    suscribirTodasAsistenciasHoy: (callback) => {
+        const hoy = new Date().toLocaleDateString('en-CA');
+        // Buscamos todos los documentos donde la fecha sea HOY
+        return window.db.collection('asistencias')
+            .where('fecha', '==', hoy)
+            .onSnapshot((snapshot) => {
+                const data = snapshot.docs.map(doc => doc.data());
+                callback(data);
+            });
     }
 };
