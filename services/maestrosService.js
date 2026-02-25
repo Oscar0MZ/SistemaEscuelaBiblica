@@ -1,7 +1,7 @@
 // services/maestrosService.js
 
 window.MaestrosService = {
-    // 1. Escuchar la lista completa (Para el Admin)
+    // 1. Escuchar la lista completa
     suscribir: (callback) => {
         return window.db.collection('maestros').onSnapshot((snapshot) => {
             const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
@@ -10,10 +10,9 @@ window.MaestrosService = {
         });
     },
 
-    // 2. NUEVO: Vigilar estado de UN solo usuario (Para expulsarlo si lo borran)
+    // 2. Vigilar usuario (Seguridad)
     vigilarUsuario: (id, callback) => {
         return window.db.collection('maestros').doc(id).onSnapshot((doc) => {
-            // Si el documento existe, devolvemos los datos. Si no existe (fue borrado), devolvemos null.
             callback(doc.exists ? doc.data() : null);
         });
     },
@@ -39,17 +38,46 @@ window.MaestrosService = {
         }
     },
 
-    // 4. Eliminar
+    // 4. NUEVO: ELIMINACIÓN EN CASCADA (Maestro + Alumnos)
+    eliminarConAlumnos: async (idMaestro, campoMaestro) => {
+        try {
+            // A) Preparamos el lote de borrado
+            const batch = window.db.batch();
+
+            // B) Buscamos todos los alumnos de ese campo
+            const snapshotAlumnos = await window.db.collection('alumnos')
+                .where('campo', '==', campoMaestro)
+                .get();
+
+            // C) Los agregamos a la lista de eliminación
+            snapshotAlumnos.docs.forEach(doc => {
+                batch.delete(doc.ref);
+            });
+
+            // D) Agregamos al maestro a la lista de eliminación
+            const maestroRef = window.db.collection('maestros').doc(idMaestro);
+            batch.delete(maestroRef);
+
+            // E) Ejecutamos todo junto (Atómico)
+            await batch.commit();
+            return true;
+        } catch (error) {
+            console.error("Error eliminando en cascada:", error);
+            throw error;
+        }
+    },
+
+    // 5. Eliminar simple (por si acaso)
     eliminar: async (id) => {
         await window.db.collection('maestros').doc(id).delete();
     },
 
-    // 5. Aprobar
+    // 6. Aprobar
     aprobar: async (id) => {
         await window.db.collection('maestros').doc(id).update({ estado: 'Activo' });
     },
 
-    // 6. Notificar
+    // 7. Notificar
     notificar: (datos) => {
         if (window.emailjs) {
             window.emailjs.send("service_475d2ya", "template_516xc7k", {
