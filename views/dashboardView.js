@@ -5,7 +5,7 @@ function DashboardView({
     alumnos = [], 
     todosLosAlumnos = [], 
     asistenciaHoy, 
-    datosGlobalesAsistencia = { registros: [], fechas: null }, // <--- Recibimos objeto
+    datosGlobalesAsistencia = { registros: [], rango: null }, 
     usuario, 
     onEdit, onDelete, onApprove, onToggleModal, 
     onOpenAlumnoModal, onEditAlumno, onDeleteAlumno, onSaveAsistencia 
@@ -20,12 +20,17 @@ function DashboardView({
     const [expandirPersonal, setExpandirPersonal] = useState(false);
 
     // Extraer datos globales
-    const { registros: todasAsistencias, fechas } = datosGlobalesAsistencia;
+    const { registros: todasAsistencias, rango } = datosGlobalesAsistencia;
 
-    // Formatear fechas para mostrar en la tarjeta
-    const textoFechas = fechas 
-        ? `${fechas.sabado.split('-')[2]}/${fechas.sabado.split('-')[1]} - ${fechas.domingo.split('-')[2]}/${fechas.domingo.split('-')[1]}` 
-        : 'Cargando...';
+    // Etiqueta de fechas (formato DD/MM)
+    const formatoFecha = (fechaStr) => {
+        if(!fechaStr) return '';
+        const partes = fechaStr.split('-');
+        return `${partes[2]}/${partes[1]}`;
+    };
+    const textoFechas = rango 
+        ? `${formatoFecha(rango.inicio)} - ${formatoFecha(rango.fin)}` 
+        : 'Calculando...';
 
     React.useEffect(() => {
         if (vistaActual === 'asistencia' && alumnos.length > 0) {
@@ -58,7 +63,7 @@ function DashboardView({
         });
         const camposOrdenados = Object.keys(conteoPorCampo).sort();
 
-        // CALCULO GLOBAL (Suma de todos los reportes del fin de semana)
+        // CALCULO GLOBAL ACUMULADO DE LA SEMANA
         let totalPresentes = 0, totalAusentes = 0, totalPermisos = 0;
         todasAsistencias.forEach(reporte => {
             if (reporte.totales) {
@@ -77,14 +82,13 @@ function DashboardView({
                     </div>
                 )}
 
-                {/* TARJETA ASISTENCIA FIN DE SEMANA */}
+                {/* TARJETA ASISTENCIA SEMANAL ACUMULADA */}
                 <div className="bg-white rounded-[32px] border border-slate-100 p-6 shadow-sm">
                     <div className="flex justify-between items-center mb-4">
                         <div>
-                            <h3 className="font-bold text-slate-700 text-sm flex items-center"><i className="fas fa-clipboard-check text-emerald-500 mr-2"></i> Asistencia Global</h3>
-                            <p className="text-[10px] text-slate-400 pl-6">Sábado y Domingo</p>
+                            <h3 className="font-bold text-slate-700 text-sm flex items-center"><i className="fas fa-clipboard-check text-emerald-500 mr-2"></i> Asistencia</h3>
+                            <p className="text-[10px] text-slate-400 pl-6">Semana Actual (Acumulado)</p>
                         </div>
-                        {/* FECHAS VISIBLES */}
                         <span className="text-[10px] bg-slate-100 text-slate-500 font-bold px-3 py-1 rounded-lg border border-slate-200">{textoFechas}</span>
                     </div>
                     <div className="flex justify-around text-center divide-x divide-slate-50">
@@ -104,8 +108,7 @@ function DashboardView({
                         <div className="p-6 pt-0 animate-in slide-in-from-top-2 duration-200 border-t border-slate-50">
                             <div className="space-y-3 mt-4">
                                 {camposOrdenados.length > 0 ? camposOrdenados.map(campo => {
-                                    // Buscar asistencia para este campo (Puede haber 2 registros, Sab y Dom)
-                                    // Sumamos ambos si existen
+                                    // Sumamos todo lo encontrado para este campo en la semana
                                     const reportesCampo = todasAsistencias.filter(a => a.campo === campo);
                                     let p = 0, a = 0, perm = 0;
                                     reportesCampo.forEach(r => { p += r.totales.presentes; a += r.totales.ausentes; perm += r.totales.permisos; });
@@ -162,7 +165,6 @@ function DashboardView({
         );
     }
 
-    // --- VISTA MAESTRO --- (Sin cambios, solo se renderiza igual)
     if (usuario === 'MAESTRO' || usuario === 'AUXILIAR') {
         if (vistaActual === 'inicio') { return (<div className="flex flex-col h-full space-y-4 pt-4 animate-in fade-in duration-500"><div className="px-2 mb-2"><h2 className="text-2xl font-black text-slate-800">Hola, {usuario.toLowerCase()}</h2><p className="text-slate-400 text-xs">Resumen del día</p></div><button onClick={() => setVistaActual('asistencia')} className={`w-full p-6 rounded-[32px] text-left relative overflow-hidden group active:scale-95 transition-all shadow-lg ${asistenciaHoy ? 'bg-white border border-slate-100' : 'bg-rose-500 text-white shadow-rose-200'}`}>{asistenciaHoy ? (<><div className="flex justify-between items-center mb-4"><h3 className="font-bold text-slate-700 flex items-center"><i className="fas fa-clipboard-check text-emerald-500 mr-2"></i> Asistencia Hoy</h3><span className="text-[10px] bg-emerald-100 text-emerald-700 px-2 py-1 rounded-lg font-bold">COMPLETADA</span></div><div className="flex justify-around text-center"><div><p className="text-2xl font-black text-emerald-500">{asistenciaHoy.totales.presentes}</p><p className="text-[10px] font-bold text-slate-400 uppercase">Presentes</p></div><div><p className="text-2xl font-black text-rose-500">{asistenciaHoy.totales.ausentes}</p><p className="text-[10px] font-bold text-slate-400 uppercase">Ausentes</p></div><div><p className="text-2xl font-black text-amber-500">{asistenciaHoy.totales.permisos}</p><p className="text-[10px] font-bold text-slate-400 uppercase">Permisos</p></div></div><div className="mt-4 text-center text-[10px] text-indigo-500 font-bold uppercase tracking-widest">Toca para editar</div></>) : (<><div className="absolute top-0 right-0 w-32 h-32 bg-white opacity-10 rounded-bl-[100px] pointer-events-none group-hover:scale-110 transition-transform"></div><div className="flex items-center space-x-4 relative z-10"><div className="w-14 h-14 bg-white/20 rounded-2xl flex items-center justify-center text-3xl backdrop-blur-sm animate-pulse"><i className="fas fa-clipboard-list"></i></div><div><h3 className="font-bold text-xl">Tomar Asistencia</h3><p className="text-rose-100 text-xs">Aún no registras el día de hoy</p></div></div></>)}</button><button onClick={() => setVistaActual('gestion')} className="w-full bg-indigo-600 p-6 rounded-[32px] text-white shadow-xl shadow-indigo-200 text-left relative overflow-hidden group active:scale-95 transition-all"><div className="absolute top-0 right-0 w-32 h-32 bg-white opacity-10 rounded-bl-[100px] pointer-events-none group-hover:scale-110 transition-transform"></div><div className="flex justify-between items-start"><div><p className="text-xs font-bold uppercase opacity-70 tracking-widest">Mis Alumnos</p><p className="text-5xl font-black tracking-tighter mt-1">{alumnos.length}</p></div><div className="w-12 h-12 bg-white/20 rounded-2xl flex items-center justify-center text-2xl backdrop-blur-sm"><i className="fas fa-users"></i></div></div><div className="mt-4 flex items-center text-xs font-bold text-indigo-200"><span>Gestionar lista</span><i className="fas fa-arrow-right ml-2 group-hover:translate-x-1 transition-transform"></i></div></button></div>); }
         if (vistaActual === 'asistencia') { return (<div className="flex flex-col h-full pt-4 animate-in slide-in-from-right duration-300"><div className="flex items-center space-x-4 mb-4 px-2"><button onClick={() => setVistaActual('inicio')} className="w-10 h-10 bg-white border border-slate-100 rounded-xl text-slate-400 hover:text-indigo-600 flex items-center justify-center"><i className="fas fa-arrow-left"></i></button><div><h2 className="text-xl font-black text-slate-800">Pasar Lista</h2><p className="text-slate-400 text-xs">{new Date().toLocaleDateString()}</p></div></div><div className="flex-1 bg-white rounded-t-[40px] shadow-lg border-t border-slate-100 p-6 overflow-hidden flex flex-col"><div className="overflow-y-auto space-y-4 pb-24 pr-2">{alumnos.map(a => (<div key={a.id} className="flex items-center justify-between p-2 border-b border-slate-50 last:border-0"><div className="flex items-center space-x-3 w-1/3"><div className="w-8 h-8 bg-indigo-50 text-indigo-600 rounded-full flex items-center justify-center text-xs font-bold">{a.nombre.charAt(0)}</div><p className="font-bold text-slate-700 text-sm truncate">{a.nombre.split(' ')[0]}</p></div><div className="flex space-x-1 flex-1 justify-end"><button onClick={() => setListaAsistencia({...listaAsistencia, [a.id]: 'Presente'})} className={`px-3 py-2 rounded-lg text-[10px] font-bold uppercase transition-all ${listaAsistencia[a.id] === 'Presente' ? 'bg-emerald-500 text-white shadow-md' : 'bg-slate-50 text-slate-400'}`}>P</button><button onClick={() => setListaAsistencia({...listaAsistencia, [a.id]: 'Ausente'})} className={`px-3 py-2 rounded-lg text-[10px] font-bold uppercase transition-all ${listaAsistencia[a.id] === 'Ausente' ? 'bg-rose-500 text-white shadow-md' : 'bg-slate-50 text-slate-400'}`}>A</button><button onClick={() => setListaAsistencia({...listaAsistencia, [a.id]: 'Permiso'})} className={`px-3 py-2 rounded-lg text-[10px] font-bold uppercase transition-all ${listaAsistencia[a.id] === 'Permiso' ? 'bg-amber-400 text-white shadow-md' : 'bg-slate-50 text-slate-400'}`}>Permiso</button></div></div>))}</div><div className="absolute bottom-6 left-6 right-6"><button onClick={guardarLista} className="w-full bg-indigo-600 p-4 rounded-2xl text-white font-black shadow-xl active:scale-95 transition-all">Guardar Asistencia</button></div></div></div>); }
