@@ -1,3 +1,5 @@
+// services/maestrosService.js
+
 window.MaestrosService = {
     // 1. Escuchar lista
     suscribir: (callback) => {
@@ -36,39 +38,62 @@ window.MaestrosService = {
         }
     },
 
-    // 4. ELIMINAR EN CASCADA (CORREGIDO Y REFORZADO)
+    // 4. ELIMINAR EN CASCADA (CORREGIDO: MAESTRO + ALUMNOS + ASISTENCIA)
     eliminarConAlumnos: async (idMaestro, campoMaestro) => {
         try {
             const batch = window.db.batch();
 
-            // Solo intentamos borrar alumnos si hay un campo definido
             if (campoMaestro) {
+                // A) BORRAR ALUMNOS
                 const snapshotAlumnos = await window.db.collection('alumnos')
                     .where('campo', '==', campoMaestro)
                     .get();
+                snapshotAlumnos.docs.forEach(doc => batch.delete(doc.ref));
 
-                // Añadir cada alumno al lote de borrado
-                snapshotAlumnos.docs.forEach(doc => {
-                    batch.delete(doc.ref);
-                });
+                // B) BORRAR ASISTENCIAS (Sábado y Domingo actual)
+                // Calculamos las fechas igual que en el servicio de alumnos
+                const hoy = new Date();
+                const diaSemana = hoy.getDay(); 
+                let fechaSabado = new Date(hoy);
+                let fechaDomingo = new Date(hoy);
+
+                if (diaSemana === 0) { // Domingo
+                    fechaSabado.setDate(hoy.getDate() - 1);
+                } else if (diaSemana === 6) { // Sábado
+                    fechaDomingo.setDate(hoy.getDate() + 1);
+                } else {
+                    const distSabado = 6 - diaSemana;
+                    fechaSabado.setDate(hoy.getDate() + distSabado);
+                    fechaDomingo.setDate(hoy.getDate() + distSabado + 1);
+                }
+
+                const sabadoStr = fechaSabado.toLocaleDateString('en-CA');
+                const domingoStr = fechaDomingo.toLocaleDateString('en-CA');
+                
+                // IDs de documentos de asistencia
+                const campoId = campoMaestro.replace(/\s+/g, '');
+                const idAsistenciaSab = `${sabadoStr}_${campoId}`;
+                const idAsistenciaDom = `${domingoStr}_${campoId}`;
+
+                // Agregamos al lote de borrado
+                batch.delete(window.db.collection('asistencias').doc(idAsistenciaSab));
+                batch.delete(window.db.collection('asistencias').doc(idAsistenciaDom));
             }
 
-            // Añadir al maestro al lote de borrado
+            // C) BORRAR MAESTRO
             const maestroRef = window.db.collection('maestros').doc(idMaestro);
             batch.delete(maestroRef);
 
-            // Ejecutar todo junto
+            // EJECUTAR TODO
             await batch.commit();
             return true;
         } catch (error) {
             console.error("Error eliminando en cascada:", error);
-            // Si falla el lote, intentamos borrar al menos al maestro
+            // Fallback: intentar borrar al menos al maestro si falla lo demás
             try {
                 await window.db.collection('maestros').doc(idMaestro).delete();
                 return true;
-            } catch (e) {
-                throw e;
-            }
+            } catch (e) { throw e; }
         }
     },
 
