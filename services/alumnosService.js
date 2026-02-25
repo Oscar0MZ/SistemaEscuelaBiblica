@@ -1,18 +1,12 @@
 // services/alumnosService.js
 
 window.AlumnosService = {
-    // 1. Registrar Alumno
+    // 1. Registrar
     registrar: async (datosAlumno) => {
         try {
-            await window.db.collection('alumnos').add({
-                ...datosAlumno,
-                createdAt: Date.now()
-            });
+            await window.db.collection('alumnos').add({ ...datosAlumno, createdAt: Date.now() });
             return true;
-        } catch (error) {
-            console.error("Error guardando alumno:", error);
-            throw error;
-        }
+        } catch (error) { console.error(error); throw error; }
     },
 
     // 2. Actualizar
@@ -29,77 +23,74 @@ window.AlumnosService = {
 
     // 4. Suscribir por Campo
     suscribirPorCampo: (campo, callback) => {
-        return window.db.collection('alumnos')
-            .where('campo', '==', campo)
-            .onSnapshot((snapshot) => {
-                const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-                data.sort((a, b) => a.nombre.localeCompare(b.nombre));
-                callback(data);
-            });
+        return window.db.collection('alumnos').where('campo', '==', campo).onSnapshot((snapshot) => {
+            const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+            data.sort((a, b) => a.nombre.localeCompare(b.nombre));
+            callback(data);
+        });
     },
 
-    // 5. Suscribir TODOS
+    // 5. Suscribir Todos
     suscribirTodos: (callback) => {
-        return window.db.collection('alumnos')
-            .onSnapshot((snapshot) => {
-                const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-                callback(data);
-            });
+        return window.db.collection('alumnos').onSnapshot((snapshot) => {
+            const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+            callback(data);
+        });
     },
 
-    // 6. Guardar Asistencia (Fecha exacta)
+    // 6. Guardar Asistencia (Sobrescribe si ya existe para ese día -> Permite Editar)
     guardarAsistencia: async (datos) => {
         const idDoc = `${datos.fecha}_${datos.campo.replace(/\s+/g, '')}`; 
         await window.db.collection('asistencias').doc(idDoc).set(datos);
     },
 
-    // 7. Suscribir Asistencia HOY (Para el Maestro - Solo ve su día actual)
+    // 7. Suscribir Asistencia HOY (Maestros)
     suscribirAsistenciaHoy: (campo, callback) => {
         const hoy = new Date().toLocaleDateString('en-CA');
         const idDoc = `${hoy}_${campo.replace(/\s+/g, '')}`;
         return window.db.collection('asistencias').doc(idDoc).onSnapshot((doc) => {
-            if (doc.exists) {
-                callback(doc.data());
-            } else {
-                callback(null); // Si no existe (es un nuevo domingo), devuelve null para empezar de cero
-            }
+            callback(doc.exists ? doc.data() : null);
         });
     },
 
-    // 8. NUEVO: Suscribir Asistencia FIN DE SEMANA (Para el Admin - Suma Sábado y Domingo)
+    // 8. NUEVO: Suscribir FIN DE SEMANA INTELIGENTE (Admin)
     suscribirAsistenciaFinDeSemana: (callback) => {
-        // Calcular fechas de este fin de semana
         const hoy = new Date();
-        const diaSemana = hoy.getDay(); // 0=Domingo, 6=Sábado
-        
-        // Ajustamos para obtener siempre el Sábado y Domingo de la semana actual
-        // Si hoy es Domingo (0), Sábado fue ayer (-1).
-        // Si hoy es Sábado (6), Domingo es mañana (+1).
-        // Si es Lunes-Viernes, calculamos el fin de semana próximo o pasado según lógica (asumimos semana actual).
+        const diaSemana = hoy.getDay(); // 0=Dom, 1=Lun... 6=Sab
         
         let fechaSabado = new Date(hoy);
         let fechaDomingo = new Date(hoy);
 
-        if (diaSemana === 0) { // Domingo
-            fechaSabado.setDate(hoy.getDate() - 1);
-        } else if (diaSemana === 6) { // Sábado
+        // REGLA: 
+        // Viernes(5), Sábado(6), Domingo(0) -> Mostrar Finde ACTUAL
+        // Lunes(1) a Jueves(4) -> Mostrar Finde PASADO (para revisar datos)
+        
+        if (diaSemana === 5) { // Viernes
+            fechaSabado.setDate(hoy.getDate() + 1);
+            fechaDomingo.setDate(hoy.getDate() + 2);
+        } else if (diaSemana === 6) { // Sábado (Hoy)
             fechaDomingo.setDate(hoy.getDate() + 1);
-        } else {
-            // Si entran un Miércoles, mostramos el finde que viene
-            const distSabado = 6 - diaSemana;
-            fechaSabado.setDate(hoy.getDate() + distSabado);
-            fechaDomingo.setDate(hoy.getDate() + distSabado + 1);
+        } else if (diaSemana === 0) { // Domingo (Hoy)
+            fechaSabado.setDate(hoy.getDate() - 1);
+        } else { // Lun-Jue (Retroceder)
+            const diasParaDomingo = diaSemana; // Si es lunes(1), resto 1 para llegar a domingo pasado
+            fechaDomingo.setDate(hoy.getDate() - diasParaDomingo);
+            fechaSabado.setDate(hoy.getDate() - diasParaDomingo - 1);
         }
 
         const sabadoStr = fechaSabado.toLocaleDateString('en-CA');
         const domingoStr = fechaDomingo.toLocaleDateString('en-CA');
 
-        // Buscamos documentos que sean del Sábado O del Domingo
+        // Escuchar datos de ambas fechas
         return window.db.collection('asistencias')
             .where('fecha', 'in', [sabadoStr, domingoStr])
             .onSnapshot((snapshot) => {
-                const data = snapshot.docs.map(doc => doc.data());
-                callback(data);
+                const registros = snapshot.docs.map(doc => doc.data());
+                // Devolvemos los datos Y las fechas que estamos viendo
+                callback({
+                    registros: registros,
+                    fechas: { sabado: sabadoStr, domingo: domingoStr }
+                });
             });
     }
 };
