@@ -38,7 +38,7 @@ window.AlumnosService = {
         });
     },
 
-    // 6. Guardar Asistencia (Sobrescribe si ya existe para ese día -> Permite Editar)
+    // 6. Guardar Asistencia
     guardarAsistencia: async (datos) => {
         const idDoc = `${datos.fecha}_${datos.campo.replace(/\s+/g, '')}`; 
         await window.db.collection('asistencias').doc(idDoc).set(datos);
@@ -53,43 +53,36 @@ window.AlumnosService = {
         });
     },
 
-    // 8. NUEVO: Suscribir FIN DE SEMANA INTELIGENTE (Admin)
-    suscribirAsistenciaFinDeSemana: (callback) => {
+    // 8. NUEVO: SEMANA ACUMULATIVA (Lunes a Domingo)
+    suscribirAsistenciaSemanal: (callback) => {
         const hoy = new Date();
-        const diaSemana = hoy.getDay(); // 0=Dom, 1=Lun... 6=Sab
+        const diaSemana = hoy.getDay(); // 0=Dom, 1=Lun...
         
-        let fechaSabado = new Date(hoy);
-        let fechaDomingo = new Date(hoy);
+        // Calcular el LUNES de esta semana
+        // Si hoy es domingo (0), el lunes fue hace 6 días. Si es lunes (1), es hoy (0 días atrás).
+        const distanciaAlLunes = diaSemana === 0 ? 6 : diaSemana - 1;
+        const lunes = new Date(hoy);
+        lunes.setDate(hoy.getDate() - distanciaAlLunes);
 
-        // REGLA: 
-        // Viernes(5), Sábado(6), Domingo(0) -> Mostrar Finde ACTUAL
-        // Lunes(1) a Jueves(4) -> Mostrar Finde PASADO (para revisar datos)
-        
-        if (diaSemana === 5) { // Viernes
-            fechaSabado.setDate(hoy.getDate() + 1);
-            fechaDomingo.setDate(hoy.getDate() + 2);
-        } else if (diaSemana === 6) { // Sábado (Hoy)
-            fechaDomingo.setDate(hoy.getDate() + 1);
-        } else if (diaSemana === 0) { // Domingo (Hoy)
-            fechaSabado.setDate(hoy.getDate() - 1);
-        } else { // Lun-Jue (Retroceder)
-            const diasParaDomingo = diaSemana; // Si es lunes(1), resto 1 para llegar a domingo pasado
-            fechaDomingo.setDate(hoy.getDate() - diasParaDomingo);
-            fechaSabado.setDate(hoy.getDate() - diasParaDomingo - 1);
+        // Generar array con las 7 fechas de la semana (Lun a Dom)
+        const fechasSemana = [];
+        for (let i = 0; i < 7; i++) {
+            const dia = new Date(lunes);
+            dia.setDate(lunes.getDate() + i);
+            fechasSemana.push(dia.toLocaleDateString('en-CA'));
         }
 
-        const sabadoStr = fechaSabado.toLocaleDateString('en-CA');
-        const domingoStr = fechaDomingo.toLocaleDateString('en-CA');
+        const inicioSemanaStr = fechasSemana[0]; // Lunes
+        const finSemanaStr = fechasSemana[6];    // Domingo
 
-        // Escuchar datos de ambas fechas
+        // Consultamos cualquier asistencia que coincida con CUALQUIER día de esta semana
         return window.db.collection('asistencias')
-            .where('fecha', 'in', [sabadoStr, domingoStr])
+            .where('fecha', 'in', fechasSemana)
             .onSnapshot((snapshot) => {
                 const registros = snapshot.docs.map(doc => doc.data());
-                // Devolvemos los datos Y las fechas que estamos viendo
                 callback({
                     registros: registros,
-                    fechas: { sabado: sabadoStr, domingo: domingoStr }
+                    rango: { inicio: inicioSemanaStr, fin: finSemanaStr }
                 });
             });
     }
