@@ -3,19 +3,17 @@ const { useState } = React;
 function DashboardView({ 
     maestros, 
     alumnos = [], 
+    todosLosAlumnos = [], // Data global que viene de App.js
     asistenciaHoy, 
     usuario, 
-    onEdit, onDelete, onApprove, onToggleModal, // Props del Admin
-    onOpenAlumnoModal, onEditAlumno, onDeleteAlumno, onSaveAsistencia // Props del Maestro
+    onEdit, onDelete, onApprove, onToggleModal, 
+    onOpenAlumnoModal, onEditAlumno, onDeleteAlumno, onSaveAsistencia 
 }) {
     const esAdmin = usuario === 'ADMIN';
     const [busqueda, setBusqueda] = useState('');
     const [vistaActual, setVistaActual] = useState('inicio'); 
-    
-    // Estado local para asistencia
     const [listaAsistencia, setListaAsistencia] = useState({});
 
-    // Cargar asistencia
     React.useEffect(() => {
         if (vistaActual === 'asistencia' && alumnos.length > 0) {
             const inicial = {};
@@ -29,28 +27,57 @@ function DashboardView({
     }, [vistaActual, alumnos, asistenciaHoy]);
 
     const guardarLista = async () => {
-        const registros = alumnos.map(a => ({
-            idAlumno: a.id,
-            nombre: a.nombre,
-            estado: listaAsistencia[a.id] || 'Ausente'
-        }));
+        const registros = alumnos.map(a => ({ idAlumno: a.id, nombre: a.nombre, estado: listaAsistencia[a.id] || 'Ausente' }));
         const exito = await onSaveAsistencia(registros);
         if (exito) setVistaActual('inicio');
     };
 
-    // --- VISTA ADMIN (Sin cambios mayores) ---
+    // --- VISTA ADMIN (CON ESTADÍSTICAS) ---
     if (esAdmin) {
         const pendientes = maestros.filter(m => m.estado === 'Pendiente');
         const activos = maestros.filter(m => m.estado === 'Activo');
         const listaAdminVisible = maestros.filter(m => m.nombre.toLowerCase().includes(busqueda.toLowerCase()) || (m.campo && m.campo.toLowerCase().includes(busqueda.toLowerCase())));
+
+        // --- CÁLCULO DE TOTALES POR CAMPO ---
+        const conteoPorCampo = {};
+        todosLosAlumnos.forEach(alumno => {
+            const campo = alumno.campo || 'Sin Campo';
+            conteoPorCampo[campo] = (conteoPorCampo[campo] || 0) + 1;
+        });
+        // Ordenamos los campos alfabéticamente para que se vea ordenado
+        const camposOrdenados = Object.keys(conteoPorCampo).sort();
+
         return (
             <div className="space-y-6">
+                {/* SOLICITUDES */}
                 {pendientes.length > 0 && (
                     <div className="bg-amber-50 border border-amber-100 p-5 rounded-[32px]">
                         <h3 className="text-amber-800 font-bold text-sm mb-3"><i className="fas fa-user-clock mr-2"></i> Solicitudes ({pendientes.length})</h3>
                         <div className="space-y-3">{pendientes.map(p => (<div key={p.id} className="bg-white p-4 rounded-2xl shadow-sm flex justify-between items-center border border-amber-100"><div><p className="font-bold text-slate-700 text-sm">{p.nombre}</p><span className="text-[10px] text-slate-400 font-bold uppercase">{p.clase}</span></div><div className="flex space-x-2"><button onClick={() => onApprove(p.id)} className="w-9 h-9 bg-emerald-500 text-white rounded-xl"><i className="fas fa-check"></i></button><button onClick={() => onDelete(p.id)} className="w-9 h-9 bg-rose-100 text-rose-500 rounded-xl"><i className="fas fa-times"></i></button></div></div>))}</div>
                     </div>
                 )}
+
+                {/* --- NUEVO: RESUMEN DE POBLACIÓN ESTUDIANTIL --- */}
+                <div className="bg-white p-6 rounded-[32px] border border-slate-100 shadow-sm">
+                    <div className="flex items-center justify-between mb-4">
+                        <h3 className="font-bold text-slate-700"><i className="fas fa-chart-pie text-indigo-500 mr-2"></i> Población Estudiantil</h3>
+                        <span className="bg-indigo-50 text-indigo-600 font-black text-xs px-3 py-1 rounded-lg">Total: {todosLosAlumnos.length}</span>
+                    </div>
+                    
+                    {/* GRID DE CAMPOS */}
+                    <div className="grid grid-cols-2 gap-3">
+                        {camposOrdenados.length > 0 ? camposOrdenados.map(campo => (
+                            <div key={campo} className="bg-slate-50 p-3 rounded-2xl border border-slate-100 flex justify-between items-center">
+                                <span className="text-xs font-bold text-slate-600 truncate mr-2 max-w-[80px]">{campo}</span>
+                                <span className="text-sm font-black text-indigo-500">{conteoPorCampo[campo]}</span>
+                            </div>
+                        )) : (
+                            <p className="col-span-2 text-center text-xs text-slate-400 italic py-4">No hay alumnos registrados aún.</p>
+                        )}
+                    </div>
+                </div>
+
+                {/* PERSONAL Y BOTÓN */}
                 <div className="grid grid-cols-2 gap-4">
                     <div className="bg-indigo-600 p-6 rounded-[32px] text-white shadow-xl shadow-indigo-200 flex flex-col justify-between h-40 relative overflow-hidden">
                         <div className="absolute top-0 right-0 w-20 h-20 bg-white opacity-10 rounded-bl-[100px] pointer-events-none"></div>
@@ -59,8 +86,10 @@ function DashboardView({
                     </div>
                     <button onClick={onToggleModal} className="bg-white p-6 rounded-[32px] border border-slate-100 flex flex-col justify-between h-40 text-left shadow-sm group"><div className="w-12 h-12 bg-indigo-50 text-indigo-600 rounded-2xl flex items-center justify-center text-xl group-hover:bg-indigo-600 group-hover:text-white transition-colors"><i className="fas fa-plus"></i></div><div><p className="font-bold text-slate-700 text-lg leading-tight">Inscribir<br/>Personal</p><p className="text-[10px] text-slate-400 mt-1">Manual</p></div></button>
                 </div>
+
+                {/* DIRECTORIO DE PERSONAL */}
                 <div className="bg-white p-6 rounded-[32px] shadow-sm border border-slate-100 min-h-[300px]">
-                    <div className="flex items-center bg-slate-50 rounded-2xl px-4 py-3 mb-6"><i className="fas fa-search text-slate-300 mr-3"></i><input type="text" placeholder="Buscar..." className="bg-transparent w-full outline-none text-sm" value={busqueda} onChange={(e) => setBusqueda(e.target.value)} /></div>
+                    <div className="flex items-center bg-slate-50 rounded-2xl px-4 py-3 mb-6"><i className="fas fa-search text-slate-300 mr-3"></i><input type="text" placeholder="Buscar personal..." className="bg-transparent w-full outline-none text-sm" value={busqueda} onChange={(e) => setBusqueda(e.target.value)} /></div>
                     <div className="space-y-4">{listaAdminVisible.map(m => (<div key={m.id} className="flex items-center justify-between p-2 rounded-xl hover:bg-slate-50"><div className="flex items-center space-x-4"><div className="w-12 h-12 bg-indigo-50 text-indigo-600 rounded-2xl flex items-center justify-center font-bold text-lg">{m.nombre.charAt(0)}</div><div><p className="font-bold text-slate-700">{m.nombre}</p><span className="text-[9px] text-slate-400 font-bold uppercase">{m.clase} - {m.campo || 'N/A'}</span></div></div><div className="flex space-x-1"><button onClick={() => onEdit(m)} className="text-indigo-400 w-8 h-8"><i className="fas fa-edit"></i></button><button onClick={() => onDelete(m.id)} className="text-rose-400 w-8 h-8"><i className="fas fa-trash"></i></button></div></div>))}</div>
                 </div>
             </div>
@@ -98,22 +127,15 @@ function DashboardView({
             );
         }
 
-        // PANTALLA GESTIÓN (LISTA + REGISTRO + EDITAR/ELIMINAR)
+        // PANTALLA GESTIÓN
         return (
             <div className="flex flex-col h-full pt-4 animate-in slide-in-from-right duration-300">
                 <div className="flex items-center space-x-4 mb-6 px-2"><button onClick={() => setVistaActual('inicio')} className="w-10 h-10 bg-white border border-slate-100 rounded-xl text-slate-400 hover:text-indigo-600 flex items-center justify-center"><i className="fas fa-arrow-left"></i></button><div><h2 className="text-xl font-black text-slate-800">Gestionar Alumnos</h2><p className="text-slate-400 text-xs">{alumnos.length} Registrados</p></div></div>
                 <button onClick={onOpenAlumnoModal} className="w-full bg-emerald-500 p-4 rounded-[24px] shadow-lg shadow-emerald-200 active:scale-95 transition-all text-white flex items-center justify-between mb-6"><div className="flex items-center space-x-3"><div className="w-10 h-10 bg-white/20 rounded-xl flex items-center justify-center text-lg backdrop-blur-sm"><i className="fas fa-plus"></i></div><span className="font-bold">Nuevo Alumno</span></div><i className="fas fa-chevron-right opacity-50"></i></button>
                 <div className="flex-1 bg-white rounded-t-[40px] shadow-[0_-10px_40px_rgba(0,0,0,0.05)] border-t border-slate-100 p-6 overflow-hidden flex flex-col"><div className="overflow-y-auto space-y-3 pb-20 pr-2">{alumnos.map(nino => (
                     <div key={nino.id} className="flex items-center justify-between p-4 bg-slate-50 rounded-2xl border border-slate-100">
-                        <div className="flex items-center space-x-4">
-                            <div className="w-10 h-10 bg-white text-slate-400 rounded-full flex items-center justify-center text-sm font-bold border border-slate-100 shadow-sm">{nino.nombre.charAt(0)}</div>
-                            <div><p className="font-bold text-slate-700 text-sm">{nino.nombre}</p><p className="text-[10px] text-slate-400"><i className="fas fa-birthday-cake mr-1 text-rose-300"></i>{nino.edad} Años</p></div>
-                        </div>
-                        {/* BOTONES DE EDICIÓN Y ELIMINACIÓN */}
-                        <div className="flex space-x-1">
-                            <button onClick={() => onEditAlumno(nino)} className="text-indigo-400 w-8 h-8 flex items-center justify-center hover:bg-indigo-50 rounded-lg transition-colors"><i className="fas fa-edit"></i></button>
-                            <button onClick={() => onDeleteAlumno(nino.id)} className="text-rose-400 w-8 h-8 flex items-center justify-center hover:bg-rose-50 rounded-lg transition-colors"><i className="fas fa-trash"></i></button>
-                        </div>
+                        <div className="flex items-center space-x-4"><div className="w-10 h-10 bg-white text-slate-400 rounded-full flex items-center justify-center text-sm font-bold border border-slate-100 shadow-sm">{nino.nombre.charAt(0)}</div><div><p className="font-bold text-slate-700 text-sm">{nino.nombre}</p><p className="text-[10px] text-slate-400"><i className="fas fa-birthday-cake mr-1 text-rose-300"></i>{nino.edad} Años</p></div></div>
+                        <div className="flex space-x-1"><button onClick={() => onEditAlumno(nino)} className="text-indigo-400 w-8 h-8 flex items-center justify-center hover:bg-indigo-50 rounded-lg transition-colors"><i className="fas fa-edit"></i></button><button onClick={() => onDeleteAlumno(nino.id)} className="text-rose-400 w-8 h-8 flex items-center justify-center hover:bg-rose-50 rounded-lg transition-colors"><i className="fas fa-trash"></i></button></div>
                     </div>
                 ))}</div></div>
             </div>
