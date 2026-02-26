@@ -3,7 +3,8 @@ const { useState } = React;
 function AdminDashboard({
     maestros, todosLosAlumnos, datosGlobalesAsistencia, historialAsistencias, entregasLogistica,
     mantenimiento, onToggleMantenimiento, onApprove, onDelete, onToggleModal, 
-    onDeleteCampo, onResetLecciones, onCrearEntrega, onBorrarEntrega, onAssignGroup
+    onDeleteCampo, onResetLecciones, onCrearEntrega, onBorrarEntrega, onAssignGroup,
+    inventarioViveres, onActualizarInventario // RECIBIMOS LOS NUEVOS PROPS
 }) {
     const [busqueda, setBusqueda] = useState('');
     const [vistaActual, setVistaActual] = useState('inicio'); 
@@ -12,12 +13,11 @@ function AdminDashboard({
     const [expandirFiltroAdmin, setExpandirFiltroAdmin] = useState(false);
     const [campoExpandido, setCampoExpandido] = useState(null); 
     const [campoResetUI, setCampoResetUI] = useState(null);
-    const [subVistaAdminLogistica, setSubVistaAdminLogistica] = useState('misiones'); 
+    const [subVistaAdminLogistica, setSubVistaAdminLogistica] = useState('bodega'); // <-- Bodega como pestaña principal en Logística
     const [edadMin, setEdadMin] = useState('');
     const [edadMax, setEdadMax] = useState('');
     const [camposRuta, setCamposRuta] = useState([]);
     
-    // ESTADO NUEVO PARA EL ACORDEÓN AGRUPADO DE RUTAS COMPLETADAS
     const [grupoCompletadoExp, setGrupoCompletadoExp] = useState(null);
 
     const historialVisible = historialAsistencias.filter(h => !h.esReset);
@@ -216,32 +216,77 @@ function AdminDashboard({
         const entregasCompletadas = entregasLogistica.filter(e => e.estado === 'Entregado');
         const personalLogistica = activos.filter(m => m.clase === 'LOGISTICA'); 
 
-        // --- MAGIA: AGRUPAR RUTAS COMPLETADAS POR EL NOMBRE DEL GRUPO ---
         const entregasCompletadasPorGrupo = {};
         entregasCompletadas.forEach(e => {
-            if (!entregasCompletadasPorGrupo[e.grupo]) {
-                entregasCompletadasPorGrupo[e.grupo] = [];
-            }
+            if (!entregasCompletadasPorGrupo[e.grupo]) entregasCompletadasPorGrupo[e.grupo] = [];
             entregasCompletadasPorGrupo[e.grupo].push(e);
         });
         const gruposCompletados = Object.keys(entregasCompletadasPorGrupo).sort();
 
+        // --- MAGIA: CÁLCULO DE INVENTARIO GENERAL ---
+        let totalRepartidoHistorico = 0;
+        entregasLogistica.forEach(e => {
+            if (e.detalles) {
+                Object.values(e.detalles).forEach(val => {
+                    totalRepartidoHistorico += (Number(val) || 0);
+                });
+            }
+        });
+        const enBodega = (inventarioViveres || 0) - totalRepartidoHistorico;
+
         contenidoAdmin = (
             <div className="space-y-4 animate-in slide-in-from-right duration-300 h-full flex flex-col">
-                <div className="px-2 mb-2"><h2 className="text-2xl font-black text-slate-800">Logística</h2><p className="text-slate-400 text-xs">Administración de rutas y equipos</p></div>
+                <div className="px-2 mb-2"><h2 className="text-2xl font-black text-slate-800">Logística</h2><p className="text-slate-400 text-xs">Inventario, rutas y equipos</p></div>
                 
                 <div className="flex px-2 space-x-2 mb-2">
+                    <button onClick={() => setSubVistaAdminLogistica('bodega')} className={`flex-1 py-2 rounded-xl text-xs font-bold transition-all ${subVistaAdminLogistica === 'bodega' ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-50 text-slate-400'}`}><i className="fas fa-warehouse mr-2"></i>Bodega</button>
                     <button onClick={() => setSubVistaAdminLogistica('misiones')} className={`flex-1 py-2 rounded-xl text-xs font-bold transition-all ${subVistaAdminLogistica === 'misiones' ? 'bg-amber-100 text-amber-700' : 'bg-slate-50 text-slate-400'}`}><i className="fas fa-route mr-2"></i>Rutas</button>
                     <button onClick={() => setSubVistaAdminLogistica('equipos')} className={`flex-1 py-2 rounded-xl text-xs font-bold transition-all ${subVistaAdminLogistica === 'equipos' ? 'bg-indigo-100 text-indigo-700' : 'bg-slate-50 text-slate-400'}`}><i className="fas fa-users-cog mr-2"></i>Equipos</button>
                 </div>
 
                 <div className="flex-1 overflow-y-auto pb-24">
-                    {subVistaAdminLogistica === 'misiones' ? (
+                    
+                    {/* --- NUEVA PESTAÑA DE BODEGA --- */}
+                    {subVistaAdminLogistica === 'bodega' && (
+                        <div className="animate-in slide-in-from-left duration-200 px-1">
+                            <div className="bg-indigo-600 p-6 rounded-[32px] text-white shadow-xl shadow-indigo-200 relative overflow-hidden mb-5 mt-2">
+                                <div className="absolute top-0 right-0 w-32 h-32 bg-white opacity-10 rounded-bl-[100px] pointer-events-none"></div>
+                                <div className="relative z-10">
+                                    <p className="text-xs font-bold uppercase opacity-80 tracking-widest mb-1">Stock en Bodega</p>
+                                    <p className="text-6xl font-black tracking-tighter">{enBodega}</p>
+                                </div>
+                                <div className="w-16 h-16 bg-white/20 rounded-2xl flex items-center justify-center text-3xl backdrop-blur-sm absolute bottom-6 right-6 z-10"><i className="fas fa-boxes"></i></div>
+                            </div>
+
+                            <div className="flex space-x-3 mb-6">
+                                <div className="w-1/2 bg-white p-4 rounded-2xl border border-slate-100 shadow-sm text-center">
+                                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Inv. Inicial</p>
+                                    <p className="text-2xl font-black text-slate-700">{inventarioViveres}</p>
+                                </div>
+                                <div className="w-1/2 bg-white p-4 rounded-2xl border border-slate-100 shadow-sm text-center">
+                                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Entregados</p>
+                                    <p className="text-2xl font-black text-emerald-500">{totalRepartidoHistorico}</p>
+                                </div>
+                            </div>
+
+                            <form onSubmit={(e) => { e.preventDefault(); onActualizarInventario(Number(e.target.nuevoStock.value)); }} className="bg-slate-50 p-5 rounded-3xl border border-slate-200 shadow-sm">
+                                <h3 className="font-bold text-slate-700 text-sm mb-3 flex items-center"><i className="fas fa-edit text-indigo-500 mr-2"></i> Registrar Nuevo Ingreso</h3>
+                                <p className="text-[11px] text-slate-500 mb-4 leading-relaxed font-bold">Coloca el número de paquetes con los que cuenta la iglesia antes de iniciar todas las rutas.</p>
+                                <div className="flex space-x-3">
+                                    <input type="number" name="nuevoStock" required defaultValue={inventarioViveres} placeholder="Ej: 150" className="w-2/3 p-4 bg-white rounded-2xl outline-none border border-slate-200 text-lg font-black text-slate-700 text-center shadow-sm focus:border-indigo-400" />
+                                    <button type="submit" className="w-1/3 bg-indigo-600 hover:bg-indigo-700 text-white font-black rounded-2xl shadow-lg active:scale-95 transition-all flex items-center justify-center">
+                                        <i className="fas fa-save text-xl"></i>
+                                    </button>
+                                </div>
+                            </form>
+                        </div>
+                    )}
+
+                    {subVistaAdminLogistica === 'misiones' && (
                         <>
                             <form onSubmit={submitMision} className="bg-amber-50 p-6 rounded-[32px] border border-amber-100 shadow-sm mx-1">
                                 <h3 className="font-bold text-amber-800 text-sm mb-4 flex items-center"><i className="fas fa-map-marked-alt mr-2"></i> Crear Ruta de Reparto</h3>
                                 <div className="space-y-4">
-                                    
                                     <div>
                                         <p className="text-[10px] font-bold text-amber-700 uppercase mb-2">1. Selecciona los campos a visitar:</p>
                                         <div className="grid grid-cols-2 gap-2 max-h-32 overflow-y-auto p-3 bg-white rounded-2xl border border-amber-100 shadow-inner">
@@ -298,19 +343,15 @@ function AdminDashboard({
                                     </div></div>
                                 )}
 
-                                {/* --- NUEVO HISTORIAL POR EQUIPO (ACORDEÓN) --- */}
                                 {gruposCompletados.length > 0 && (
                                     <div><h4 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-3 px-2">Historial por Rutas (Completadas)</h4>
                                     <div className="space-y-3 opacity-95">
                                         {gruposCompletados.map(nombreGrupo => {
                                             const isExpanded = grupoCompletadoExp === nombreGrupo;
-                                            // Ordenamos las rutas de este grupo de la más reciente a la más vieja
                                             const entregasDelGrupo = entregasCompletadasPorGrupo[nombreGrupo].sort((a, b) => (b.fechaEntrega || 0) - (a.fechaEntrega || 0));
 
                                             return (
                                                 <div key={nombreGrupo} className="bg-slate-50 rounded-2xl border border-slate-200 overflow-hidden shadow-sm transition-all duration-300">
-                                                    
-                                                    {/* HEADER DEL ACORDEÓN: NOMBRE DEL GRUPO */}
                                                     <button onClick={() => setGrupoCompletadoExp(isExpanded ? null : nombreGrupo)} className="w-full p-4 flex justify-between items-center bg-white hover:bg-slate-50 transition-colors">
                                                         <div className="text-left">
                                                             <p className="font-black text-slate-700 text-sm">{nombreGrupo}</p>
@@ -322,15 +363,12 @@ function AdminDashboard({
                                                         </div>
                                                     </button>
                                                     
-                                                    {/* CUERPO DEL ACORDEÓN: LISTA DE RUTAS */}
                                                     {isExpanded && (
                                                         <div className="p-4 pt-0 border-t border-slate-100 bg-slate-50 animate-in slide-in-from-top-2 duration-200">
                                                             <div className="space-y-4 mt-4 max-h-[400px] overflow-y-auto pr-1">
                                                                 {entregasDelGrupo.map(e => {
                                                                     const totalEntregado = e.detalles ? Object.values(e.detalles).reduce((sum, val) => sum + (Number(val) || 0), 0) : 0;
                                                                     const diferencia = e.cantidad - totalEntregado;
-                                                                    
-                                                                    // Formateamos la fecha exacta de entrega
                                                                     const fechaObj = e.fechaEntrega ? new Date(e.fechaEntrega) : null;
                                                                     const fechaFormateada = fechaObj ? `${fechaObj.toLocaleDateString()} a las ${fechaObj.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}` : 'Fecha no registrada';
 
@@ -370,8 +408,10 @@ function AdminDashboard({
                                 )}
                             </div>
                         </>
-                    ) : (
-                        <div className="px-1 animate-in slide-in-from-right duration-200">
+                    )}
+
+                    {subVistaAdminLogistica === 'equipos' && (
+                        <div className="px-1 animate-in slide-in-from-right duration-200 mt-2">
                             <p className="text-xs text-slate-500 mb-4 px-2 leading-relaxed">Asigna a qué grupo de reparto pertenece cada integrante de logística.</p>
                             <div className="space-y-3">
                                 {personalLogistica.length === 0 ? <p className="text-center text-slate-400 text-sm italic mt-8">No hay personal de logística registrado.</p> :
