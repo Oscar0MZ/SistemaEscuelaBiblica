@@ -12,7 +12,7 @@ function DashboardView({
     onEdit, onDelete, onApprove, onToggleModal, 
     onOpenAlumnoModal, onEditAlumno, onDeleteAlumno, onSaveAsistencia,
     onDeleteCampo,
-    onResetLecciones // <-- RECIBIMOS LA FUNCIÓN DEL DIRECTOR
+    onResetLecciones
 }) {
     const esAdmin = usuario === 'ADMIN';
     const [busqueda, setBusqueda] = useState('');
@@ -22,7 +22,7 @@ function DashboardView({
     // ESTADOS ADMIN
     const [expandirFiltroAdmin, setExpandirFiltroAdmin] = useState(false);
     const [campoHistorialExp, setCampoHistorialExp] = useState(null); 
-    const [campoResetUI, setCampoResetUI] = useState(null); // Para mostrar las opciones de Parte 1 o 2
+    const [campoResetUI, setCampoResetUI] = useState(null);
 
     // ESTADOS MAESTRO
     const [subVistaReporte, setSubVistaReporte] = useState('ranking');
@@ -35,17 +35,18 @@ function DashboardView({
     const [edadMin, setEdadMin] = useState('');
     const [edadMax, setEdadMax] = useState('');
 
-    // Limpiamos los "resets" ocultos para que no salgan en las listas visuales
+    // Filtramos los "resets" ocultos para las vistas
     const historialVisible = historialAsistencias.filter(h => !h.esReset);
+    const todasAsistencias = datosGlobalesAsistencia?.registros || [];
 
     const formatoFecha = (f) => {
         if (!f) return '';
         const p = f.split('-');
         return `${p[2]}/${p[1]}/${p[0]}`; 
     };
-    const textoFechas = datosGlobalesAsistencia.rango ? `${formatoFecha(datosGlobalesAsistencia.rango.inicio).substring(0,5)} - ${formatoFecha(datosGlobalesAsistencia.rango.fin).substring(0,5)}` : 'Calculando...';
+    const textoFechas = datosGlobalesAsistencia?.rango ? `${formatoFecha(datosGlobalesAsistencia.rango.inicio).substring(0,5)} - ${formatoFecha(datosGlobalesAsistencia.rango.fin).substring(0,5)}` : 'Calculando...';
 
-    // FUNCIÓN DE CÁLCULO DE PROGRESO DE LECCIÓN (0 a 50)
+    // CÁLCULO DE PROGRESO DE LECCIÓN (0 a 50)
     const calcProgreso = (leccionNumero) => {
         const l = parseInt(leccionNumero) || 0;
         if (l === 0) return { parte: 1, impartidas: 0, faltan: 25, porc: 0 };
@@ -63,15 +64,13 @@ function DashboardView({
                 setLeccionImpartida(asistenciaHoy.leccionImpartida !== false);
             } else {
                 alumnos.forEach(a => inicial[a.id] = 'Presente');
-                
-                // AUTO-INCREMENTO DE LECCIÓN (Leyendo el historial completo, incluyendo los resets)
+                // AUTO-INCREMENTO LEYENDO HISTORIAL COMPLETO
                 if (historialAsistencias && historialAsistencias.length > 0) {
                     const ultimo = historialAsistencias.find(h => h.leccion !== undefined);
                     if (ultimo) {
                         setLeccionActual(ultimo.leccionImpartida ? parseInt(ultimo.leccion) + 1 : parseInt(ultimo.leccion));
                     } else { setLeccionActual(1); }
                 } else { setLeccionActual(1); }
-                
                 setLeccionImpartida(true);
             }
             setListaAsistencia(inicial);
@@ -100,105 +99,96 @@ function DashboardView({
         const activos = maestros.filter(m => m.estado === 'Activo');
         const listaAdminVisible = maestros.filter(m => m.nombre.toLowerCase().includes(busqueda.toLowerCase()) || (m.campo && m.campo.toLowerCase().includes(busqueda.toLowerCase())));
         
+        // Juntamos todos los campos existentes (incluso los huérfanos)
         const todosLosCamposExistentes = [...new Set([
             ...todosLosAlumnos.map(a => a.campo),
-            ...datosGlobalesAsistencia.registros.map(a => a.campo),
+            ...todasAsistencias.map(a => a.campo),
             ...historialAsistencias.map(h => h.campo)
         ].filter(Boolean))].sort();
 
         let contenidoAdmin;
 
         if (vistaActual === 'inicio') {
-            let tp = 0, ta = 0, tperm = 0; datosGlobalesAsistencia.registros.forEach(r => { if(r.totales){ tp+=r.totales.presentes; ta+=r.totales.ausentes; tperm+=r.totales.permisos; } });
+            let tp = 0, ta = 0, tperm = 0; todasAsistencias.forEach(r => { if(r.totales){ tp+=r.totales.presentes; ta+=r.totales.ausentes; tperm+=r.totales.permisos; } });
             contenidoAdmin = (
                 <div className="space-y-6 animate-in fade-in duration-300">
                     {pendientes.length > 0 && (<div className="bg-amber-50 border border-amber-100 p-5 rounded-[32px]"><h3 className="text-amber-800 font-bold text-sm mb-3"><i className="fas fa-user-clock mr-2"></i> Solicitudes ({pendientes.length})</h3><div className="space-y-3">{pendientes.map(p => (<div key={p.id} className="bg-white p-4 rounded-2xl shadow-sm flex justify-between items-center border border-amber-100"><div><p className="font-bold text-slate-700 text-sm">{p.nombre}</p><span className="text-[10px] text-slate-400 font-bold uppercase">{p.clase} - {p.campo}</span></div><div className="flex space-x-2"><button onClick={() => onApprove(p.id)} className="w-9 h-9 bg-emerald-500 text-white rounded-xl"><i className="fas fa-check"></i></button><button onClick={() => onDelete(p)} className="w-9 h-9 bg-rose-100 text-rose-500 rounded-xl"><i className="fas fa-times"></i></button></div></div>))}</div></div>)}
                     <div className="bg-white rounded-[32px] border border-slate-100 p-6 shadow-sm"><div className="flex justify-between items-center mb-4"><div><h3 className="font-bold text-slate-700 text-sm flex items-center"><i className="fas fa-clipboard-check text-emerald-500 mr-2"></i> Asistencia Global</h3><p className="text-[10px] text-slate-400 pl-6">Acumulado Semanal</p></div><span className="text-[10px] bg-slate-100 text-slate-500 font-bold px-3 py-1 rounded-lg border border-slate-200">{textoFechas}</span></div><div className="flex justify-around text-center divide-x divide-slate-50"><div className="px-2"><p className="text-3xl font-black text-emerald-500">{tp}</p><p className="text-[9px] font-bold text-slate-400 uppercase tracking-wide">Presentes</p></div><div className="px-2"><p className="text-3xl font-black text-rose-500">{ta}</p><p className="text-[9px] font-bold text-slate-400 uppercase tracking-wide">Ausentes</p></div><div className="px-2"><p className="text-3xl font-black text-amber-500">{tperm}</p><p className="text-[9px] font-bold text-slate-400 uppercase tracking-wide">Permisos</p></div></div></div>
-                    
-                    <div className="bg-white rounded-[32px] border border-slate-100 shadow-sm overflow-hidden transition-all duration-300">
-                        <button onClick={() => setExpandirFiltroAdmin(!expandirFiltroAdmin)} className="w-full flex items-center justify-between p-6 bg-white hover:bg-slate-50 transition-colors">
-                            <div className="flex items-center"><div className="w-10 h-10 bg-sky-50 text-sky-500 rounded-xl flex items-center justify-center mr-3"><i className="fas fa-filter"></i></div><div className="text-left"><h3 className="font-bold text-slate-700 text-sm">Filtro Demográfico</h3><p className="text-[10px] text-slate-400">Analizar edades globales</p></div></div>
-                            <i className={`fas fa-chevron-down text-slate-300 transition-transform duration-300 ${expandirFiltroAdmin ? 'rotate-180' : ''}`}></i>
-                        </button>
-                        {expandirFiltroAdmin && (
-                            <div className="p-6 pt-0 animate-in slide-in-from-top-2 duration-200 border-t border-slate-50">
-                                <div className="flex space-x-3 mb-4 mt-4"><div className="w-1/2"><label className="text-[9px] font-bold text-slate-400 uppercase ml-1">Mínima (Años)</label><input type="number" className="w-full p-3 mt-1 bg-slate-50 rounded-xl outline-none border border-slate-100" value={edadMin} onChange={e=>setEdadMin(e.target.value)} /></div><div className="w-1/2"><label className="text-[9px] font-bold text-slate-400 uppercase ml-1">Máxima (Años)</label><input type="number" className="w-full p-3 mt-1 bg-slate-50 rounded-xl outline-none border border-slate-100" value={edadMax} onChange={e=>setEdadMax(e.target.value)} /></div></div>
-                                {(edadMin !== '' || edadMax !== '') && (() => {
-                                    const filtrados = todosLosAlumnos.filter(a => {
-                                        if (edadMin !== '' && a.edad < parseInt(edadMin)) return false;
-                                        if (edadMax !== '' && a.edad > parseInt(edadMax)) return false; return true;
-                                    });
-                                    const m = filtrados.filter(a => a.genero === 'M').length; const f = filtrados.filter(a => a.genero === 'F').length;
-                                    return (
-                                        <div className="flex justify-around items-center bg-sky-50 p-4 rounded-2xl mb-4">
-                                            <div className="text-center"><p className="text-2xl font-black text-sky-600">{filtrados.length}</p><p className="text-[9px] font-bold text-sky-500 uppercase">Total</p></div>
-                                            <div className="text-center"><p className="text-2xl font-black text-indigo-500">{m}</p><p className="text-[9px] font-bold text-indigo-400 uppercase">Niños</p></div>
-                                            <div className="text-center"><p className="text-2xl font-black text-pink-500">{f}</p><p className="text-[9px] font-bold text-pink-400 uppercase">Niñas</p></div>
-                                        </div>
-                                    );
-                                })()}
-                            </div>
-                        )}
-                    </div>
                     <div className="grid grid-cols-2 gap-4"><div className="bg-indigo-600 p-6 rounded-[32px] text-white shadow-xl shadow-indigo-200 flex flex-col justify-between h-40 relative overflow-hidden"><div className="absolute top-0 right-0 w-20 h-20 bg-white opacity-10 rounded-bl-[100px] pointer-events-none"></div><p className="text-xs font-bold uppercase opacity-70 tracking-widest">Personal Activo</p><div><p className="text-5xl font-black tracking-tighter">{activos.length}</p><p className="text-[10px] opacity-70 mt-1">Miembros Totales</p></div></div><button onClick={onToggleModal} className="bg-white p-6 rounded-[32px] border border-slate-100 flex flex-col justify-between h-40 text-left shadow-sm group hover:shadow-md transition-all active:scale-95"><div className="w-12 h-12 bg-indigo-50 text-indigo-600 rounded-2xl flex items-center justify-center text-xl transition-colors"><i className="fas fa-plus"></i></div><div><p className="font-bold text-slate-700 text-lg leading-tight">Inscribir<br/>Personal</p><p className="text-[10px] text-slate-400 mt-1">Manual</p></div></button></div>
                 </div>
             );
         }
 
-        // --- PESTAÑA POBLACIÓN (ADMIN) -> ¡AQUÍ ESTÁ EL RESET DE LECCIONES! ---
+        // PANTALLA POBLACIÓN + MATERIAL
         if (vistaActual === 'poblacion') {
+            const adminAlumnosFiltrados = todosLosAlumnos.filter(a => {
+                if (edadMin !== '' && a.edad < parseInt(edadMin)) return false;
+                if (edadMax !== '' && a.edad > parseInt(edadMax)) return false; return true;
+            });
+            const adminTotalNinos = adminAlumnosFiltrados.filter(a => a.genero === 'M').length;
+            const adminTotalNinas = adminAlumnosFiltrados.filter(a => a.genero === 'F').length;
+            const filtroActivo = edadMin !== '' || edadMax !== '';
+
             contenidoAdmin = (
                 <div className="space-y-4 animate-in slide-in-from-right duration-300">
-                    <div className="px-2 mb-2"><h2 className="text-2xl font-black text-slate-800">Campos y Material</h2><p className="text-slate-400 text-xs">Ajustes y progreso del currículo</p></div>
+                    <div className="px-2 mb-2"><h2 className="text-2xl font-black text-slate-800">Campos y Material</h2><p className="text-slate-400 text-xs">Administración de currículo y datos locales</p></div>
                     
-                    <div className="space-y-3 pb-24">
-                        {camposDisponibles.length === 0 ? <p className="text-center text-slate-400 italic mt-8">No hay campos registrados.</p> :
-                         camposDisponibles.map(campo => {
-                            const total = todosLosAlumnos.filter(a => a.campo === campo).length; 
-                            
-                            // Progreso de Material de este campo
-                            const histCampo = historialAsistencias.find(h => h.campo === campo && h.leccion !== undefined);
-                            const ultimaLec = histCampo ? parseInt(histCampo.leccion) : 0;
-                            const prog = calcProgreso(ultimaLec);
-                            
-                            return (
-                                <div key={campo} className="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm">
-                                    <div className="flex justify-between items-center mb-2">
-                                        <span className="font-bold text-slate-700 text-lg">{campo}</span>
-                                        <div className="flex items-center space-x-2">
-                                            <span className="bg-indigo-50 text-indigo-600 font-black text-[10px] px-2 py-1 rounded uppercase">{total} Alumnos</span>
-                                            
-                                            {/* BOTÓN REINICIAR MATERIAL */}
-                                            <button onClick={() => setCampoResetUI(campoResetUI === campo ? null : campo)} className="w-8 h-8 flex items-center justify-center bg-sky-50 text-sky-500 rounded-lg hover:bg-sky-500 hover:text-white transition-colors" title="Ajustar Lección"><i className="fas fa-cog"></i></button>
-                                            
-                                            {/* BOTÓN ELIMINAR CAMPO */}
-                                            <button onClick={() => onDeleteCampo(campo)} className="w-8 h-8 flex items-center justify-center bg-rose-50 text-rose-500 rounded-lg hover:bg-rose-500 hover:text-white transition-colors"><i className="fas fa-trash-alt"></i></button>
-                                        </div>
-                                    </div>
-                                    
-                                    {/* BARRA DE PROGRESO DE LECCIÓN */}
-                                    <div className="mt-4 mb-2">
-                                        <div className="flex justify-between text-[10px] font-bold text-slate-500 mb-1">
-                                            <span>Material: Parte {prog.parte} • {prog.impartidas}/25 dadas</span>
-                                            <span className="text-indigo-500">{prog.porc}%</span>
-                                        </div>
-                                        <div className="w-full bg-slate-100 rounded-full h-2 overflow-hidden">
-                                            <div className="bg-indigo-500 h-2 rounded-full transition-all duration-1000" style={{width: `${prog.porc}%`}}></div>
-                                        </div>
-                                    </div>
+                    {/* FILTRO DEMOGRÁFICO */}
+                    <div className="bg-sky-50 rounded-[32px] p-6 shadow-sm border border-sky-100">
+                        <h3 className="font-bold text-sky-800 text-sm mb-4 flex items-center"><i className="fas fa-filter mr-2"></i> Rango de Edades</h3>
+                        <div className="flex space-x-4"><div className="w-1/2"><label className="text-[10px] font-bold text-sky-600 uppercase ml-2">Mínima (Años)</label><input type="number" placeholder="Ej: 0" className="w-full p-4 mt-1 bg-white rounded-2xl outline-none border border-sky-100 focus:ring-2 focus:ring-sky-300 text-lg font-bold" value={edadMin} onChange={e=>setEdadMin(e.target.value)} /></div><div className="w-1/2"><label className="text-[10px] font-bold text-sky-600 uppercase ml-2">Máxima (Años)</label><input type="number" placeholder="Ej: 5" className="w-full p-4 mt-1 bg-white rounded-2xl outline-none border border-sky-100 focus:ring-2 focus:ring-sky-300 text-lg font-bold" value={edadMax} onChange={e=>setEdadMax(e.target.value)} /></div></div>
+                        <div className="flex justify-around items-center bg-white p-4 rounded-2xl mt-4 shadow-sm"><div className="text-center"><p className="text-3xl font-black text-sky-600">{adminAlumnosFiltrados.length}</p><p className="text-[9px] font-bold text-sky-500 uppercase">Total Red</p></div><div className="w-px h-10 bg-slate-100"></div><div className="text-center"><p className="text-2xl font-black text-indigo-500">{adminTotalNinos}</p><p className="text-[9px] font-bold text-indigo-400 uppercase">Niños</p></div><div className="w-px h-10 bg-slate-100"></div><div className="text-center"><p className="text-2xl font-black text-pink-500">{adminTotalNinas}</p><p className="text-[9px] font-bold text-pink-400 uppercase">Niñas</p></div></div>
+                    </div>
 
-                                    {/* PANEL DE CONFIGURACIÓN DE LECCIÓN (ACORDEÓN) */}
-                                    {campoResetUI === campo && (
-                                        <div className="mt-3 p-3 bg-indigo-50 rounded-xl border border-indigo-100 animate-in zoom-in duration-200">
-                                            <p className="text-[10px] font-black text-indigo-800 mb-2 uppercase tracking-widest text-center">Fijar Nuevo Ciclo</p>
-                                            <div className="flex space-x-2">
-                                                <button onClick={() => { onResetLecciones(campo, 0); setCampoResetUI(null); }} className="flex-1 py-2 bg-indigo-500 text-white rounded-lg text-xs font-bold shadow-md active:scale-95 transition-all">Parte 1 (Lec. 1)</button>
-                                                <button onClick={() => { onResetLecciones(campo, 25); setCampoResetUI(null); }} className="flex-1 py-2 bg-sky-500 text-white rounded-lg text-xs font-bold shadow-md active:scale-95 transition-all">Parte 2 (Lec. 26)</button>
+                    <h3 className="font-bold text-slate-700 text-sm mt-6 px-2">Gestión por Campo</h3>
+                    <div className="space-y-3 pb-24">
+                        {todosLosCamposExistentes.length === 0 ? <p className="text-center text-slate-400 italic mt-8">No hay campos registrados.</p> :
+                         todosLosCamposExistentes.map(campo => {
+                            // Filtro activo: Solo mostrar M/F
+                            if (filtroActivo) {
+                                const alumnosCampo = adminAlumnosFiltrados.filter(a => a.campo === campo);
+                                const total = alumnosCampo.length; const ninos = alumnosCampo.filter(a => a.genero === 'M').length; const ninas = alumnosCampo.filter(a => a.genero === 'F').length;
+                                if (total === 0) return null; 
+                                return (<div key={campo} className="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm flex items-center justify-between"><span className="font-bold text-slate-700 text-sm">{campo}</span><div className="flex space-x-2 text-xs font-bold"><span className="bg-slate-100 text-slate-600 px-3 py-1.5 rounded-lg">T: {total}</span><span className="bg-sky-50 text-sky-600 px-3 py-1.5 rounded-lg">M: {ninos}</span><span className="bg-pink-50 text-pink-600 px-3 py-1.5 rounded-lg">F: {ninas}</span></div></div>);
+                            } 
+                            // Vista normal: Mostrar Acciones y Progreso
+                            else {
+                                const total = todosLosAlumnos.filter(a => a.campo === campo).length; 
+                                const histCampo = historialAsistencias.find(h => h.campo === campo && h.leccion !== undefined);
+                                const ultimaLec = histCampo ? parseInt(histCampo.leccion) : 0;
+                                const prog = calcProgreso(ultimaLec);
+                                
+                                return (
+                                    <div key={campo} className="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm">
+                                        <div className="flex justify-between items-center mb-3">
+                                            <span className="font-bold text-slate-700 text-lg truncate w-1/2">{campo}</span>
+                                            <div className="flex items-center space-x-2">
+                                                <span className="bg-indigo-50 text-indigo-600 font-black text-[10px] px-2 py-1.5 rounded uppercase">{total} Alumnos</span>
+                                                <button onClick={() => setCampoResetUI(campoResetUI === campo ? null : campo)} className="w-8 h-8 flex items-center justify-center bg-slate-100 text-slate-500 rounded-lg hover:bg-sky-500 hover:text-white transition-colors" title="Ajustar Material"><i className="fas fa-cog"></i></button>
+                                                <button onClick={() => onDeleteCampo(campo)} className="w-8 h-8 flex items-center justify-center bg-rose-50 text-rose-500 rounded-lg hover:bg-rose-500 hover:text-white transition-colors" title="Limpiar Campo"><i className="fas fa-trash-alt"></i></button>
                                             </div>
                                         </div>
-                                    )}
-                                </div>
-                            );
+
+                                        <div className="mt-2">
+                                            <div className="flex justify-between text-[10px] font-bold text-slate-500 mb-1">
+                                                <span>Material: Parte {prog.parte} • {prog.impartidas}/25 dadas</span>
+                                                <span className="text-indigo-500">{prog.porc}%</span>
+                                            </div>
+                                            <div className="w-full bg-slate-100 rounded-full h-2 overflow-hidden"><div className="bg-indigo-500 h-2 rounded-full transition-all duration-1000" style={{width: `${prog.porc}%`}}></div></div>
+                                        </div>
+
+                                        {campoResetUI === campo && (
+                                            <div className="mt-4 p-4 bg-slate-50 rounded-xl border border-slate-200 animate-in slide-in-from-top-2 duration-200">
+                                                <p className="text-[10px] font-black text-slate-500 mb-3 uppercase tracking-widest text-center"><i className="fas fa-sync-alt mr-1"></i> Reiniciar Material</p>
+                                                <div className="flex space-x-2">
+                                                    <button onClick={() => { onResetLecciones(campo, 0); setCampoResetUI(null); }} className="flex-1 py-3 bg-indigo-500 text-white rounded-lg text-xs font-bold shadow-md active:scale-95 transition-all">Empezar Parte 1</button>
+                                                    <button onClick={() => { onResetLecciones(campo, 25); setCampoResetUI(null); }} className="flex-1 py-3 bg-sky-500 text-white rounded-lg text-xs font-bold shadow-md active:scale-95 transition-all">Empezar Parte 2</button>
+                                                </div>
+                                            </div>
+                                        )}
+                                    </div>
+                                );
+                            }
                         })}
                     </div>
                 </div>
@@ -210,7 +200,10 @@ function DashboardView({
 
             contenidoAdmin = (
                 <div className="space-y-4 animate-in slide-in-from-right duration-300 h-full flex flex-col">
-                    <div className="px-2 mb-2"><h2 className="text-2xl font-black text-slate-800">Historial Anual</h2><p className="text-slate-400 text-xs">Clases agrupadas por campo ({new Date().getFullYear()})</p></div>
+                    <div className="px-2 mb-2">
+                        <h2 className="text-2xl font-black text-slate-800">Historial Anual</h2>
+                        <p className="text-slate-400 text-xs">Clases agrupadas por campo ({new Date().getFullYear()})</p>
+                    </div>
                     <div className="flex-1 overflow-y-auto space-y-3 pb-24 pr-2">
                         {camposConHistorial.length === 0 ? <div className="text-center p-8 bg-slate-50 rounded-[32px]"><p className="text-sm font-bold text-slate-500">Historial vacío</p></div> : 
                         camposConHistorial.map(campo => {
@@ -284,8 +277,32 @@ function DashboardView({
         const nombreDisplay = datosUsuarioActual ? datosUsuarioActual.nombre.split(' ')[0] : '';
         const rolDisplay = usuario.charAt(0) + usuario.slice(1).toLowerCase();
 
-        // Calcular Progreso Lección actual para la vista de inicio
         const progInicio = calcProgreso(leccionActual || (asistenciaHoy ? asistenciaHoy.leccion : 0));
+
+        const historialRankingFiltrado = historialVisible.filter(ha => {
+            if (!fechaInicioRanking && !fechaFinRanking) return true;
+            const f = ha.fecha;
+            if (fechaInicioRanking && f < fechaInicioRanking) return false;
+            if (fechaFinRanking && f > fechaFinRanking) return false;
+            return true;
+        });
+
+        const alumnosConRanking = alumnos.map(a => {
+            let asistenciasLogradas = 0;
+            historialRankingFiltrado.forEach(ha => {
+                const registroAlumno = ha.registros?.find(r => r.idAlumno === a.id);
+                if (registroAlumno && registroAlumno.estado === 'Presente') asistenciasLogradas++;
+            });
+            return { ...a, asistenciasLogradas };
+        });
+
+        const rankingOrdenado = [...alumnosConRanking].sort((a,b) => b.asistenciasLogradas - a.asistenciasLogradas);
+
+        const alumnosFiltrados = alumnos.filter(a => {
+            if (edadMin !== '' && a.edad < parseInt(edadMin)) return false;
+            if (edadMax !== '' && a.edad > parseInt(edadMax)) return false;
+            return true;
+        });
 
         let contenidoMaestro;
 
@@ -294,19 +311,13 @@ function DashboardView({
                 <div className="flex flex-col h-full space-y-6 pt-4 animate-in fade-in duration-300">
                     <div className="px-2"><h2 className="text-3xl font-black text-slate-800">Hola, {rolDisplay} {nombreDisplay}</h2><p className="text-slate-400 text-sm mt-1">Resumen de tu campo: <b className="text-indigo-500">{datosUsuarioActual.campo}</b></p></div>
                     
-                    {/* TARJETA ASISTENCIA MEJORADA CON PROGRESO */}
                     <div className={`w-full p-6 rounded-[32px] text-left relative overflow-hidden group shadow-lg ${estaBloqueada ? 'bg-slate-50 border border-slate-200' : asistenciaTomada ? 'bg-white border border-slate-100' : 'bg-rose-500 text-white shadow-rose-200'}`}>
                         {asistenciaTomada ? (
                             <>
-                                <div className="flex justify-between items-center mb-6"><h3 className={`font-bold text-sm flex items-center ${estaBloqueada ? 'text-slate-500' : 'text-slate-700'}`}><i className={`fas ${estaBloqueada ? 'fa-lock' : 'fa-clipboard-check'} mr-2 text-lg ${estaBloqueada ? 'text-slate-400' : 'text-emerald-500'}`}></i> {estaBloqueada ? 'Asistencia (Solo Lectura)' : 'Asistencia Completada'}</h3>{estaBloqueada ? (<span className="text-[9px] bg-slate-200 text-slate-500 px-2 py-1 rounded-lg font-bold uppercase">Bloqueada</span>) : (<span className="text-[10px] bg-emerald-100 text-emerald-700 px-2 py-1 rounded-lg font-bold">TUYA</span>)}</div>
+                                <div className="flex justify-between items-center mb-6"><h3 className={`font-bold text-sm flex items-center ${estaBloqueada ? 'text-slate-500' : 'text-slate-700'}`}><i className={`fas ${estaBloqueada ? 'fa-lock' : 'fa-clipboard-check'} mr-2 text-lg ${estaBloqueada ? 'text-slate-400' : 'text-emerald-500'}`}></i> {estaBloqueada ? 'Asistencia (Lectura)' : 'Completada'}</h3>{estaBloqueada ? (<span className="text-[9px] bg-slate-200 text-slate-500 px-2 py-1 rounded-lg font-bold uppercase">Bloqueada</span>) : (<span className="text-[10px] bg-emerald-100 text-emerald-700 px-2 py-1 rounded-lg font-bold">TUYA</span>)}</div>
                                 <div className="flex justify-around text-center mb-6"><div><p className={`text-3xl font-black ${estaBloqueada ? 'text-slate-500' : 'text-emerald-500'}`}>{asistenciaHoy.totales.presentes}</p><p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">Presentes</p></div><div><p className={`text-3xl font-black ${estaBloqueada ? 'text-slate-500' : 'text-rose-500'}`}>{asistenciaHoy.totales.ausentes}</p><p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">Ausentes</p></div><div><p className={`text-3xl font-black ${estaBloqueada ? 'text-slate-500' : 'text-amber-500'}`}>{asistenciaHoy.totales.permisos}</p><p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">Permisos</p></div></div>
-                                
-                                {/* PROGRESO DE LECCIÓN EN INICIO */}
                                 <div className={`pt-4 border-t ${estaBloqueada ? 'border-slate-200' : 'border-slate-50'}`}>
-                                    <div className="flex justify-between text-[10px] font-bold text-slate-400 mb-2">
-                                        <span>Material: Parte {progInicio.parte} • {progInicio.impartidas}/25</span>
-                                        <span className="text-indigo-400">{progInicio.porc}%</span>
-                                    </div>
+                                    <div className="flex justify-between text-[10px] font-bold text-slate-400 mb-2"><span>Material: Parte {progInicio.parte} • {progInicio.impartidas}/25</span><span className="text-indigo-400">{progInicio.porc}%</span></div>
                                     <div className="w-full bg-slate-100 rounded-full h-1.5 overflow-hidden"><div className="bg-indigo-400 h-1.5 rounded-full" style={{width: `${progInicio.porc}%`}}></div></div>
                                 </div>
                             </>
@@ -365,30 +376,6 @@ function DashboardView({
         }
 
         if (vistaActual === 'reportes') {
-            const historialRankingFiltrado = historialVisible.filter(ha => {
-                if (!fechaInicioRanking && !fechaFinRanking) return true;
-                const f = ha.fecha;
-                if (fechaInicioRanking && f < fechaInicioRanking) return false;
-                if (fechaFinRanking && f > fechaFinRanking) return false;
-                return true;
-            });
-
-            const alumnosConRanking = alumnos.map(a => {
-                let asistenciasLogradas = 0;
-                historialRankingFiltrado.forEach(ha => {
-                    const registroAlumno = ha.registros?.find(r => r.idAlumno === a.id);
-                    if (registroAlumno && registroAlumno.estado === 'Presente') asistenciasLogradas++;
-                });
-                return { ...a, asistenciasLogradas };
-            });
-
-            const rankingOrdenado = [...alumnosConRanking].sort((a,b) => b.asistenciasLogradas - a.asistenciasLogradas);
-            const alumnosFiltrados = alumnos.filter(a => {
-                if (edadMin !== '' && a.edad < parseInt(edadMin)) return false;
-                if (edadMax !== '' && a.edad > parseInt(edadMax)) return false;
-                return true;
-            });
-
             contenidoMaestro = (
                 <div className="flex flex-col h-full pt-4 animate-in slide-in-from-right duration-300">
                     <div className="px-2 mb-4"><h2 className="text-2xl font-black text-slate-800">Reportes</h2><p className="text-slate-400 text-xs">Análisis y estadísticas de tu clase</p></div>
@@ -400,7 +387,6 @@ function DashboardView({
                     </div>
 
                     <div className="flex-1 bg-white rounded-t-[40px] shadow-[0_-10px_40px_rgba(0,0,0,0.05)] border-t border-slate-100 p-6 overflow-hidden flex flex-col">
-                        
                         {subVistaReporte === 'ranking' && (
                             <>
                                 <h3 className="text-sm font-bold text-slate-700 mb-3 px-2 flex items-center justify-between">Top Asistencia<span className="text-[9px] bg-amber-50 text-amber-600 px-2 py-1 rounded-lg uppercase tracking-widest">{historialRankingFiltrado.length} clases</span></h3>
@@ -412,7 +398,6 @@ function DashboardView({
                                 </div>
                             </>
                         )}
-
                         {subVistaReporte === 'historial' && (
                             <>
                                 <h3 className="text-sm font-bold text-slate-700 mb-4 px-2">Días Anteriores (Solo Lectura)</h3>
@@ -427,7 +412,6 @@ function DashboardView({
                                 </div>
                             </>
                         )}
-
                         {subVistaReporte === 'filtro' && (
                             <>
                                 <div className="flex space-x-4 mb-5"><div className="w-1/2"><label className="text-[10px] font-bold text-sky-600 uppercase ml-2">Edad Mínima</label><input type="number" placeholder="Ej: 0" className="w-full p-4 mt-1 bg-sky-50 rounded-2xl outline-none border border-sky-100 focus:ring-2 focus:ring-sky-300 text-xl font-black text-slate-700 text-center" value={edadMin} onChange={e=>setEdadMin(e.target.value)} /></div><div className="w-1/2"><label className="text-[10px] font-bold text-sky-600 uppercase ml-2">Edad Máxima</label><input type="number" placeholder="Ej: 5" className="w-full p-4 mt-1 bg-sky-50 rounded-2xl outline-none border border-sky-100 focus:ring-2 focus:ring-sky-300 text-xl font-black text-slate-700 text-center" value={edadMax} onChange={e=>setEdadMax(e.target.value)} /></div></div>
