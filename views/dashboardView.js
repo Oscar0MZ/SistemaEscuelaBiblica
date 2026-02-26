@@ -19,7 +19,7 @@ function DashboardView({
     onCrearEntrega, 
     onActualizarEntrega,
     onBorrarEntrega,
-    onAssignGroup // <-- NUEVA FUNCIÓN
+    onAssignGroup
 }) {
     const esAdmin = usuario === 'ADMIN';
     const esLogistica = usuario === 'LOGISTICA';
@@ -33,7 +33,7 @@ function DashboardView({
     const [expandirFiltroAdmin, setExpandirFiltroAdmin] = useState(false);
     const [campoHistorialExp, setCampoHistorialExp] = useState(null); 
     const [campoResetUI, setCampoResetUI] = useState(null);
-    const [subVistaAdminLogistica, setSubVistaAdminLogistica] = useState('misiones'); // Misiones o Equipos
+    const [subVistaAdminLogistica, setSubVistaAdminLogistica] = useState('misiones'); 
 
     // ESTADOS MAESTRO
     const [subVistaReporte, setSubVistaReporte] = useState('ranking');
@@ -46,6 +46,9 @@ function DashboardView({
 
     const historialVisible = historialAsistencias.filter(h => !h.esReset);
     const todasAsistencias = datosGlobalesAsistencia?.registros || [];
+
+    // CONSTANTE: CAMPOS FIJOS PARA EVITAR PANTALLA BLANCA SI LA DB ESTÁ VACÍA
+    const camposFijos = ["La Isla", "Las Delicias", "El Amatal", "El Manguito", "Buenos Aires", "Corozal #1", "El Porvenir", "El Caulote", "Corozal #2", "Valle Encantado", "La Playa"];
 
     const formatoFecha = (f) => {
         if (!f) return '';
@@ -104,13 +107,13 @@ function DashboardView({
         const activos = maestros.filter(m => m.estado === 'Activo');
         const listaAdminVisible = maestros.filter(m => m.nombre.toLowerCase().includes(busqueda.toLowerCase()) || (m.campo && m.campo.toLowerCase().includes(busqueda.toLowerCase())));
         
+        // UNIMOS LOS CAMPOS FIJOS CON LOS EXISTENTES EN DB PARA QUE NUNCA SE QUEDE EN BLANCO
         const todosLosCamposExistentes = [...new Set([
+            ...camposFijos,
             ...todosLosAlumnos.map(a => a.campo),
             ...todasAsistencias.map(a => a.campo),
             ...historialAsistencias.map(h => h.campo)
         ].filter(Boolean))].sort();
-
-        const camposDisponiblesApp = ["La Isla", "Las Delicias", "El Amatal", "El Manguito", "Buenos Aires", "Corozal #1", "El Porvenir", "El Caulote", "Corozal #2", "Valle Encantado", "La Playa"];
 
         let contenidoAdmin;
 
@@ -161,13 +164,18 @@ function DashboardView({
                     <div className="bg-sky-50 rounded-[32px] p-6 shadow-sm border border-sky-100">
                         <h3 className="font-bold text-sky-800 text-sm mb-4 flex items-center"><i className="fas fa-filter mr-2"></i> Rango de Edades</h3>
                         <div className="flex space-x-4"><div className="w-1/2"><label className="text-[10px] font-bold text-sky-600 uppercase ml-2">Mínima (Años)</label><input type="number" placeholder="Ej: 0" className="w-full p-4 mt-1 bg-white rounded-2xl outline-none border border-sky-100 focus:ring-2 focus:ring-sky-300 text-lg font-bold" value={edadMin} onChange={e=>setEdadMin(e.target.value)} /></div><div className="w-1/2"><label className="text-[10px] font-bold text-sky-600 uppercase ml-2">Máxima (Años)</label><input type="number" placeholder="Ej: 5" className="w-full p-4 mt-1 bg-white rounded-2xl outline-none border border-sky-100 focus:ring-2 focus:ring-sky-300 text-lg font-bold" value={edadMax} onChange={e=>setEdadMax(e.target.value)} /></div></div>
-                        <div className="flex justify-around items-center bg-white p-4 rounded-2xl mt-4 shadow-sm"><div className="text-center"><p className="text-3xl font-black text-sky-600">{adminAlumnosFiltrados.length}</p><p className="text-[9px] font-bold text-sky-500 uppercase">Total Red</p></div><div className="w-px h-10 bg-slate-100"></div><div className="text-center"><p className="text-2xl font-black text-indigo-500">{adminTotalNinos}</p><p className="text-[9px] font-bold text-indigo-400 uppercase">Niños</p></div><div className="w-px h-10 bg-slate-100"></div><div className="text-center"><p className="text-2xl font-black text-pink-500">{adminTotalNinas}</p><p className="text-[9px] font-bold text-pink-400 uppercase">Niñas</p></div></div>
+                        <div className="flex justify-around items-center bg-white p-4 rounded-2xl mt-4 shadow-sm">
+                            <div className="text-center"><p className="text-3xl font-black text-sky-600">{adminAlumnosFiltrados.length}</p><p className="text-[9px] font-bold text-sky-500 uppercase">Total Red</p></div>
+                            <div className="w-px h-10 bg-slate-100"></div>
+                            <div className="text-center"><p className="text-2xl font-black text-indigo-500">{adminAlumnosFiltrados.filter(a => a.genero === 'M').length}</p><p className="text-[9px] font-bold text-indigo-400 uppercase">Niños</p></div>
+                            <div className="w-px h-10 bg-slate-100"></div>
+                            <div className="text-center"><p className="text-2xl font-black text-pink-500">{adminAlumnosFiltrados.filter(a => a.genero === 'F').length}</p><p className="text-[9px] font-bold text-pink-400 uppercase">Niñas</p></div>
+                        </div>
                     </div>
 
                     <h3 className="font-bold text-slate-700 text-sm mt-6 px-2">Gestión por Campo</h3>
                     <div className="space-y-3 pb-24">
-                        {todosLosCamposExistentes.length === 0 ? <p className="text-center text-slate-400 italic mt-8">No hay campos registrados.</p> :
-                         todosLosCamposExistentes.map(campo => {
+                        {todosLosCamposExistentes.map(campo => {
                             if (filtroActivo) {
                                 const alumnosCampo = adminAlumnosFiltrados.filter(a => a.campo === campo);
                                 const total = alumnosCampo.length; const ninos = alumnosCampo.filter(a => a.genero === 'M').length; const ninas = alumnosCampo.filter(a => a.genero === 'F').length;
@@ -261,11 +269,11 @@ function DashboardView({
             );
         }
 
-        // --- PESTAÑA LOGÍSTICA PARA EL ADMIN (CON ASIGNACIÓN DE GRUPOS) ---
+        // --- PESTAÑA LOGÍSTICA (RESTAURADA CON ASIGNACIÓN DE CAMPO) ---
         if (vistaActual === 'logistica') {
             const entregasPendientes = entregasLogistica.filter(e => e.estado === 'Pendiente');
             const entregasCompletadas = entregasLogistica.filter(e => e.estado === 'Entregado');
-            const personalLogistica = activos.filter(m => m.clase === 'LOGISTICA'); // Usuarios de logística
+            const personalLogistica = activos.filter(m => m.clase === 'LOGISTICA'); 
 
             contenidoAdmin = (
                 <div className="space-y-4 animate-in slide-in-from-right duration-300 h-full flex flex-col">
@@ -282,8 +290,26 @@ function DashboardView({
                                 <form onSubmit={onCrearEntrega} className="bg-amber-50 p-6 rounded-[32px] border border-amber-100 shadow-sm mx-1">
                                     <h3 className="font-bold text-amber-800 text-sm mb-4 flex items-center"><i className="fas fa-box-open mr-2"></i> Asignar Víveres</h3>
                                     <div className="space-y-3">
-                                        <select name="campo" required className="w-full p-4 bg-white rounded-2xl outline-none border border-amber-100 text-sm font-bold text-slate-700"><option value="">Seleccionar Campo Destino</option>{camposDisponiblesApp.map(c => <option key={c} value={c}>{c}</option>)}</select>
-                                        <div className="flex space-x-3"><div className="w-1/2"><input type="number" name="cantidad" required placeholder="Cant. Víveres" className="w-full p-4 bg-white rounded-2xl outline-none border border-amber-100 text-sm font-bold text-slate-700 text-center" /></div><div className="w-1/2"><select name="grupo" required className="w-full p-4 bg-white rounded-2xl outline-none border border-amber-100 text-sm font-bold text-slate-700"><option value="">¿Qué Grupo?</option><option value="Grupo 1">Grupo 1</option><option value="Grupo 2">Grupo 2</option><option value="Grupo 3">Grupo 3</option><option value="Grupo 4">Grupo 4</option><option value="Grupo 5">Grupo 5</option></select></div></div>
+                                        {/* EL SELECT DE CAMPO FUE RESTAURADO */}
+                                        <select name="campo" required className="w-full p-4 bg-white rounded-2xl outline-none border border-amber-100 text-sm font-bold text-slate-700">
+                                            <option value="">Seleccionar Campo Destino</option>
+                                            {camposFijos.map(c => <option key={c} value={c}>{c}</option>)}
+                                        </select>
+                                        <div className="flex space-x-3">
+                                            <div className="w-1/2">
+                                                <input type="number" name="cantidad" required placeholder="Cant. Víveres" className="w-full p-4 bg-white rounded-2xl outline-none border border-amber-100 text-sm font-bold text-slate-700 text-center" />
+                                            </div>
+                                            <div className="w-1/2">
+                                                <select name="grupo" required className="w-full p-4 bg-white rounded-2xl outline-none border border-amber-100 text-sm font-bold text-slate-700">
+                                                    <option value="">¿Qué Grupo?</option>
+                                                    <option value="Grupo 1">Grupo 1</option>
+                                                    <option value="Grupo 2">Grupo 2</option>
+                                                    <option value="Grupo 3">Grupo 3</option>
+                                                    <option value="Grupo 4">Grupo 4</option>
+                                                    <option value="Grupo 5">Grupo 5</option>
+                                                </select>
+                                            </div>
+                                        </div>
                                         <button type="submit" className="w-full py-4 bg-amber-500 hover:bg-amber-600 text-white font-black rounded-2xl shadow-lg active:scale-95 transition-all mt-2">Crear Misión</button>
                                     </div>
                                 </form>
@@ -298,7 +324,6 @@ function DashboardView({
                                 </div>
                             </>
                         ) : (
-                            // GESTIÓN DE EQUIPOS DE LOGÍSTICA
                             <div className="px-1 animate-in slide-in-from-right duration-200">
                                 <p className="text-xs text-slate-500 mb-4 px-2 leading-relaxed">Asigna a qué grupo de reparto pertenece cada integrante de logística.</p>
                                 <div className="space-y-3">
@@ -369,14 +394,12 @@ function DashboardView({
         const nombreDisplay = datosUsuarioActual ? datosUsuarioActual.nombre.split(' ')[0] : '';
         const miGrupo = datosUsuarioActual?.grupo; 
         
-        // El usuario de logística SOLO ve las entregas asignadas a SU grupo
         const entregasPendientes = entregasLogistica.filter(e => e.estado === 'Pendiente' && e.grupo === miGrupo);
         const entregasCompletadas = entregasLogistica.filter(e => e.estado === 'Entregado' && e.grupo === miGrupo);
 
         let contenidoLogistica;
 
         if (!miGrupo) {
-            // SI EL DIRECTOR AÚN NO LO HA ASIGNADO A UN GRUPO
             contenidoLogistica = (
                 <div className="flex flex-col items-center justify-center h-full text-center p-8 animate-in zoom-in-95">
                     <div className="w-24 h-24 bg-amber-100 text-amber-500 rounded-full flex items-center justify-center text-5xl mb-6 shadow-inner"><i className="fas fa-user-clock"></i></div>
@@ -417,6 +440,7 @@ function DashboardView({
                             ) : (
                                 entregasPendientes.map(e => (
                                     <div key={e.id} className="bg-slate-50 p-5 rounded-3xl border border-slate-200 relative overflow-hidden">
+                                        <div className="absolute top-0 right-0 bg-amber-400 text-white text-[9px] font-black uppercase px-3 py-1 rounded-bl-xl shadow-sm">{e.grupo}</div>
                                         <h3 className="font-black text-slate-800 text-xl mb-1 mt-2"><i className="fas fa-map-marker-alt text-amber-500 mr-2"></i>{e.campo}</h3>
                                         <p className="text-sm font-bold text-indigo-500 mb-5 pl-7">{e.cantidad} Paquetes a entregar</p>
                                         <button onClick={() => onActualizarEntrega(e.id, 'Entregado')} className="w-full py-4 bg-emerald-500 hover:bg-emerald-600 text-white font-black rounded-2xl shadow-lg shadow-emerald-200 active:scale-95 transition-all flex items-center justify-center text-lg"><i className="fas fa-check-circle mr-2"></i> Marcar Entregado</button>
@@ -432,7 +456,6 @@ function DashboardView({
         return (
             <>
                 {contenidoLogistica}
-                {/* SI TIENE GRUPO, MOSTRAMOS LA BARRA. SI NO, SOLO SE VE LA PANTALLA DE ESPERA */}
                 {miGrupo && (
                     <div className="fixed bottom-0 left-0 right-0 max-w-md mx-auto bg-white/90 backdrop-blur-md border-t border-slate-100 flex justify-around items-center p-2 z-50 pb-safe shadow-[0_-10px_40px_rgba(0,0,0,0.05)]">
                         <NavButton id="inicio" icon="fa-home" label="Resumen" width="w-[100px]" />
