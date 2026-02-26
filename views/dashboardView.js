@@ -128,7 +128,7 @@ function DashboardView({
                                 const total = alumnosCampo.length;
                                 const ninos = alumnosCampo.filter(a => a.genero === 'M').length;
                                 const ninas = alumnosCampo.filter(a => a.genero === 'F').length;
-                                if (total === 0) return null; // Ocultar si no hay en ese rango
+                                if (total === 0) return null; 
                                 
                                 return (
                                     <div key={campo} className="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm flex items-center justify-between">
@@ -209,7 +209,7 @@ function DashboardView({
         const nombreDisplay = datosUsuarioActual ? datosUsuarioActual.nombre.split(' ')[0] : '';
         const rolDisplay = usuario.charAt(0) + usuario.slice(1).toLowerCase();
 
-        // LÓGICA DE FILTRADO (MAESTROS)
+        // LÓGICA DE FILTRADO
         const alumnosFiltrados = alumnos.filter(a => {
             if (edadMin !== '' && a.edad < parseInt(edadMin)) return false;
             if (edadMax !== '' && a.edad > parseInt(edadMax)) return false;
@@ -227,14 +227,24 @@ function DashboardView({
                         <h2 className="text-3xl font-black text-slate-800">Hola, {rolDisplay} {nombreDisplay}</h2>
                         <p className="text-slate-400 text-sm mt-1">Resumen de tu campo: <b className="text-indigo-500">{datosUsuarioActual.campo}</b></p>
                     </div>
+                    
+                    {/* TARJETA DE ASISTENCIA */}
                     <div className={`w-full p-6 rounded-[32px] text-left relative overflow-hidden group shadow-lg ${estaBloqueada ? 'bg-slate-50 border border-slate-200' : asistenciaTomada ? 'bg-white border border-slate-100' : 'bg-rose-500 text-white shadow-rose-200'}`}>
                         {asistenciaTomada ? (
                             <><div className="flex justify-between items-center mb-6"><h3 className={`font-bold text-sm flex items-center ${estaBloqueada ? 'text-slate-500' : 'text-slate-700'}`}><i className={`fas ${estaBloqueada ? 'fa-lock' : 'fa-clipboard-check'} mr-2 text-lg ${estaBloqueada ? 'text-slate-400' : 'text-emerald-500'}`}></i> {estaBloqueada ? 'Asistencia (Solo Lectura)' : 'Asistencia Completada'}</h3>{estaBloqueada ? (<span className="text-[9px] bg-slate-200 text-slate-500 px-2 py-1 rounded-lg font-bold uppercase">Bloqueada</span>) : (<span className="text-[10px] bg-emerald-100 text-emerald-700 px-2 py-1 rounded-lg font-bold">TUYA</span>)}</div><div className="flex justify-around text-center"><div><p className={`text-3xl font-black ${estaBloqueada ? 'text-slate-500' : 'text-emerald-500'}`}>{asistenciaHoy.totales.presentes}</p><p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">Presentes</p></div><div><p className={`text-3xl font-black ${estaBloqueada ? 'text-slate-500' : 'text-rose-500'}`}>{asistenciaHoy.totales.ausentes}</p><p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">Ausentes</p></div><div><p className={`text-3xl font-black ${estaBloqueada ? 'text-slate-500' : 'text-amber-500'}`}>{asistenciaHoy.totales.permisos}</p><p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">Permisos</p></div></div><div className="mt-6 text-center text-[10px] font-bold uppercase tracking-widest bg-slate-100 p-2 rounded-xl">{estaBloqueada ? (<span className="text-slate-500"><i className="fas fa-info-circle mr-1"></i> Tomada por: {asistenciaHoy.maestro}</span>) : (<span className="text-indigo-500">Ve a 'Lista' para editar</span>)}</div></>
                         ) : (<><div className="absolute top-0 right-0 w-32 h-32 bg-white opacity-10 rounded-bl-[100px] pointer-events-none"></div><div className="flex items-center space-x-4 relative z-10"><div className="w-16 h-16 bg-white/20 rounded-2xl flex items-center justify-center text-3xl backdrop-blur-sm animate-pulse"><i className="fas fa-clipboard-list"></i></div><div><h3 className="font-bold text-xl">Tomar Asistencia</h3><p className="text-rose-100 text-xs">Aún no registras el día de hoy</p></div></div></>)}
                     </div>
-                    <div className="grid grid-cols-2 gap-4">
-                        <div className="bg-indigo-600 p-6 rounded-[32px] text-white shadow-xl shadow-indigo-200 flex flex-col justify-between h-40"><p className="text-xs font-bold uppercase opacity-70 tracking-widest">Niños Totales</p><div><p className="text-5xl font-black tracking-tighter">{alumnos.length}</p></div></div>
-                        <div onClick={() => setVistaActual('filtros')} className="bg-sky-500 p-6 rounded-[32px] text-white shadow-xl shadow-sky-200 flex flex-col justify-between h-40 cursor-pointer active:scale-95 transition-all"><p className="text-xs font-bold uppercase opacity-90 tracking-widest">Filtrar</p><div className="w-12 h-12 bg-white/20 rounded-2xl flex items-center justify-center text-2xl backdrop-blur-sm"><i className="fas fa-filter"></i></div></div>
+                    
+                    {/* TARJETA ÚNICA DE NIÑOS TOTALES (A LO ANCHO) */}
+                    <div className="w-full bg-indigo-600 p-6 rounded-[32px] text-white shadow-xl shadow-indigo-200 flex justify-between items-center relative overflow-hidden">
+                        <div className="absolute top-0 right-0 w-32 h-32 bg-white opacity-10 rounded-bl-[100px] pointer-events-none"></div>
+                        <div className="relative z-10">
+                            <p className="text-xs font-bold uppercase opacity-70 tracking-widest">Niños Totales</p>
+                            <p className="text-5xl font-black tracking-tighter mt-1">{alumnos.length}</p>
+                        </div>
+                        <div className="w-14 h-14 bg-white/20 rounded-2xl flex items-center justify-center text-3xl backdrop-blur-sm relative z-10">
+                            <i className="fas fa-users"></i>
+                        </div>
                     </div>
                 </div>
             );
@@ -242,7 +252,7 @@ function DashboardView({
 
         if (vistaActual === 'asistencia') { 
             if (estaBloqueada) {
-                contenidoMaestro = <div className="flex flex-col items-center justify-center h-full text-center p-8"><div className="w-20 h-20 bg-slate-100 text-slate-400 rounded-full flex items-center justify-center text-4xl mb-4"><i className="fas fa-lock"></i></div><h3 className="text-xl font-bold text-slate-700">Acceso Bloqueado</h3><p className="text-slate-400 text-sm mt-2">La asistencia ya fue registrada por <b>{asistenciaHoy?.maestro}</b>.</p></div>;
+                contenidoMaestro = <div className="flex flex-col items-center justify-center h-full text-center p-8 animate-in fade-in"><div className="w-24 h-24 bg-slate-100 text-slate-400 rounded-full flex items-center justify-center text-5xl mb-6 shadow-inner"><i className="fas fa-lock"></i></div><h3 className="text-2xl font-black text-slate-700 mb-2">Acceso Bloqueado</h3><p className="text-slate-500 text-sm leading-relaxed">La asistencia de hoy ya fue registrada exitosamente por <b>{asistenciaHoy?.maestro}</b>.</p></div>;
             } else {
                 contenidoMaestro = (<div className="flex flex-col h-full pt-4 animate-in slide-in-from-right duration-300"><div className="flex items-center space-x-4 mb-4 px-2"><div><h2 className="text-2xl font-black text-slate-800">Pasar Lista</h2><p className="text-slate-400 text-xs">{new Date().toLocaleDateString()}</p></div></div><div className="flex-1 bg-white rounded-t-[40px] shadow-lg border-t border-slate-100 p-6 overflow-hidden flex flex-col relative"><div className="overflow-y-auto space-y-4 pb-28 pr-2">{alumnos.map(a => (<div key={a.id} className="flex items-center justify-between p-3 bg-slate-50 rounded-2xl border border-slate-100"><div className="flex items-center space-x-3 w-1/3"><div className="w-10 h-10 bg-indigo-50 text-indigo-600 rounded-xl flex items-center justify-center text-sm font-bold">{a.nombre.charAt(0)}</div><p className="font-bold text-slate-700 text-sm truncate">{a.nombre.split(' ')[0]}</p></div><div className="flex space-x-2 flex-1 justify-end"><button onClick={() => setListaAsistencia({...listaAsistencia, [a.id]: 'Presente'})} className={`w-10 h-10 rounded-xl text-xs font-bold uppercase transition-all ${listaAsistencia[a.id] === 'Presente' ? 'bg-emerald-500 text-white shadow-md' : 'bg-white border border-slate-200 text-slate-400'}`}>P</button><button onClick={() => setListaAsistencia({...listaAsistencia, [a.id]: 'Ausente'})} className={`w-10 h-10 rounded-xl text-xs font-bold uppercase transition-all ${listaAsistencia[a.id] === 'Ausente' ? 'bg-rose-500 text-white shadow-md' : 'bg-white border border-slate-200 text-slate-400'}`}>A</button><button onClick={() => setListaAsistencia({...listaAsistencia, [a.id]: 'Permiso'})} className={`w-12 h-10 rounded-xl text-[10px] font-bold uppercase transition-all ${listaAsistencia[a.id] === 'Permiso' ? 'bg-amber-400 text-white shadow-md' : 'bg-white border border-slate-200 text-slate-400'}`}>PER</button></div></div>))}</div><div className="absolute bottom-6 left-6 right-6"><button onClick={guardarLista} className="w-full bg-indigo-600 p-4 rounded-2xl text-white font-black shadow-xl active:scale-95 transition-all text-lg">Guardar Asistencia</button></div></div></div>); 
             }
@@ -263,7 +273,6 @@ function DashboardView({
                 <div className="flex flex-col h-full pt-4 animate-in slide-in-from-right duration-300">
                     <div className="px-2 mb-4"><h2 className="text-2xl font-black text-slate-800">Filtro de Edades</h2><p className="text-slate-400 text-xs">Segmenta tu clase rápidamente</p></div>
                     
-                    {/* ESPACIO AMPLIO PARA EL FILTRO */}
                     <div className="bg-sky-50 rounded-[32px] p-6 shadow-sm border border-sky-100 mb-6">
                         <div className="flex space-x-4 mb-5">
                             <div className="w-1/2">
