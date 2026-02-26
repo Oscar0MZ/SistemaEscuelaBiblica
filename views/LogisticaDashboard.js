@@ -2,7 +2,6 @@ const { useState, useEffect } = React;
 
 function LogisticaDashboard({ datosUsuarioActual, entregasLogistica, onActualizarEntrega, onGuardarAvanceEntrega }) {
     const [vistaActual, setVistaActual] = useState('inicio'); 
-    
     const [cantidadesDetalle, setCantidadesDetalle] = useState({});
     
     const nombreDisplay = datosUsuarioActual ? datosUsuarioActual.nombre.split(' ')[0] : '';
@@ -27,6 +26,56 @@ function LogisticaDashboard({ datosUsuarioActual, entregasLogistica, onActualiza
                 [campoRuta]: valor
             }
         }));
+    };
+
+    // --- FUNCIÓN INTELIGENTE DE GUARDAR AVANCE (Bloqueo Individual) ---
+    const handleGuardarAvance = (e) => {
+        const misIngresos = cantidadesDetalle[e.id] || {};
+        const nuevosDetalles = { ...(e.detalles || {}) };
+        const nuevosBloqueos = { ...(e.bloqueos || {}) };
+
+        let huboCambios = false;
+        const camposDeRuta = e.campos || [e.campo];
+
+        camposDeRuta.forEach(c => {
+            const valorIngresado = misIngresos[c];
+            const bloqueoActual = e.bloqueos?.[c];
+            
+            // Si yo escribí un valor
+            if (valorIngresado !== undefined && valorIngresado !== "") {
+                // Solo lo guardo si nadie más lo bloqueó antes, o si yo soy el dueño
+                if (!bloqueoActual || bloqueoActual.id === datosUsuarioActual.id) {
+                    nuevosDetalles[c] = valorIngresado;
+                    nuevosBloqueos[c] = { id: datosUsuarioActual.id, nombre: datosUsuarioActual.nombre };
+                    huboCambios = true;
+                }
+            }
+        });
+
+        if (huboCambios) {
+            onGuardarAvanceEntrega(e.id, nuevosDetalles, nuevosBloqueos);
+        } else {
+            alert("No hay datos nuevos para guardar, o los campos que editaste ya fueron registrados por otro compañero.");
+        }
+    };
+
+    const handleFinalizar = (e) => {
+        const misIngresos = cantidadesDetalle[e.id] || {};
+        const nuevosDetalles = { ...(e.detalles || {}) };
+        const nuevosBloqueos = { ...(e.bloqueos || {}) };
+        
+        const camposDeRuta = e.campos || [e.campo];
+        camposDeRuta.forEach(c => {
+            const valorIngresado = misIngresos[c];
+            const bloqueoActual = e.bloqueos?.[c];
+            if (valorIngresado !== undefined && valorIngresado !== "") {
+                if (!bloqueoActual || bloqueoActual.id === datosUsuarioActual.id) {
+                    nuevosDetalles[c] = valorIngresado;
+                    nuevosBloqueos[c] = { id: datosUsuarioActual.id, nombre: datosUsuarioActual.nombre };
+                }
+            }
+        });
+        onActualizarEntrega(e.id, 'Entregado', nuevosDetalles, nuevosBloqueos);
     };
 
     const NavButton = ({ id, icon, label, width = 'w-[100px]' }) => (
@@ -77,69 +126,59 @@ function LogisticaDashboard({ datosUsuarioActual, entregasLogistica, onActualiza
                             <div className="text-center p-8 mt-10"><div className="w-24 h-24 bg-slate-50 text-slate-300 rounded-full flex items-center justify-center text-5xl mx-auto mb-4"><i className="fas fa-check-double"></i></div><h3 className="font-bold text-slate-700 text-lg">¡Ruta Limpia!</h3><p className="text-slate-400 text-sm mt-1">Tu grupo no tiene rutas pendientes por ahora.</p></div>
                         ) : (
                             entregasPendientes.map(e => {
-                                // --- MAGIA: Lógica de Bloqueo de Propiedad ---
-                                const estaBloqueada = e.registradoPorId && e.registradoPorId !== datosUsuarioActual.id;
+                                const camposDeRuta = e.campos || [e.campo];
 
                                 return (
-                                    <div key={e.id} className={`p-6 rounded-3xl border relative overflow-hidden shadow-sm transition-colors ${estaBloqueada ? 'bg-slate-100 border-slate-200 opacity-90' : 'bg-slate-50 border-slate-200'}`}>
-                                        <div className={`absolute top-0 right-0 text-white text-[9px] font-black uppercase px-3 py-1 rounded-bl-xl shadow-sm ${estaBloqueada ? 'bg-slate-400' : 'bg-amber-400'}`}>{e.grupo}</div>
+                                    <div key={e.id} className="bg-slate-50 p-6 rounded-3xl border border-slate-200 relative overflow-hidden shadow-sm">
+                                        <div className="absolute top-0 right-0 bg-amber-400 text-white text-[9px] font-black uppercase px-3 py-1 rounded-bl-xl shadow-sm">{e.grupo}</div>
+                                        <h3 className="font-black text-slate-800 text-lg mb-1 mt-1"><i className="fas fa-truck-loading text-amber-500 mr-2"></i>Misión de Reparto</h3>
+                                        <p className="text-xs font-bold text-indigo-500 mb-5 pl-7">Total a llevar: {e.cantidad} Paquetes</p>
                                         
-                                        <h3 className="font-black text-slate-800 text-lg mb-1 mt-1"><i className={`fas fa-truck-loading mr-2 ${estaBloqueada ? 'text-slate-400' : 'text-amber-500'}`}></i>Misión de Reparto</h3>
-                                        <p className="text-xs font-bold text-indigo-500 mb-3 pl-7">Total a llevar: {e.cantidad} Paquetes</p>
-                                        
-                                        {/* MENSAJE DE BLOQUEO SI OTRO USUARIO LA TOMÓ */}
-                                        {e.registradoPorId && (
-                                            <div className={`mt-2 mb-4 text-[10px] font-bold px-3 py-2 rounded-xl flex items-center ${estaBloqueada ? 'bg-rose-100 text-rose-600' : 'bg-emerald-100 text-emerald-700'}`}>
-                                                <i className={`fas ${estaBloqueada ? 'fa-lock' : 'fa-unlock'} mr-2 text-base`}></i>
-                                                {estaBloqueada ? `Bloqueado: Ruta trabajada por ${e.registradoPorNombre}` : 'Ruta a tu cargo (Tú la iniciaste)'}
-                                            </div>
-                                        )}
-
-                                        <div className="space-y-2 mb-5">
+                                        {/* LISTA DE CAMPOS CON BLOQUEO INDIVIDUAL */}
+                                        <div className="space-y-3 mb-5">
                                             <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest pl-1 mb-2">Registro de entregas:</p>
                                             
-                                            {e.campos ? e.campos.map(c => (
-                                                <div key={c} className={`flex justify-between items-center bg-white p-2 px-3 rounded-xl border shadow-sm ${estaBloqueada ? 'border-slate-100' : 'border-indigo-50'}`}>
-                                                    <span className={`text-xs font-bold w-1/2 truncate ${estaBloqueada ? 'text-slate-400' : 'text-slate-700'}`}>{c}</span>
-                                                    <div className="w-1/2 flex justify-end">
-                                                        <input 
-                                                            type="number" 
-                                                            placeholder="Cant." 
-                                                            disabled={estaBloqueada} // DESHABILITA EL INPUT SI ESTÁ BLOQUEADO
-                                                            className={`w-16 p-2 rounded-lg text-xs font-black text-center outline-none transition-colors ${estaBloqueada ? 'bg-slate-100 text-slate-400 border-none' : 'bg-slate-50 border border-slate-200 text-indigo-600 focus:border-indigo-400'}`}
-                                                            value={cantidadesDetalle[e.id]?.[c] || ''}
-                                                            onChange={(ev) => handleCantidadChange(e.id, c, ev.target.value)}
-                                                        />
+                                            {camposDeRuta.map(c => {
+                                                const bloqueo = e.bloqueos?.[c];
+                                                const bloqueadoPorOtro = bloqueo && bloqueo.id !== datosUsuarioActual.id;
+                                                const bloqueadoPorMi = bloqueo && bloqueo.id === datosUsuarioActual.id;
+
+                                                return (
+                                                    <div key={c} className={`flex flex-col bg-white p-3 rounded-xl border shadow-sm ${bloqueadoPorOtro ? 'border-rose-100 bg-rose-50/40' : bloqueadoPorMi ? 'border-emerald-100 bg-emerald-50/30' : 'border-slate-100'}`}>
+                                                        <div className="flex justify-between items-center">
+                                                            <span className={`text-xs font-bold w-1/2 truncate ${bloqueadoPorOtro ? 'text-slate-400' : 'text-slate-700'}`}>{c}</span>
+                                                            <div className="w-1/2 flex justify-end">
+                                                                <input 
+                                                                    type="number" 
+                                                                    placeholder="Cant." 
+                                                                    disabled={bloqueadoPorOtro}
+                                                                    className={`w-16 p-2 rounded-lg text-xs font-black text-center outline-none transition-colors ${bloqueadoPorOtro ? 'bg-transparent text-slate-400' : 'bg-slate-50 border border-slate-200 text-indigo-600 focus:border-indigo-400'}`}
+                                                                    value={cantidadesDetalle[e.id]?.[c] || ''}
+                                                                    onChange={(ev) => handleCantidadChange(e.id, c, ev.target.value)}
+                                                                />
+                                                            </div>
+                                                        </div>
+                                                        
+                                                        {/* MENSAJES DE ESTADO */}
+                                                        {bloqueadoPorOtro && (
+                                                            <p className="text-[9px] text-rose-500 font-bold mt-2"><i className="fas fa-lock mr-1"></i> Registrado por {bloqueo.nombre}</p>
+                                                        )}
+                                                        {bloqueadoPorMi && (
+                                                            <p className="text-[9px] text-emerald-500 font-bold mt-2"><i className="fas fa-check mr-1"></i> Tú registraste este campo</p>
+                                                        )}
                                                     </div>
-                                                </div>
-                                            )) : (
-                                                <div className={`flex justify-between items-center bg-white p-2 px-3 rounded-xl border shadow-sm ${estaBloqueada ? 'border-slate-100' : 'border-indigo-50'}`}>
-                                                    <span className={`text-xs font-bold w-1/2 truncate ${estaBloqueada ? 'text-slate-400' : 'text-slate-700'}`}>{e.campo}</span>
-                                                    <div className="w-1/2 flex justify-end">
-                                                        <input 
-                                                            type="number" 
-                                                            placeholder="Cant." 
-                                                            disabled={estaBloqueada}
-                                                            className={`w-16 p-2 rounded-lg text-xs font-black text-center outline-none transition-colors ${estaBloqueada ? 'bg-slate-100 text-slate-400 border-none' : 'bg-slate-50 border border-slate-200 text-indigo-600 focus:border-indigo-400'}`}
-                                                            value={cantidadesDetalle[e.id]?.[e.campo] || ''}
-                                                            onChange={(ev) => handleCantidadChange(e.id, e.campo, ev.target.value)}
-                                                        />
-                                                    </div>
-                                                </div>
-                                            )}
+                                                );
+                                            })}
                                         </div>
 
-                                        {/* OCULTA LOS BOTONES SI OTRO USUARIO ESTÁ EDITANDO */}
-                                        {!estaBloqueada && (
-                                            <div className="flex space-x-2">
-                                                <button onClick={() => onGuardarAvanceEntrega(e.id, cantidadesDetalle[e.id] || {})} className="w-1/3 py-4 bg-white hover:bg-slate-100 text-indigo-500 border border-indigo-100 font-black rounded-2xl shadow-sm active:scale-95 transition-all flex flex-col items-center justify-center text-[10px] uppercase tracking-wide">
-                                                    <i className="fas fa-save mb-1 text-base"></i> Avance
-                                                </button>
-                                                <button onClick={() => onActualizarEntrega(e.id, 'Entregado', cantidadesDetalle[e.id] || {})} className="w-2/3 py-4 bg-emerald-500 hover:bg-emerald-600 text-white font-black rounded-2xl shadow-lg shadow-emerald-200 active:scale-95 transition-all flex items-center justify-center text-sm">
-                                                    <i className="fas fa-check-circle mr-2"></i> Finalizar Ruta
-                                                </button>
-                                            </div>
-                                        )}
+                                        <div className="flex space-x-2">
+                                            <button onClick={() => handleGuardarAvance(e)} className="w-1/3 py-4 bg-white hover:bg-slate-100 text-indigo-500 border border-indigo-100 font-black rounded-2xl shadow-sm active:scale-95 transition-all flex flex-col items-center justify-center text-[10px] uppercase tracking-wide">
+                                                <i className="fas fa-save mb-1 text-base"></i> Avance
+                                            </button>
+                                            <button onClick={() => handleFinalizar(e)} className="w-2/3 py-4 bg-emerald-500 hover:bg-emerald-600 text-white font-black rounded-2xl shadow-lg shadow-emerald-200 active:scale-95 transition-all flex items-center justify-center text-sm">
+                                                <i className="fas fa-check-circle mr-2"></i> Finalizar Ruta
+                                            </button>
+                                        </div>
                                     </div>
                                 );
                             })
