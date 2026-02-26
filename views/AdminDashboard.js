@@ -15,7 +15,6 @@ function AdminDashboard({
     const [subVistaAdminLogistica, setSubVistaAdminLogistica] = useState('misiones'); 
     const [edadMin, setEdadMin] = useState('');
     const [edadMax, setEdadMax] = useState('');
-
     const [camposRuta, setCamposRuta] = useState([]);
 
     const historialVisible = historialAsistencias.filter(h => !h.esReset);
@@ -268,9 +267,16 @@ function AdminDashboard({
                                                 <div className="w-3/4 pr-2">
                                                     <p className="font-black text-slate-800 text-sm mb-1">{e.grupo}</p>
                                                     <p className="text-[10px] text-slate-500 font-bold leading-relaxed"><i className="fas fa-map-marker-alt mr-1 text-amber-500"></i> {e.campos ? e.campos.join(', ') : e.campo}</p>
-                                                    <p className="text-xs text-indigo-500 font-bold mt-2"><i className="fas fa-box mr-1"></i>{e.cantidad} Paquetes en total</p>
+                                                    <p className="text-xs text-indigo-500 font-bold mt-2 mb-1"><i className="fas fa-box mr-1"></i>{e.cantidad} Paquetes en total</p>
+                                                    
+                                                    {/* NUEVO: MUESTRA AVANCES PARCIALES AL DIRECTOR */}
                                                     {e.detalles && Object.keys(e.detalles).length > 0 && (
-                                                        <div className="mt-2 text-[9px] text-emerald-500 font-bold"><i className="fas fa-save mr-1"></i> Avance guardado en ruta...</div>
+                                                        <div className="mt-2 text-[9px] text-emerald-500 font-bold flex flex-col space-y-1">
+                                                            {Object.entries(e.detalles).map(([c, cant]) => {
+                                                                const creador = e.bloqueos?.[c]?.nombre;
+                                                                return <span key={c}><i className="fas fa-check-circle mr-1"></i> {c}: {cant} {creador ? `(${creador})` : ''}</span>
+                                                            })}
+                                                        </div>
                                                     )}
                                                 </div>
                                                 <button onClick={() => onBorrarEntrega(e.id)} className="w-10 h-10 flex items-center justify-center bg-rose-50 text-rose-500 rounded-xl hover:bg-rose-500 hover:text-white transition-colors flex-shrink-0"><i className="fas fa-trash-alt"></i></button>
@@ -288,12 +294,18 @@ function AdminDashboard({
                                                     <span className="text-emerald-500 font-bold text-xl"><i className="fas fa-check-circle"></i></span>
                                                 </div>
                                                 
-                                                {/* DESGLOSE DE ENTREGAS POR CAMPO */}
+                                                {/* DESGLOSE EXACTO CON QUIÉN ENTREGÓ QUÉ */}
                                                 {e.detalles && Object.keys(e.detalles).length > 0 && (
-                                                    <div className="mt-3 pt-3 border-t border-slate-200 grid grid-cols-2 gap-2">
-                                                        {Object.entries(e.detalles).map(([campo, cant]) => (
-                                                            <p key={campo} className="text-[10px] font-bold text-slate-500 truncate"><i className="fas fa-caret-right text-indigo-400 mr-1"></i> {campo}: <span className="text-indigo-600 font-black">{cant}</span></p>
-                                                        ))}
+                                                    <div className="mt-3 pt-3 border-t border-slate-200 grid grid-cols-1 gap-2">
+                                                        {Object.entries(e.detalles).map(([campo, cant]) => {
+                                                            const creador = e.bloqueos?.[campo]?.nombre;
+                                                            return (
+                                                                <p key={campo} className="text-[10px] font-bold text-slate-500 truncate flex justify-between">
+                                                                    <span><i className="fas fa-caret-right text-indigo-400 mr-1"></i> {campo}</span>
+                                                                    <span className="text-indigo-600 font-black">{cant} <span className="font-normal text-slate-400 ml-1">{creador ? `(${creador})` : ''}</span></span>
+                                                                </p>
+                                                            )
+                                                        })}
                                                     </div>
                                                 )}
                                             </div>
