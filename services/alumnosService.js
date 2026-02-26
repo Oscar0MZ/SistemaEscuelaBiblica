@@ -20,9 +20,47 @@ window.AlumnosService = {
         return true;
     },
 
-    eliminar: async (id) => {
-        await window.db.collection('alumnos').doc(id).delete();
-        return true;
+    // MEJORADO: Elimina al alumno Y actualiza las asistencias recientes
+    eliminar: async (idAlumno, campo) => {
+        try {
+            const batch = window.db.batch();
+            
+            // 1. Borrar al alumno
+            const alumnoRef = window.db.collection('alumnos').doc(idAlumno);
+            batch.delete(alumnoRef);
+
+            // 2. Buscar asistencias de este campo y quitar al alumno
+            if (campo) {
+                const asistenciasSnap = await window.db.collection('asistencias')
+                    .where('campo', '==', campo)
+                    .get();
+
+                asistenciasSnap.docs.forEach(doc => {
+                    const data = doc.data();
+                    if (data.registros && !data.esReset) {
+                        // Filtramos para quitar al niño eliminado
+                        const nuevosRegistros = data.registros.filter(r => r.idAlumno !== idAlumno);
+                        
+                        // Si el niño estaba en esta lista, la actualizamos y recalculamos
+                        if (nuevosRegistros.length !== data.registros.length) {
+                            const p = nuevosRegistros.filter(r => r.estado === 'Presente').length;
+                            const a = nuevosRegistros.filter(r => r.estado === 'Ausente').length;
+                            const per = nuevosRegistros.filter(r => r.estado === 'Permiso').length;
+                            batch.update(doc.ref, { 
+                                registros: nuevosRegistros, 
+                                totales: { presentes: p, ausentes: a, permisos: per } 
+                            });
+                        }
+                    }
+                });
+            }
+
+            await batch.commit();
+            return true;
+        } catch (error) {
+            console.error("Error al eliminar alumno en cascada:", error);
+            throw error;
+        }
     },
 
     suscribirPorCampo: (campo, callback) => {
@@ -81,26 +119,20 @@ window.AlumnosService = {
             });
     },
 
-    // 9. NUEVO: HISTORIAL ANUAL POR CAMPO (Para Ranking del Maestro)
     suscribirHistorialPorCampo: (campo, callback) => {
-        // Establece el "Reinicio" el 1 de Enero del año actual
         const inicioAnio = new Date(new Date().getFullYear(), 0, 1).getTime();
-        
         return window.db.collection('asistencias')
             .where('campo', '==', campo)
             .onSnapshot((snapshot) => {
                 let data = snapshot.docs.map(doc => doc.data());
-                // Solo devuelve los de este año (El reinicio anual automático)
                 data = data.filter(d => d.timestamp && d.timestamp >= inicioAnio);
-                data.sort((a, b) => b.timestamp - a.timestamp); // Más recientes primero
+                data.sort((a, b) => b.timestamp - a.timestamp); 
                 callback(data);
             });
     },
 
-    // 10. NUEVO: HISTORIAL ANUAL GLOBAL (Para el Administrador)
     suscribirHistorialGlobal: (callback) => {
         const inicioAnio = new Date(new Date().getFullYear(), 0, 1).getTime();
-        
         return window.db.collection('asistencias')
             .onSnapshot((snapshot) => {
                 let data = snapshot.docs.map(doc => doc.data());
@@ -108,5 +140,33 @@ window.AlumnosService = {
                 data.sort((a, b) => b.timestamp - a.timestamp);
                 callback(data);
             });
+    },
+
+    eliminarCampoCompleto: async (campo) => {
+        try {
+            const batch = window.db.batch();
+            const alumnosSnap = await window.db.collection('alumnos').where('campo', '==', campo).get();
+            alumnosSnap.docs.forEach(doc => batch.delete(doc.ref));
+            const asistenciasSnap = await window.db.collection('asistencias').where('campo', '==', campo).get();
+            asistenciasSnap.docs.forEach(doc => batch.delete(doc.ref));
+            await batch.commit();
+            return true;
+        } catch (error) { console.error(error); throw error; }
+    },
+
+    // NUEVO: REINICIO DE MATERIAL (Ciclo 1 o 2) POR EL ADMINISTRADOR
+    reiniciarLecciones: async (campo, leccionBase) => {
+        const idDoc = `RESET_${Date.now()}_${campo.replace(/\s+/g, '')}`;
+        await window.db.collection('asistencias').doc(idDoc).set({
+            campo: campo,
+            fecha: new Date().toLocaleDateString('en-CA'),
+            maestro: 'Administrador (Reinicio)',
+            leccion: leccionBase, // Será 0 (para empezar en 1) o 25 (para empezar en 26)
+            leccionImpartida: true,
+            esReset: true, // Marca oculta para que no ensucie la asistencia
+            registros: [],
+            totales: { presentes: 0, ausentes: 0, permisos: 0 },
+            timestamp: Date.now()
+        });
     }
 };
