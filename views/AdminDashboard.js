@@ -4,7 +4,7 @@ function AdminDashboard({
     maestros, todosLosAlumnos, datosGlobalesAsistencia, historialAsistencias, entregasLogistica,
     mantenimiento, onToggleMantenimiento, onApprove, onDelete, onToggleModal, 
     onDeleteCampo, onResetLecciones, onCrearEntrega, onBorrarEntrega, onAssignGroup,
-    inventarioViveres, onActualizarInventario // RECIBIMOS LOS NUEVOS PROPS
+    inventarioViveres, onActualizarInventario
 }) {
     const [busqueda, setBusqueda] = useState('');
     const [vistaActual, setVistaActual] = useState('inicio'); 
@@ -13,7 +13,7 @@ function AdminDashboard({
     const [expandirFiltroAdmin, setExpandirFiltroAdmin] = useState(false);
     const [campoExpandido, setCampoExpandido] = useState(null); 
     const [campoResetUI, setCampoResetUI] = useState(null);
-    const [subVistaAdminLogistica, setSubVistaAdminLogistica] = useState('bodega'); // <-- Bodega como pestaña principal en Logística
+    const [subVistaAdminLogistica, setSubVistaAdminLogistica] = useState('bodega'); 
     const [edadMin, setEdadMin] = useState('');
     const [edadMax, setEdadMax] = useState('');
     const [camposRuta, setCamposRuta] = useState([]);
@@ -223,7 +223,6 @@ function AdminDashboard({
         });
         const gruposCompletados = Object.keys(entregasCompletadasPorGrupo).sort();
 
-        // --- MAGIA: CÁLCULO DE INVENTARIO GENERAL ---
         let totalRepartidoHistorico = 0;
         entregasLogistica.forEach(e => {
             if (e.detalles) {
@@ -246,13 +245,13 @@ function AdminDashboard({
 
                 <div className="flex-1 overflow-y-auto pb-24">
                     
-                    {/* --- NUEVA PESTAÑA DE BODEGA --- */}
+                    {/* --- PESTAÑA BODEGA ACTUALIZADA (AHORA ES PARA SUMAR) --- */}
                     {subVistaAdminLogistica === 'bodega' && (
                         <div className="animate-in slide-in-from-left duration-200 px-1">
                             <div className="bg-indigo-600 p-6 rounded-[32px] text-white shadow-xl shadow-indigo-200 relative overflow-hidden mb-5 mt-2">
                                 <div className="absolute top-0 right-0 w-32 h-32 bg-white opacity-10 rounded-bl-[100px] pointer-events-none"></div>
                                 <div className="relative z-10">
-                                    <p className="text-xs font-bold uppercase opacity-80 tracking-widest mb-1">Stock en Bodega</p>
+                                    <p className="text-xs font-bold uppercase opacity-80 tracking-widest mb-1">Stock Físico en Bodega</p>
                                     <p className="text-6xl font-black tracking-tighter">{enBodega}</p>
                                 </div>
                                 <div className="w-16 h-16 bg-white/20 rounded-2xl flex items-center justify-center text-3xl backdrop-blur-sm absolute bottom-6 right-6 z-10"><i className="fas fa-boxes"></i></div>
@@ -260,7 +259,7 @@ function AdminDashboard({
 
                             <div className="flex space-x-3 mb-6">
                                 <div className="w-1/2 bg-white p-4 rounded-2xl border border-slate-100 shadow-sm text-center">
-                                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Inv. Inicial</p>
+                                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Total Histórico</p>
                                     <p className="text-2xl font-black text-slate-700">{inventarioViveres}</p>
                                 </div>
                                 <div className="w-1/2 bg-white p-4 rounded-2xl border border-slate-100 shadow-sm text-center">
@@ -269,13 +268,17 @@ function AdminDashboard({
                                 </div>
                             </div>
 
-                            <form onSubmit={(e) => { e.preventDefault(); onActualizarInventario(Number(e.target.nuevoStock.value)); }} className="bg-slate-50 p-5 rounded-3xl border border-slate-200 shadow-sm">
-                                <h3 className="font-bold text-slate-700 text-sm mb-3 flex items-center"><i className="fas fa-edit text-indigo-500 mr-2"></i> Registrar Nuevo Ingreso</h3>
-                                <p className="text-[11px] text-slate-500 mb-4 leading-relaxed font-bold">Coloca el número de paquetes con los que cuenta la iglesia antes de iniciar todas las rutas.</p>
+                            <form onSubmit={(e) => { 
+                                e.preventDefault(); 
+                                onActualizarInventario(Number(e.target.nuevoStock.value)); 
+                                e.target.reset(); // Limpia el cuadro después de sumar
+                            }} className="bg-slate-50 p-5 rounded-3xl border border-slate-200 shadow-sm">
+                                <h3 className="font-bold text-slate-700 text-sm mb-3 flex items-center"><i className="fas fa-plus-circle text-indigo-500 mr-2"></i> Agregar Nuevos Víveres</h3>
+                                <p className="text-[11px] text-slate-500 mb-4 leading-relaxed font-bold">¿Llegó más mercadería? Ingresa la cantidad recibida hoy y se sumará automáticamente al stock disponible.</p>
                                 <div className="flex space-x-3">
-                                    <input type="number" name="nuevoStock" required defaultValue={inventarioViveres} placeholder="Ej: 150" className="w-2/3 p-4 bg-white rounded-2xl outline-none border border-slate-200 text-lg font-black text-slate-700 text-center shadow-sm focus:border-indigo-400" />
+                                    <input type="number" name="nuevoStock" required min="1" placeholder="Ej: 100" className="w-2/3 p-4 bg-white rounded-2xl outline-none border border-slate-200 text-lg font-black text-slate-700 text-center shadow-sm focus:border-indigo-400" />
                                     <button type="submit" className="w-1/3 bg-indigo-600 hover:bg-indigo-700 text-white font-black rounded-2xl shadow-lg active:scale-95 transition-all flex items-center justify-center">
-                                        <i className="fas fa-save text-xl"></i>
+                                        Sumar <i className="fas fa-plus ml-2"></i>
                                     </button>
                                 </div>
                             </form>
@@ -287,6 +290,7 @@ function AdminDashboard({
                             <form onSubmit={submitMision} className="bg-amber-50 p-6 rounded-[32px] border border-amber-100 shadow-sm mx-1">
                                 <h3 className="font-bold text-amber-800 text-sm mb-4 flex items-center"><i className="fas fa-map-marked-alt mr-2"></i> Crear Ruta de Reparto</h3>
                                 <div className="space-y-4">
+                                    
                                     <div>
                                         <p className="text-[10px] font-bold text-amber-700 uppercase mb-2">1. Selecciona los campos a visitar:</p>
                                         <div className="grid grid-cols-2 gap-2 max-h-32 overflow-y-auto p-3 bg-white rounded-2xl border border-amber-100 shadow-inner">
