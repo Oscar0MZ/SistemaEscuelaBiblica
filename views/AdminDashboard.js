@@ -16,6 +16,9 @@ function AdminDashboard({
     const [edadMin, setEdadMin] = useState('');
     const [edadMax, setEdadMax] = useState('');
 
+    // NUEVO: Array para capturar los campos que el admin selecciona para la Ruta
+    const [camposRuta, setCamposRuta] = useState([]);
+
     const historialVisible = historialAsistencias.filter(h => !h.esReset);
     const todasAsistencias = datosGlobalesAsistencia?.registros || [];
 
@@ -50,7 +53,30 @@ function AdminDashboard({
         ...historialVisible.map(h => h.campo)
     ].filter(Boolean))].sort();
 
-    const camposDisponiblesApp = ["La Isla", "Las Delicias", "El Amatal", "El Manguito", "Buenos Aires", "Corozal #1", "El Porvenir", "El Caulote", "Corozal #2", "Valle Encantado", "La Playa"];
+    const camposFijos = ["La Isla", "Las Delicias", "El Amatal", "El Manguito", "Buenos Aires", "Corozal #1", "El Porvenir", "El Caulote", "Corozal #2", "Valle Encantado", "La Playa"];
+
+    // FUNCIÓN PARA EL CHECKBOX MULTIPLE DE RUTAS
+    const toggleCampoRuta = (c) => {
+        if(camposRuta.includes(c)) setCamposRuta(camposRuta.filter(x => x !== c));
+        else setCamposRuta([...camposRuta, c]);
+    };
+
+    // EVITAR EL SUBMIT POR DEFECTO PARA ENVIAR EL ARRAY
+    const submitMision = (e) => {
+        e.preventDefault();
+        if(camposRuta.length === 0) {
+            alert("⚠️ Debes seleccionar al menos un campo para armar la ruta.");
+            return;
+        }
+        const fd = new FormData(e.target);
+        onCrearEntrega({
+            campos: camposRuta,
+            cantidad: parseInt(fd.get('cantidad')),
+            grupo: fd.get('grupo')
+        });
+        setCamposRuta([]); // Limpiar selección
+        e.target.reset();
+    };
 
     let contenidoAdmin;
 
@@ -146,9 +172,7 @@ function AdminDashboard({
                                             <span className="font-bold text-slate-700 text-lg truncate w-1/3">{campo}</span>
                                             <div className="flex items-center space-x-2">
                                                 <span className="bg-indigo-50 text-indigo-600 font-black text-[10px] px-2 py-1.5 rounded uppercase">{total} Alumnos</span>
-                                                <button onClick={() => setCampoExpandido(isExpanded ? null : campo)} className={`w-8 h-8 flex items-center justify-center rounded-lg transition-colors ${isExpanded ? 'bg-indigo-500 text-white' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'}`} title="Ver Historial de Clases">
-                                                    <i className={`fas fa-chevron-down transition-transform duration-300 ${isExpanded ? 'rotate-180' : ''}`}></i>
-                                                </button>
+                                                <button onClick={() => setCampoExpandido(isExpanded ? null : campo)} className={`w-8 h-8 flex items-center justify-center rounded-lg transition-colors ${isExpanded ? 'bg-indigo-500 text-white' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'}`} title="Ver Historial de Clases"><i className={`fas fa-chevron-down transition-transform duration-300 ${isExpanded ? 'rotate-180' : ''}`}></i></button>
                                                 <button onClick={() => setCampoResetUI(campoResetUI === campo ? null : campo)} className="w-8 h-8 flex items-center justify-center bg-slate-100 text-slate-500 rounded-lg hover:bg-sky-500 hover:text-white transition-colors" title="Ajustar Material"><i className="fas fa-cog"></i></button>
                                                 <button onClick={() => onDeleteCampo(campo)} className="w-8 h-8 flex items-center justify-center bg-rose-50 text-rose-500 rounded-lg hover:bg-rose-500 hover:text-white transition-colors" title="Limpiar Campo"><i className="fas fa-trash-alt"></i></button>
                                             </div>
@@ -207,42 +231,75 @@ function AdminDashboard({
 
         contenidoAdmin = (
             <div className="space-y-4 animate-in slide-in-from-right duration-300 h-full flex flex-col">
-                <div className="px-2 mb-2"><h2 className="text-2xl font-black text-slate-800">Logística</h2><p className="text-slate-400 text-xs">Administración de equipos y entregas</p></div>
+                <div className="px-2 mb-2"><h2 className="text-2xl font-black text-slate-800">Logística</h2><p className="text-slate-400 text-xs">Administración de rutas y equipos</p></div>
                 
                 <div className="flex px-2 space-x-2 mb-2">
-                    <button onClick={() => setSubVistaAdminLogistica('misiones')} className={`flex-1 py-2 rounded-xl text-xs font-bold transition-all ${subVistaAdminLogistica === 'misiones' ? 'bg-amber-100 text-amber-700' : 'bg-slate-50 text-slate-400'}`}><i className="fas fa-truck mr-2"></i>Misiones</button>
+                    <button onClick={() => setSubVistaAdminLogistica('misiones')} className={`flex-1 py-2 rounded-xl text-xs font-bold transition-all ${subVistaAdminLogistica === 'misiones' ? 'bg-amber-100 text-amber-700' : 'bg-slate-50 text-slate-400'}`}><i className="fas fa-route mr-2"></i>Rutas</button>
                     <button onClick={() => setSubVistaAdminLogistica('equipos')} className={`flex-1 py-2 rounded-xl text-xs font-bold transition-all ${subVistaAdminLogistica === 'equipos' ? 'bg-indigo-100 text-indigo-700' : 'bg-slate-50 text-slate-400'}`}><i className="fas fa-users-cog mr-2"></i>Equipos</button>
                 </div>
 
                 <div className="flex-1 overflow-y-auto pb-24">
                     {subVistaAdminLogistica === 'misiones' ? (
                         <>
-                            <form onSubmit={onCrearEntrega} className="bg-amber-50 p-6 rounded-[32px] border border-amber-100 shadow-sm mx-1">
-                                <h3 className="font-bold text-amber-800 text-sm mb-4 flex items-center"><i className="fas fa-box-open mr-2"></i> Asignar Víveres</h3>
-                                <div className="space-y-3">
-                                    <div className="flex space-x-3">
-                                        <div className="w-1/2">
-                                            <input type="number" name="cantidad" required placeholder="Cant. Víveres" className="w-full p-4 bg-white rounded-2xl outline-none border border-amber-100 text-sm font-bold text-slate-700 text-center" />
-                                        </div>
-                                        <div className="w-1/2">
-                                            <select name="grupo" required className="w-full p-4 bg-white rounded-2xl outline-none border border-amber-100 text-sm font-bold text-slate-700">
-                                                <option value="">¿Qué Grupo?</option>
-                                                {[1, 2, 3, 4, 5, 6, 7, 8].map(n => (
-                                                    <option key={n} value={`Grupo ${n}`}>Grupo {n}</option>
-                                                ))}
-                                            </select>
+                            <form onSubmit={submitMision} className="bg-amber-50 p-6 rounded-[32px] border border-amber-100 shadow-sm mx-1">
+                                <h3 className="font-bold text-amber-800 text-sm mb-4 flex items-center"><i className="fas fa-map-marked-alt mr-2"></i> Crear Ruta de Reparto</h3>
+                                <div className="space-y-4">
+                                    
+                                    {/* GRID DE MULTIPLES CAMPOS */}
+                                    <div>
+                                        <p className="text-[10px] font-bold text-amber-700 uppercase mb-2">1. Selecciona los campos a visitar:</p>
+                                        <div className="grid grid-cols-2 gap-2 max-h-32 overflow-y-auto p-3 bg-white rounded-2xl border border-amber-100 shadow-inner">
+                                            {camposFijos.map(c => (
+                                                <label key={c} className="flex items-center space-x-2 text-xs font-bold text-slate-600 cursor-pointer active:scale-95 transition-transform">
+                                                    <input type="checkbox" checked={camposRuta.includes(c)} onChange={() => toggleCampoRuta(c)} className="w-4 h-4 text-amber-500 rounded focus:ring-amber-400" />
+                                                    <span className="truncate">{c}</span>
+                                                </label>
+                                            ))}
                                         </div>
                                     </div>
-                                    <button type="submit" className="w-full py-4 bg-amber-500 hover:bg-amber-600 text-white font-black rounded-2xl shadow-lg active:scale-95 transition-all mt-2">Crear Misión</button>
+
+                                    {/* CANTIDAD Y GRUPO */}
+                                    <div>
+                                        <p className="text-[10px] font-bold text-amber-700 uppercase mb-2">2. Asigna Cantidad y Equipo:</p>
+                                        <div className="flex space-x-3">
+                                            <div className="w-1/2">
+                                                <input type="number" name="cantidad" required placeholder="Total Víveres" className="w-full p-4 bg-white rounded-2xl outline-none border border-amber-100 text-sm font-bold text-slate-700 text-center shadow-sm" />
+                                            </div>
+                                            <div className="w-1/2">
+                                                <select name="grupo" required className="w-full p-4 bg-white rounded-2xl outline-none border border-amber-100 text-sm font-bold text-slate-700 shadow-sm">
+                                                    <option value="">¿A qué Grupo?</option>
+                                                    {[1, 2, 3, 4, 5, 6, 7, 8].map(n => (
+                                                        <option key={n} value={`Grupo ${n}`}>Grupo {n}</option>
+                                                    ))}
+                                                </select>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <button type="submit" className="w-full py-4 bg-amber-500 hover:bg-amber-600 text-white font-black rounded-2xl shadow-lg active:scale-95 transition-all mt-2">
+                                        Confirmar Ruta
+                                    </button>
                                 </div>
                             </form>
 
                             <div className="mt-6 px-1">
                                 {entregasPendientes.length > 0 && (
-                                    <div className="mb-6"><h4 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-3 px-2">Pendientes ({entregasPendientes.length})</h4><div className="space-y-3">{entregasPendientes.map(e => (<div key={e.id} className="bg-white p-4 rounded-2xl border-l-4 border-l-amber-400 shadow-sm flex justify-between items-center"><div><p className="font-bold text-slate-700 text-lg">Cargamento Asignado</p><p className="text-xs text-slate-500 font-bold mt-1"><i className="fas fa-users mr-1"></i>{e.grupo} <span className="mx-2 text-slate-300">|</span> <span className="text-indigo-500"><i className="fas fa-box mr-1"></i>{e.cantidad} Paquetes</span></p></div><button onClick={() => onBorrarEntrega(e.id)} className="w-10 h-10 flex items-center justify-center bg-rose-50 text-rose-500 rounded-xl hover:bg-rose-500 hover:text-white transition-colors"><i className="fas fa-trash-alt"></i></button></div>))}</div></div>
+                                    <div className="mb-6"><h4 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-3 px-2">Rutas Pendientes ({entregasPendientes.length})</h4>
+                                    <div className="space-y-3">
+                                        {entregasPendientes.map(e => (
+                                            <div key={e.id} className="bg-white p-4 rounded-2xl border-l-4 border-l-amber-400 shadow-sm flex justify-between items-center">
+                                                <div className="w-3/4 pr-2">
+                                                    <p className="font-black text-slate-800 text-sm mb-1">{e.grupo}</p>
+                                                    <p className="text-[10px] text-slate-500 font-bold leading-relaxed"><i className="fas fa-map-marker-alt mr-1 text-amber-500"></i> {e.campos ? e.campos.join(', ') : e.campo}</p>
+                                                    <p className="text-xs text-indigo-500 font-bold mt-2"><i className="fas fa-box mr-1"></i>{e.cantidad} Paquetes en total</p>
+                                                </div>
+                                                <button onClick={() => onBorrarEntrega(e.id)} className="w-10 h-10 flex items-center justify-center bg-rose-50 text-rose-500 rounded-xl hover:bg-rose-500 hover:text-white transition-colors flex-shrink-0"><i className="fas fa-trash-alt"></i></button>
+                                            </div>
+                                        ))}
+                                    </div></div>
                                 )}
                                 {entregasCompletadas.length > 0 && (
-                                    <div><h4 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-3 px-2">Completadas Hoy</h4><div className="space-y-3 opacity-60">{entregasCompletadas.slice(0, 5).map(e => (<div key={e.id} className="bg-slate-50 p-4 rounded-2xl border border-slate-100 flex justify-between items-center"><div><p className="font-bold text-slate-700 line-through decoration-slate-300">Cargamento Entregado</p><p className="text-[10px] text-slate-400 mt-1 uppercase">Entregado por {e.grupo}</p></div><span className="text-emerald-500 font-bold text-sm"><i className="fas fa-check-circle"></i></span></div>))}</div></div>
+                                    <div><h4 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-3 px-2">Completadas Hoy</h4><div className="space-y-3 opacity-60">{entregasCompletadas.slice(0, 5).map(e => (<div key={e.id} className="bg-slate-50 p-4 rounded-2xl border border-slate-100 flex justify-between items-center"><div><p className="font-bold text-slate-700 line-through decoration-slate-300">Ruta Entregada</p><p className="text-[10px] text-slate-400 mt-1 uppercase">Por {e.grupo}</p></div><span className="text-emerald-500 font-bold text-sm"><i className="fas fa-check-circle"></i></span></div>))}</div></div>
                                 )}
                             </div>
                         </>
@@ -258,7 +315,6 @@ function AdminDashboard({
                                                 <p className="font-bold text-slate-700 text-sm truncate">{p.nombre}</p>
                                             </div>
                                             <div className="w-1/2">
-                                                {/* ACTUALIZADO A VALUE CONTROLADO PARA RESPUESTA INMEDIATA */}
                                                 <select 
                                                     value={p.grupo || ''} 
                                                     onChange={(e) => onAssignGroup(p.id, e.target.value)} 
@@ -298,7 +354,6 @@ function AdminDashboard({
     return (
         <>
             {contenidoAdmin}
-            {/* MENÚ INFERIOR DE 4 BOTONES */}
             <div className="fixed bottom-0 left-0 right-0 max-w-md mx-auto bg-white/90 backdrop-blur-md border-t border-slate-100 flex justify-around items-center p-2 z-50 pb-safe shadow-[0_-10px_40px_rgba(0,0,0,0.05)]">
                 <NavButton id="inicio" icon="fa-home" label="Panel" width="w-[75px]" />
                 <NavButton id="poblacion" icon="fa-layer-group" label="Campos" width="w-[75px]" />
