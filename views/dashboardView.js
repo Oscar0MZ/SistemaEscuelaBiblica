@@ -7,7 +7,7 @@ function DashboardView({
     asistenciaHoy, 
     datosGlobalesAsistencia = { registros: [], rango: null }, 
     usuario, 
-    datosUsuarioActual, 
+    datosUsuarioActual,
     onEdit, onDelete, onApprove, onToggleModal, 
     onOpenAlumnoModal, onEditAlumno, onDeleteAlumno, onSaveAsistencia 
 }) {
@@ -19,8 +19,12 @@ function DashboardView({
     // ESTADOS ADMIN
     const [expandirPoblacion, setExpandirPoblacion] = useState(false);
     const [expandirPersonal, setExpandirPersonal] = useState(false);
+    const [expandirFiltroAdmin, setExpandirFiltroAdmin] = useState(false); // NUEVO: Acordeón Filtro Admin
 
-    // ESTADOS FILTRO MAESTRO (NUEVO)
+    // ESTADOS MAESTRO/AUXILIAR
+    const [expandirFiltroMaestro, setExpandirFiltroMaestro] = useState(false); // NUEVO: Acordeón Filtro Maestro
+
+    // ESTADOS DE FILTRO (Compartidos, se usan según la vista)
     const [edadMin, setEdadMin] = useState('');
     const [edadMax, setEdadMax] = useState('');
 
@@ -46,20 +50,116 @@ function DashboardView({
         if (exito) setVistaActual('inicio');
     };
 
-    // --- VISTA ADMIN (SIN CAMBIOS) ---
+    // --- VISTA ADMIN ---
     if (esAdmin) {
         const pendientes = maestros.filter(m => m.estado === 'Pendiente');
         const activos = maestros.filter(m => m.estado === 'Activo');
         const listaAdminVisible = maestros.filter(m => m.nombre.toLowerCase().includes(busqueda.toLowerCase()) || (m.campo && m.campo.toLowerCase().includes(busqueda.toLowerCase())));
-        const conteoPorCampo = {}; todosLosAlumnos.forEach(a => { const c = a.campo || 'Sin Campo'; conteoPorCampo[c] = (conteoPorCampo[c] || 0) + 1; }); const camposOrdenados = Object.keys(conteoPorCampo).sort();
-        let tp = 0, ta = 0, tperm = 0; todasAsistencias.forEach(r => { if(r.totales){ tp+=r.totales.presentes; ta+=r.totales.ausentes; tperm+=r.totales.permisos; } });
+
+        // POBLACIÓN GENERAL
+        const conteoPorCampo = {};
+        todosLosAlumnos.forEach(alumno => {
+            const campo = alumno.campo || 'Sin Campo';
+            conteoPorCampo[campo] = (conteoPorCampo[campo] || 0) + 1;
+        });
+        const camposOrdenados = Object.keys(conteoPorCampo).sort();
+
+        // ASISTENCIA GLOBAL
+        let totalPresentes = 0, totalAusentes = 0, totalPermisos = 0;
+        todasAsistencias.forEach(reporte => {
+            if (reporte.totales) {
+                totalPresentes += reporte.totales.presentes || 0;
+                totalAusentes += reporte.totales.ausentes || 0;
+                totalPermisos += reporte.totales.permisos || 0;
+            }
+        });
+
+        // --- LÓGICA DE FILTRADO DEMOGRÁFICO ADMIN ---
+        const adminAlumnosFiltrados = todosLosAlumnos.filter(a => {
+            if (edadMin !== '' && a.edad < parseInt(edadMin)) return false;
+            if (edadMax !== '' && a.edad > parseInt(edadMax)) return false;
+            return true;
+        });
+
+        const adminTotalNinos = adminAlumnosFiltrados.filter(a => a.genero === 'M').length;
+        const adminTotalNinas = adminAlumnosFiltrados.filter(a => a.genero === 'F').length;
+
+        // Agrupar filtrados por campo
+        const filtroPorCampo = {};
+        adminAlumnosFiltrados.forEach(a => {
+            const c = a.campo || 'Sin Campo';
+            if (!filtroPorCampo[c]) filtroPorCampo[c] = { total: 0, M: 0, F: 0 };
+            filtroPorCampo[c].total++;
+            if (a.genero === 'M') filtroPorCampo[c].M++;
+            if (a.genero === 'F') filtroPorCampo[c].F++;
+        });
+        const camposFiltroOrdenados = Object.keys(filtroPorCampo).sort();
+        const filtroActivo = edadMin !== '' || edadMax !== '';
 
         return (
             <div className="space-y-6 animate-in fade-in duration-500">
                 {pendientes.length > 0 && (<div className="bg-amber-50 border border-amber-100 p-5 rounded-[32px]"><h3 className="text-amber-800 font-bold text-sm mb-3"><i className="fas fa-user-clock mr-2"></i> Solicitudes ({pendientes.length})</h3><div className="space-y-3">{pendientes.map(p => (<div key={p.id} className="bg-white p-4 rounded-2xl shadow-sm flex justify-between items-center border border-amber-100"><div><p className="font-bold text-slate-700 text-sm">{p.nombre}</p><span className="text-[10px] text-slate-400 font-bold uppercase">{p.clase}</span></div><div className="flex space-x-2"><button onClick={() => onApprove(p.id)} className="w-9 h-9 bg-emerald-500 text-white rounded-xl"><i className="fas fa-check"></i></button><button onClick={() => onDelete(p)} className="w-9 h-9 bg-rose-100 text-rose-500 rounded-xl"><i className="fas fa-times"></i></button></div></div>))}</div></div>)}
-                <div className="bg-white rounded-[32px] border border-slate-100 p-6 shadow-sm"><div className="flex justify-between items-center mb-4"><div><h3 className="font-bold text-slate-700 text-sm flex items-center"><i className="fas fa-clipboard-check text-emerald-500 mr-2"></i> Asistencia Global</h3><p className="text-[10px] text-slate-400 pl-6">Acumulado Semanal</p></div><span className="text-[10px] bg-slate-100 text-slate-500 font-bold px-3 py-1 rounded-lg border border-slate-200">{textoFechas}</span></div><div className="flex justify-around text-center divide-x divide-slate-50"><div className="px-2"><p className="text-3xl font-black text-emerald-500">{tp}</p><p className="text-[9px] font-bold text-slate-400 uppercase tracking-wide">Presentes</p></div><div className="px-2"><p className="text-3xl font-black text-rose-500">{ta}</p><p className="text-[9px] font-bold text-slate-400 uppercase tracking-wide">Ausentes</p></div><div className="px-2"><p className="text-3xl font-black text-amber-500">{tperm}</p><p className="text-[9px] font-bold text-slate-400 uppercase tracking-wide">Permisos</p></div></div></div>
-                <div className="bg-white rounded-[32px] border border-slate-100 shadow-sm overflow-hidden transition-all duration-300"><button onClick={() => setExpandirPoblacion(!expandirPoblacion)} className="w-full flex items-center justify-between p-6 bg-white hover:bg-slate-50 transition-colors"><div className="flex items-center"><div className="w-10 h-10 bg-indigo-50 text-indigo-600 rounded-xl flex items-center justify-center mr-3"><i className="fas fa-chart-pie"></i></div><div className="text-left"><h3 className="font-bold text-slate-700 text-sm">Población Estudiantil</h3><p className="text-[10px] text-slate-400">{expandirPoblacion ? 'Ocultar detalles' : 'Ver asistencia por campo'}</p></div></div><div className="flex items-center space-x-3"><span className="bg-indigo-600 text-white font-black text-xs px-3 py-1.5 rounded-lg shadow-sm shadow-indigo-200">Total: {todosLosAlumnos.length}</span><i className={`fas fa-chevron-down text-slate-300 transition-transform duration-300 ${expandirPoblacion ? 'rotate-180' : ''}`}></i></div></button>{expandirPoblacion && (<div className="p-6 pt-0 animate-in slide-in-from-top-2 duration-200 border-t border-slate-50"><div className="space-y-3 mt-4">{camposOrdenados.length > 0 ? camposOrdenados.map(campo => { const rc = todasAsistencias.filter(a => a.campo === campo); let p = 0, a = 0, perm = 0; rc.forEach(r => { p += r.totales.presentes; a += r.totales.ausentes; perm += r.totales.permisos; }); const hay = rc.length > 0; return (<div key={campo} className="bg-slate-50 p-4 rounded-2xl border border-slate-100"><div className="flex justify-between items-center mb-2"><span className="text-sm font-bold text-slate-700">{campo}</span><span className="bg-white text-indigo-600 font-black text-xs px-2 py-1 rounded-lg border border-slate-100">{conteoPorCampo[campo]} Niños</span></div>{hay ? (<div className="flex space-x-2"><span className="text-[10px] bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded font-bold">P: {p}</span><span className="text-[10px] bg-rose-100 text-rose-700 px-2 py-0.5 rounded font-bold">A: {a}</span><span className="text-[10px] bg-amber-100 text-amber-700 px-2 py-0.5 rounded font-bold">Perm: {perm}</span></div>) : <p className="text-[9px] text-slate-400 italic"><i className="fas fa-clock mr-1"></i> Sin asistencia registrada</p>}</div>); }) : <p className="text-center text-xs text-slate-400 italic py-2">No hay alumnos registrados.</p>}</div></div>)}</div>
+                
+                {/* ASISTENCIA GLOBAL */}
+                <div className="bg-white rounded-[32px] border border-slate-100 p-6 shadow-sm"><div className="flex justify-between items-center mb-4"><div><h3 className="font-bold text-slate-700 text-sm flex items-center"><i className="fas fa-clipboard-check text-emerald-500 mr-2"></i> Asistencia Global</h3><p className="text-[10px] text-slate-400 pl-6">Acumulado Semanal</p></div><span className="text-[10px] bg-slate-100 text-slate-500 font-bold px-3 py-1 rounded-lg border border-slate-200">{textoFechas}</span></div><div className="flex justify-around text-center divide-x divide-slate-50"><div className="px-2"><p className="text-3xl font-black text-emerald-500">{totalPresentes}</p><p className="text-[9px] font-bold text-slate-400 uppercase tracking-wide">Presentes</p></div><div className="px-2"><p className="text-3xl font-black text-rose-500">{totalAusentes}</p><p className="text-[9px] font-bold text-slate-400 uppercase tracking-wide">Ausentes</p></div><div className="px-2"><p className="text-3xl font-black text-amber-500">{totalPermisos}</p><p className="text-[9px] font-bold text-slate-400 uppercase tracking-wide">Permisos</p></div></div></div>
+
+                {/* NUEVO: FILTRO DEMOGRÁFICO ADMIN (ACORDEÓN) */}
+                <div className="bg-white rounded-[32px] border border-slate-100 shadow-sm overflow-hidden transition-all duration-300">
+                    <button onClick={() => setExpandirFiltroAdmin(!expandirFiltroAdmin)} className="w-full flex items-center justify-between p-6 bg-white hover:bg-slate-50 transition-colors">
+                        <div className="flex items-center"><div className="w-10 h-10 bg-sky-50 text-sky-500 rounded-xl flex items-center justify-center mr-3"><i className="fas fa-filter"></i></div><div className="text-left"><h3 className="font-bold text-slate-700 text-sm">Filtro Demográfico</h3><p className="text-[10px] text-slate-400">Analizar edades globales</p></div></div>
+                        <i className={`fas fa-chevron-down text-slate-300 transition-transform duration-300 ${expandirFiltroAdmin ? 'rotate-180' : ''}`}></i>
+                    </button>
+                    {expandirFiltroAdmin && (
+                        <div className="p-6 pt-0 animate-in slide-in-from-top-2 duration-200 border-t border-slate-50">
+                            {/* Inputs Filtro */}
+                            <div className="flex space-x-3 mb-4 mt-4">
+                                <div className="w-1/2">
+                                    <label className="text-[9px] font-bold text-slate-400 uppercase ml-1">Mínima (Años)</label>
+                                    <input type="number" placeholder="Ej: 0" className="w-full p-3 mt-1 bg-slate-50 rounded-xl outline-none border border-slate-100 focus:border-sky-300 transition-colors" value={edadMin} onChange={e=>setEdadMin(e.target.value)} />
+                                </div>
+                                <div className="w-1/2">
+                                    <label className="text-[9px] font-bold text-slate-400 uppercase ml-1">Máxima (Años)</label>
+                                    <input type="number" placeholder="Ej: 5" className="w-full p-3 mt-1 bg-slate-50 rounded-xl outline-none border border-slate-100 focus:border-sky-300 transition-colors" value={edadMax} onChange={e=>setEdadMax(e.target.value)} />
+                                </div>
+                            </div>
+                            
+                            {/* Resumen Global del Filtro */}
+                            {filtroActivo && (
+                                <>
+                                    <div className="flex justify-around items-center bg-sky-50 p-4 rounded-2xl mb-4">
+                                        <div className="text-center"><p className="text-2xl font-black text-sky-600">{adminAlumnosFiltrados.length}</p><p className="text-[9px] font-bold text-sky-500 uppercase">Total Red</p></div>
+                                        <div className="w-px h-8 bg-sky-200"></div>
+                                        <div className="text-center"><p className="text-2xl font-black text-indigo-500">{adminTotalNinos}</p><p className="text-[9px] font-bold text-indigo-400 uppercase">Niños</p></div>
+                                        <div className="w-px h-8 bg-sky-200"></div>
+                                        <div className="text-center"><p className="text-2xl font-black text-pink-500">{adminTotalNinas}</p><p className="text-[9px] font-bold text-pink-400 uppercase">Niñas</p></div>
+                                    </div>
+
+                                    {/* Desglose por Campo */}
+                                    <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-3">Desglose por Campo</h4>
+                                    <div className="grid grid-cols-1 gap-2">
+                                        {camposFiltroOrdenados.length > 0 ? camposFiltroOrdenados.map(c => (
+                                            <div key={c} className="flex items-center justify-between bg-white border border-slate-100 p-3 rounded-xl shadow-sm">
+                                                <span className="font-bold text-slate-700 text-xs w-1/3 truncate">{c}</span>
+                                                <div className="flex space-x-2 text-[10px] font-bold">
+                                                    <span className="bg-slate-100 text-slate-600 px-2 py-1 rounded">T: {filtroPorCampo[c].total}</span>
+                                                    <span className="bg-indigo-50 text-indigo-600 px-2 py-1 rounded">M: {filtroPorCampo[c].M}</span>
+                                                    <span className="bg-pink-50 text-pink-600 px-2 py-1 rounded">F: {filtroPorCampo[c].F}</span>
+                                                </div>
+                                            </div>
+                                        )) : <p className="text-center text-xs text-slate-400 italic">No hay registros en este rango de edad.</p>}
+                                    </div>
+                                </>
+                            )}
+                        </div>
+                    )}
+                </div>
+
+                {/* POBLACIÓN ESTUDIANTIL (ACORDEÓN) */}
+                <div className="bg-white rounded-[32px] border border-slate-100 shadow-sm overflow-hidden transition-all duration-300"><button onClick={() => setExpandirPoblacion(!expandirPoblacion)} className="w-full flex items-center justify-between p-6 bg-white hover:bg-slate-50 transition-colors"><div className="flex items-center"><div className="w-10 h-10 bg-indigo-50 text-indigo-600 rounded-xl flex items-center justify-center mr-3"><i className="fas fa-users"></i></div><div className="text-left"><h3 className="font-bold text-slate-700 text-sm">Población por Campo</h3><p className="text-[10px] text-slate-400">{expandirPoblacion ? 'Ocultar detalles' : 'Ver asistencia local'}</p></div></div><div className="flex items-center space-x-3"><span className="bg-indigo-600 text-white font-black text-xs px-3 py-1.5 rounded-lg shadow-sm shadow-indigo-200">Total: {todosLosAlumnos.length}</span><i className={`fas fa-chevron-down text-slate-300 transition-transform duration-300 ${expandirPoblacion ? 'rotate-180' : ''}`}></i></div></button>{expandirPoblacion && (<div className="p-6 pt-0 animate-in slide-in-from-top-2 duration-200 border-t border-slate-50"><div className="space-y-3 mt-4">{camposOrdenados.length > 0 ? camposOrdenados.map(campo => { const rc = todasAsistencias.filter(a => a.campo === campo); let p = 0, a = 0, perm = 0; rc.forEach(r => { p += r.totales.presentes; a += r.totales.ausentes; perm += r.totales.permisos; }); const hay = rc.length > 0; return (<div key={campo} className="bg-slate-50 p-4 rounded-2xl border border-slate-100"><div className="flex justify-between items-center mb-2"><span className="text-sm font-bold text-slate-700">{campo}</span><span className="bg-white text-indigo-600 font-black text-xs px-2 py-1 rounded-lg border border-slate-100">{conteoPorCampo[campo]} Niños</span></div>{hay ? (<div className="flex space-x-2"><span className="text-[10px] bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded font-bold">P: {p}</span><span className="text-[10px] bg-rose-100 text-rose-700 px-2 py-0.5 rounded font-bold">A: {a}</span><span className="text-[10px] bg-amber-100 text-amber-700 px-2 py-0.5 rounded font-bold">Perm: {perm}</span></div>) : <p className="text-[9px] text-slate-400 italic"><i className="fas fa-clock mr-1"></i> Sin asistencia registrada</p>}</div>); }) : <p className="text-center text-xs text-slate-400 italic py-2">No hay alumnos registrados.</p>}</div></div>)}</div>
+
+                {/* DIRECTORIO PERSONAL (ACORDEÓN) */}
                 <div className="bg-white rounded-[32px] border border-slate-100 shadow-sm overflow-hidden transition-all duration-300"><button onClick={() => setExpandirPersonal(!expandirPersonal)} className="w-full flex items-center justify-between p-6 bg-white hover:bg-slate-50 transition-colors"><div className="flex items-center"><div className="w-10 h-10 bg-emerald-50 text-emerald-600 rounded-xl flex items-center justify-center mr-3"><i className="fas fa-address-book"></i></div><div className="text-left"><h3 className="font-bold text-slate-700 text-sm">Directorio del Personal</h3><p className="text-[10px] text-slate-400">{expandirPersonal ? 'Ocultar lista' : 'Buscar y gestionar'}</p></div></div><div className="flex items-center space-x-3"><span className="bg-emerald-500 text-white font-black text-xs px-3 py-1.5 rounded-lg shadow-sm shadow-emerald-200">Total: {activos.length}</span><i className={`fas fa-chevron-down text-slate-300 transition-transform duration-300 ${expandirPersonal ? 'rotate-180' : ''}`}></i></div></button>{expandirPersonal && (<div className="p-6 pt-0 animate-in slide-in-from-top-2 duration-200 border-t border-slate-50"><div className="flex items-center bg-slate-50 rounded-2xl px-4 py-3 my-4"><i className="fas fa-search text-slate-300 mr-3"></i><input type="text" placeholder="Buscar personal..." className="bg-transparent w-full outline-none text-sm" value={busqueda} onChange={(e) => setBusqueda(e.target.value)} /></div><div className="space-y-4 max-h-[400px] overflow-y-auto pr-2">{listaAdminVisible.map(m => (<div key={m.id} className="flex items-center justify-between p-2 rounded-xl hover:bg-slate-50 transition-colors"><div className="flex items-center space-x-4"><div className="w-10 h-10 bg-indigo-50 text-indigo-600 rounded-2xl flex items-center justify-center font-bold text-sm">{m.nombre.charAt(0)}</div><div><p className="font-bold text-slate-700 text-sm">{m.nombre}</p><span className="text-[9px] text-slate-400 font-bold uppercase">{m.clase} - {m.campo || 'N/A'}</span></div></div><div className="flex space-x-1"><button onClick={() => onEdit(m)} className="text-indigo-400 w-8 h-8 flex items-center justify-center hover:bg-indigo-50 rounded-lg transition-colors"><i className="fas fa-edit"></i></button><button onClick={() => onDelete(m)} className="text-rose-400 w-8 h-8 flex items-center justify-center hover:bg-rose-50 rounded-lg transition-colors"><i className="fas fa-trash"></i></button></div></div>))}{listaAdminVisible.length === 0 && <p className="text-center text-xs text-slate-300 italic">Sin resultados.</p>}</div></div>)}</div>
+                
                 <div className="grid grid-cols-2 gap-4"><div className="bg-indigo-600 p-6 rounded-[32px] text-white shadow-xl shadow-indigo-200 flex flex-col justify-between h-40 relative overflow-hidden"><div className="absolute top-0 right-0 w-20 h-20 bg-white opacity-10 rounded-bl-[100px] pointer-events-none"></div><p className="text-xs font-bold uppercase opacity-70 tracking-widest">Personal Activo</p><div><p className="text-5xl font-black tracking-tighter">{activos.length}</p><p className="text-[10px] opacity-70 mt-1">Miembros Totales</p></div></div><button onClick={onToggleModal} className="bg-white p-6 rounded-[32px] border border-slate-100 flex flex-col justify-between h-40 text-left shadow-sm group hover:shadow-md transition-all active:scale-95"><div className="w-12 h-12 bg-indigo-50 text-indigo-600 rounded-2xl flex items-center justify-center text-xl group-hover:bg-indigo-600 group-hover:text-white transition-colors"><i className="fas fa-plus"></i></div><div><p className="font-bold text-slate-700 text-lg leading-tight">Inscribir<br/>Personal</p><p className="text-[10px] text-slate-400 mt-1">Manual</p></div></button></div>
             </div>
         );
@@ -74,18 +174,16 @@ function DashboardView({
         const nombreDisplay = datosUsuarioActual ? datosUsuarioActual.nombre.split(' ')[0] : '';
         const rolDisplay = usuario.charAt(0) + usuario.slice(1).toLowerCase();
 
-        // LÓGICA DE FILTRADO DE EDADES (NUEVO)
+        // LÓGICA DE FILTRADO (MAESTROS)
         const alumnosFiltrados = alumnos.filter(a => {
             if (edadMin !== '' && a.edad < parseInt(edadMin)) return false;
             if (edadMax !== '' && a.edad > parseInt(edadMax)) return false;
             return true;
         });
-
-        // Contar por género
         const totalNinos = alumnosFiltrados.filter(a => a.genero === 'M').length;
         const totalNinas = alumnosFiltrados.filter(a => a.genero === 'F').length;
 
-        // PANTALLA DE INICIO
+        // PANTALLA INICIO
         if (vistaActual === 'inicio') {
             return (
                 <div className="flex flex-col h-full space-y-4 pt-4 animate-in fade-in duration-500">
@@ -100,10 +198,10 @@ function DashboardView({
             );
         }
 
-        // PANTALLA DE ASISTENCIA
+        // PANTALLA ASISTENCIA
         if (vistaActual === 'asistencia') { return (<div className="flex flex-col h-full pt-4 animate-in slide-in-from-right duration-300"><div className="flex items-center space-x-4 mb-4 px-2"><button onClick={() => setVistaActual('inicio')} className="w-10 h-10 bg-white border border-slate-100 rounded-xl text-slate-400 hover:text-indigo-600 flex items-center justify-center"><i className="fas fa-arrow-left"></i></button><div><h2 className="text-xl font-black text-slate-800">Pasar Lista</h2><p className="text-slate-400 text-xs">{new Date().toLocaleDateString()}</p></div></div><div className="flex-1 bg-white rounded-t-[40px] shadow-lg border-t border-slate-100 p-6 overflow-hidden flex flex-col"><div className="overflow-y-auto space-y-4 pb-24 pr-2">{alumnos.map(a => (<div key={a.id} className="flex items-center justify-between p-2 border-b border-slate-50 last:border-0"><div className="flex items-center space-x-3 w-1/3"><div className="w-8 h-8 bg-indigo-50 text-indigo-600 rounded-full flex items-center justify-center text-xs font-bold">{a.nombre.charAt(0)}</div><p className="font-bold text-slate-700 text-sm truncate">{a.nombre.split(' ')[0]}</p></div><div className="flex space-x-1 flex-1 justify-end"><button onClick={() => setListaAsistencia({...listaAsistencia, [a.id]: 'Presente'})} className={`px-3 py-2 rounded-lg text-[10px] font-bold uppercase transition-all ${listaAsistencia[a.id] === 'Presente' ? 'bg-emerald-500 text-white shadow-md' : 'bg-slate-50 text-slate-400'}`}>P</button><button onClick={() => setListaAsistencia({...listaAsistencia, [a.id]: 'Ausente'})} className={`px-3 py-2 rounded-lg text-[10px] font-bold uppercase transition-all ${listaAsistencia[a.id] === 'Ausente' ? 'bg-rose-500 text-white shadow-md' : 'bg-slate-50 text-slate-400'}`}>A</button><button onClick={() => setListaAsistencia({...listaAsistencia, [a.id]: 'Permiso'})} className={`px-3 py-2 rounded-lg text-[10px] font-bold uppercase transition-all ${listaAsistencia[a.id] === 'Permiso' ? 'bg-amber-400 text-white shadow-md' : 'bg-slate-50 text-slate-400'}`}>Permiso</button></div></div>))}</div><div className="absolute bottom-6 left-6 right-6"><button onClick={guardarLista} className="w-full bg-indigo-600 p-4 rounded-2xl text-white font-black shadow-xl active:scale-95 transition-all">Guardar Asistencia</button></div></div></div>); }
         
-        // PANTALLA GESTIÓN (AQUÍ ESTÁ EL FILTRO)
+        // PANTALLA GESTIÓN
         return (
             <div className="flex flex-col h-full pt-4 animate-in slide-in-from-right duration-300">
                 <div className="flex items-center space-x-4 mb-6 px-2"><button onClick={() => setVistaActual('inicio')} className="w-10 h-10 bg-white border border-slate-100 rounded-xl text-slate-400 hover:text-indigo-600 flex items-center justify-center"><i className="fas fa-arrow-left"></i></button><div><h2 className="text-xl font-black text-slate-800">Gestionar Alumnos</h2><p className="text-slate-400 text-xs">{alumnos.length} Registrados en total</p></div></div>
@@ -111,32 +209,38 @@ function DashboardView({
                 
                 <div className="flex-1 bg-white rounded-t-[40px] shadow-[0_-10px_40px_rgba(0,0,0,0.05)] border-t border-slate-100 p-6 overflow-hidden flex flex-col">
                     
-                    {/* --- NUEVO: FILTRO DEMOGRÁFICO --- */}
-                    <div className="bg-slate-50 p-4 rounded-[24px] mb-4 border border-slate-100">
-                        <h3 className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-3 flex items-center"><i className="fas fa-filter mr-2"></i>Filtro de Edades</h3>
-                        <div className="flex space-x-3 mb-3">
-                            <div className="w-1/2">
-                                <label className="text-[9px] font-bold text-slate-400 uppercase ml-1">Mínima (Años)</label>
-                                <input type="number" placeholder="Ej: 0" className="w-full p-3 mt-1 bg-white rounded-xl outline-none border border-slate-100 focus:border-indigo-300 transition-colors" value={edadMin} onChange={e=>setEdadMin(e.target.value)} />
-                            </div>
-                            <div className="w-1/2">
-                                <label className="text-[9px] font-bold text-slate-400 uppercase ml-1">Máxima (Años)</label>
-                                <input type="number" placeholder="Ej: 5" className="w-full p-3 mt-1 bg-white rounded-xl outline-none border border-slate-100 focus:border-indigo-300 transition-colors" value={edadMax} onChange={e=>setEdadMax(e.target.value)} />
-                            </div>
-                        </div>
-                        {/* RESUMEN DEL FILTRO */}
-                        {(edadMin !== '' || edadMax !== '') && (
-                            <div className="flex justify-around items-center bg-white p-3 rounded-xl shadow-sm border border-slate-100 animate-in zoom-in duration-200">
-                                <div className="text-center"><p className="text-xl font-black text-indigo-500">{alumnosFiltrados.length}</p><p className="text-[9px] font-bold text-slate-400 uppercase">Total</p></div>
-                                <div className="w-px h-8 bg-slate-100"></div>
-                                <div className="text-center"><p className="text-xl font-black text-sky-500">{totalNinos}</p><p className="text-[9px] font-bold text-slate-400 uppercase">Niños (M)</p></div>
-                                <div className="w-px h-8 bg-slate-100"></div>
-                                <div className="text-center"><p className="text-xl font-black text-pink-500">{totalNinas}</p><p className="text-[9px] font-bold text-slate-400 uppercase">Niñas (F)</p></div>
+                    {/* FILTRO DEMOGRÁFICO MAESTRO (AHORA EN ACORDEÓN) */}
+                    <div className="bg-slate-50 rounded-[24px] border border-slate-100 mb-4 overflow-hidden transition-all duration-300">
+                        <button onClick={() => setExpandirFiltroMaestro(!expandirFiltroMaestro)} className="w-full flex items-center justify-between p-4 bg-slate-50 hover:bg-slate-100 transition-colors">
+                            <div className="flex items-center"><i className="fas fa-filter text-indigo-500 mr-3"></i><span className="font-bold text-slate-700 text-xs uppercase tracking-widest">Filtro de Edades</span></div>
+                            <i className={`fas fa-chevron-down text-slate-400 transition-transform ${expandirFiltroMaestro ? 'rotate-180' : ''}`}></i>
+                        </button>
+                        
+                        {expandirFiltroMaestro && (
+                            <div className="p-4 border-t border-slate-200 animate-in slide-in-from-top-2 duration-200">
+                                <div className="flex space-x-3 mb-3">
+                                    <div className="w-1/2">
+                                        <label className="text-[9px] font-bold text-slate-400 uppercase ml-1">Mínima (Años)</label>
+                                        <input type="number" placeholder="Ej: 0" className="w-full p-3 mt-1 bg-white rounded-xl outline-none border border-slate-100 focus:border-indigo-300 transition-colors" value={edadMin} onChange={e=>setEdadMin(e.target.value)} />
+                                    </div>
+                                    <div className="w-1/2">
+                                        <label className="text-[9px] font-bold text-slate-400 uppercase ml-1">Máxima (Años)</label>
+                                        <input type="number" placeholder="Ej: 5" className="w-full p-3 mt-1 bg-white rounded-xl outline-none border border-slate-100 focus:border-indigo-300 transition-colors" value={edadMax} onChange={e=>setEdadMax(e.target.value)} />
+                                    </div>
+                                </div>
+                                {(edadMin !== '' || edadMax !== '') && (
+                                    <div className="flex justify-around items-center bg-white p-3 rounded-xl shadow-sm border border-slate-100">
+                                        <div className="text-center"><p className="text-xl font-black text-indigo-500">{alumnosFiltrados.length}</p><p className="text-[9px] font-bold text-slate-400 uppercase">Total</p></div>
+                                        <div className="w-px h-8 bg-slate-100"></div>
+                                        <div className="text-center"><p className="text-xl font-black text-sky-500">{totalNinos}</p><p className="text-[9px] font-bold text-slate-400 uppercase">Niños</p></div>
+                                        <div className="w-px h-8 bg-slate-100"></div>
+                                        <div className="text-center"><p className="text-xl font-black text-pink-500">{totalNinas}</p><p className="text-[9px] font-bold text-slate-400 uppercase">Niñas</p></div>
+                                    </div>
+                                )}
                             </div>
                         )}
                     </div>
 
-                    {/* LISTA DE ALUMNOS (AHORA USA alumnosFiltrados) */}
                     <div className="overflow-y-auto space-y-3 pb-20 pr-2">
                         {alumnosFiltrados.length === 0 ? (
                             <p className="text-center text-slate-400 text-sm italic mt-4">No hay alumnos en este rango.</p>
