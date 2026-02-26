@@ -10,7 +10,6 @@ function LogisticaDashboard({ datosUsuarioActual, entregasLogistica, onActualiza
     const entregasPendientes = entregasLogistica.filter(e => e.estado === 'Pendiente' && e.grupo === miGrupo);
     const entregasCompletadas = entregasLogistica.filter(e => e.estado === 'Entregado' && e.grupo === miGrupo);
 
-    // Ordenamos las completadas por fecha para obtener la última que hicieron
     const entregasCompletadasOrdenadas = [...entregasCompletadas].sort((a, b) => (b.fechaEntrega || 0) - (a.fechaEntrega || 0));
     const ultimaRutaCompletada = entregasCompletadasOrdenadas.length > 0 ? entregasCompletadasOrdenadas[0] : null;
 
@@ -123,19 +122,13 @@ function LogisticaDashboard({ datosUsuarioActual, entregasLogistica, onActualiza
                 
                 <div className="flex-1 bg-white rounded-t-[40px] shadow-[0_-10px_40px_rgba(0,0,0,0.05)] border-t border-slate-100 p-6 overflow-hidden flex flex-col">
                     <div className="overflow-y-auto space-y-6 pb-24 pr-2">
-                        
-                        {/* --- PANTALLA DE ESPERA SI NO HAY RUTAS PENDIENTES --- */}
                         {entregasPendientes.length === 0 ? (
                             <div className="flex flex-col items-center justify-center animate-in zoom-in-95 duration-300">
                                 <div className="text-center p-6 mt-4 mb-4">
-                                    <div className="w-24 h-24 bg-slate-100 text-slate-400 rounded-full flex items-center justify-center text-5xl mx-auto mb-4 shadow-inner">
-                                        <i className="fas fa-hourglass-half"></i>
-                                    </div>
+                                    <div className="w-24 h-24 bg-slate-100 text-slate-400 rounded-full flex items-center justify-center text-5xl mx-auto mb-4 shadow-inner"><i className="fas fa-hourglass-half"></i></div>
                                     <h3 className="font-bold text-slate-700 text-xl">¡Misión Cumplida!</h3>
                                     <p className="text-slate-500 text-sm mt-2 leading-relaxed">Esperando a que el Administrador asigne nuevas rutas para tu equipo...</p>
                                 </div>
-
-                                {/* TARJETA GRIS DE LA RUTA ANTERIOR */}
                                 {ultimaRutaCompletada && (
                                     <div className="w-full mt-4">
                                         <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest pl-2 mb-3"><i className="fas fa-history mr-1"></i> Tu Ruta Anterior:</p>
@@ -143,14 +136,11 @@ function LogisticaDashboard({ datosUsuarioActual, entregasLogistica, onActualiza
                                             <div className="absolute top-0 right-0 bg-slate-400 text-white text-[9px] font-black uppercase px-3 py-1 rounded-bl-xl">{ultimaRutaCompletada.grupo}</div>
                                             <h3 className="font-black text-slate-600 text-base mb-1 mt-1"><i className="fas fa-check-double text-slate-500 mr-2"></i>Ruta Finalizada</h3>
                                             <p className="text-xs font-bold text-slate-500 mb-4 pl-7">Total asignado: {ultimaRutaCompletada.cantidad} Paquetes</p>
-                                            
                                             <div className="space-y-2">
                                                 {(ultimaRutaCompletada.campos || [ultimaRutaCompletada.campo]).map(c => (
                                                     <div key={c} className="flex justify-between items-center bg-white/50 p-2 px-3 rounded-xl border border-slate-200">
                                                         <span className="text-xs font-bold text-slate-500 w-1/2 truncate">{c}</span>
-                                                        <span className="text-xs font-black text-slate-400">
-                                                            {ultimaRutaCompletada.detalles?.[c] || 0} entregados
-                                                        </span>
+                                                        <span className="text-xs font-black text-slate-400">{ultimaRutaCompletada.detalles?.[c] || 0} entregados</span>
                                                     </div>
                                                 ))}
                                             </div>
@@ -159,18 +149,38 @@ function LogisticaDashboard({ datosUsuarioActual, entregasLogistica, onActualiza
                                 )}
                             </div>
                         ) : (
-                            // --- VISTA NORMAL DE RUTAS ACTIVAS ---
                             entregasPendientes.map(e => {
                                 const camposDeRuta = e.campos || [e.campo];
+                                
+                                // --- MAGIA: CALCULADORA EN TIEMPO REAL ---
+                                const totalIngresado = camposDeRuta.reduce((sum, c) => {
+                                    return sum + (Number(cantidadesDetalle[e.id]?.[c]) || Number(e.detalles?.[c]) || 0);
+                                }, 0);
+                                const enVehiculo = e.cantidad - totalIngresado;
 
                                 return (
                                     <div key={e.id} className="bg-slate-50 p-6 rounded-3xl border border-slate-200 relative overflow-hidden shadow-sm">
                                         <div className="absolute top-0 right-0 bg-amber-400 text-white text-[9px] font-black uppercase px-3 py-1 rounded-bl-xl shadow-sm">{e.grupo}</div>
-                                        <h3 className="font-black text-slate-800 text-lg mb-1 mt-1"><i className="fas fa-truck-loading text-amber-500 mr-2"></i>Misión de Reparto</h3>
-                                        <p className="text-xs font-bold text-indigo-500 mb-5 pl-7">Total a llevar: {e.cantidad} Paquetes</p>
+                                        <h3 className="font-black text-slate-800 text-lg mb-4 mt-1"><i className="fas fa-truck-loading text-amber-500 mr-2"></i>Ruta Activa</h3>
+                                        
+                                        {/* PANEL DE BALANCE EN TIEMPO REAL */}
+                                        <div className="bg-white p-3 rounded-2xl mb-5 flex justify-between items-center shadow-sm border border-slate-100">
+                                            <div className="text-center w-1/3">
+                                                <p className="text-[9px] font-bold text-slate-400 uppercase">Carga Inicial</p>
+                                                <p className="text-lg font-black text-indigo-600">{e.cantidad}</p>
+                                            </div>
+                                            <div className="text-center w-1/3 border-l border-r border-slate-100">
+                                                <p className="text-[9px] font-bold text-slate-400 uppercase">Entregados</p>
+                                                <p className="text-lg font-black text-emerald-500">{totalIngresado}</p>
+                                            </div>
+                                            <div className="text-center w-1/3">
+                                                <p className="text-[9px] font-bold text-slate-400 uppercase">En Vehículo</p>
+                                                <p className={`text-lg font-black ${enVehiculo < 0 ? 'text-rose-500' : 'text-amber-500'}`}>{enVehiculo}</p>
+                                            </div>
+                                        </div>
                                         
                                         <div className="space-y-3 mb-5">
-                                            <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest pl-1 mb-2">Registro de entregas:</p>
+                                            <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest pl-1 mb-2">Ingresa cantidad dejada por campo:</p>
                                             
                                             {camposDeRuta.map(c => {
                                                 const bloqueo = e.bloqueos?.[c];
@@ -187,18 +197,14 @@ function LogisticaDashboard({ datosUsuarioActual, entregasLogistica, onActualiza
                                                                     placeholder="Cant." 
                                                                     disabled={bloqueadoPorOtro}
                                                                     className={`w-16 p-2 rounded-lg text-xs font-black text-center outline-none transition-colors ${bloqueadoPorOtro ? 'bg-transparent text-slate-400' : 'bg-slate-50 border border-slate-200 text-indigo-600 focus:border-indigo-400'}`}
-                                                                    value={cantidadesDetalle[e.id]?.[c] || ''}
+                                                                    value={cantidadesDetalle[e.id]?.[c] !== undefined ? cantidadesDetalle[e.id]?.[c] : (e.detalles?.[c] || '')}
                                                                     onChange={(ev) => handleCantidadChange(e.id, c, ev.target.value)}
                                                                 />
                                                             </div>
                                                         </div>
                                                         
-                                                        {bloqueadoPorOtro && (
-                                                            <p className="text-[9px] text-rose-500 font-bold mt-2"><i className="fas fa-lock mr-1"></i> Registrado por {bloqueo.nombre}</p>
-                                                        )}
-                                                        {bloqueadoPorMi && (
-                                                            <p className="text-[9px] text-emerald-500 font-bold mt-2"><i className="fas fa-check mr-1"></i> Tú registraste este campo</p>
-                                                        )}
+                                                        {bloqueadoPorOtro && (<p className="text-[9px] text-rose-500 font-bold mt-2"><i className="fas fa-lock mr-1"></i> Registrado por {bloqueo.nombre}</p>)}
+                                                        {bloqueadoPorMi && (<p className="text-[9px] text-emerald-500 font-bold mt-2"><i className="fas fa-check mr-1"></i> Tú registraste este campo</p>)}
                                                     </div>
                                                 );
                                             })}
