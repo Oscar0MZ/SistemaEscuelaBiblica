@@ -58,7 +58,7 @@ window.AlumnosService = {
             await batch.commit();
             return true;
         } catch (error) {
-            console.error("Error al eliminar alumno en cascada:", error);
+            console.error("Error al eliminar alumno:", error);
             throw error;
         }
     },
@@ -154,16 +154,16 @@ window.AlumnosService = {
         } catch (error) { console.error(error); throw error; }
     },
 
-    // NUEVO: REINICIO DE MATERIAL (Ciclo 1 o 2) POR EL ADMINISTRADOR
+    // REINICIO DE MATERIAL (Ciclo 1 o 2) POR EL ADMINISTRADOR
     reiniciarLecciones: async (campo, leccionBase) => {
         const idDoc = `RESET_${Date.now()}_${campo.replace(/\s+/g, '')}`;
         await window.db.collection('asistencias').doc(idDoc).set({
             campo: campo,
             fecha: new Date().toLocaleDateString('en-CA'),
-            maestro: 'Administrador (Reinicio)',
-            leccion: leccionBase, // Será 0 (para empezar en 1) o 25 (para empezar en 26)
+            maestro: 'Administrador',
+            leccion: leccionBase,
             leccionImpartida: true,
-            esReset: true, // Marca oculta para que no ensucie la asistencia
+            esReset: true, 
             registros: [],
             totales: { presentes: 0, ausentes: 0, permisos: 0 },
             timestamp: Date.now()
