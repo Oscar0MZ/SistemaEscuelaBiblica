@@ -10,6 +10,10 @@ function LogisticaDashboard({ datosUsuarioActual, entregasLogistica, onActualiza
     const entregasPendientes = entregasLogistica.filter(e => e.estado === 'Pendiente' && e.grupo === miGrupo);
     const entregasCompletadas = entregasLogistica.filter(e => e.estado === 'Entregado' && e.grupo === miGrupo);
 
+    // Ordenamos las completadas por fecha para obtener la última que hicieron
+    const entregasCompletadasOrdenadas = [...entregasCompletadas].sort((a, b) => (b.fechaEntrega || 0) - (a.fechaEntrega || 0));
+    const ultimaRutaCompletada = entregasCompletadasOrdenadas.length > 0 ? entregasCompletadasOrdenadas[0] : null;
+
     useEffect(() => {
         const inicial = {};
         entregasPendientes.forEach(e => {
@@ -28,7 +32,6 @@ function LogisticaDashboard({ datosUsuarioActual, entregasLogistica, onActualiza
         }));
     };
 
-    // --- FUNCIÓN INTELIGENTE DE GUARDAR AVANCE (Bloqueo Individual) ---
     const handleGuardarAvance = (e) => {
         const misIngresos = cantidadesDetalle[e.id] || {};
         const nuevosDetalles = { ...(e.detalles || {}) };
@@ -41,9 +44,7 @@ function LogisticaDashboard({ datosUsuarioActual, entregasLogistica, onActualiza
             const valorIngresado = misIngresos[c];
             const bloqueoActual = e.bloqueos?.[c];
             
-            // Si yo escribí un valor
             if (valorIngresado !== undefined && valorIngresado !== "") {
-                // Solo lo guardo si nadie más lo bloqueó antes, o si yo soy el dueño
                 if (!bloqueoActual || bloqueoActual.id === datosUsuarioActual.id) {
                     nuevosDetalles[c] = valorIngresado;
                     nuevosBloqueos[c] = { id: datosUsuarioActual.id, nombre: datosUsuarioActual.nombre };
@@ -122,9 +123,43 @@ function LogisticaDashboard({ datosUsuarioActual, entregasLogistica, onActualiza
                 
                 <div className="flex-1 bg-white rounded-t-[40px] shadow-[0_-10px_40px_rgba(0,0,0,0.05)] border-t border-slate-100 p-6 overflow-hidden flex flex-col">
                     <div className="overflow-y-auto space-y-6 pb-24 pr-2">
+                        
+                        {/* --- PANTALLA DE ESPERA SI NO HAY RUTAS PENDIENTES --- */}
                         {entregasPendientes.length === 0 ? (
-                            <div className="text-center p-8 mt-10"><div className="w-24 h-24 bg-slate-50 text-slate-300 rounded-full flex items-center justify-center text-5xl mx-auto mb-4"><i className="fas fa-check-double"></i></div><h3 className="font-bold text-slate-700 text-lg">¡Ruta Limpia!</h3><p className="text-slate-400 text-sm mt-1">Tu grupo no tiene rutas pendientes por ahora.</p></div>
+                            <div className="flex flex-col items-center justify-center animate-in zoom-in-95 duration-300">
+                                <div className="text-center p-6 mt-4 mb-4">
+                                    <div className="w-24 h-24 bg-slate-100 text-slate-400 rounded-full flex items-center justify-center text-5xl mx-auto mb-4 shadow-inner">
+                                        <i className="fas fa-hourglass-half"></i>
+                                    </div>
+                                    <h3 className="font-bold text-slate-700 text-xl">¡Misión Cumplida!</h3>
+                                    <p className="text-slate-500 text-sm mt-2 leading-relaxed">Esperando a que el Administrador asigne nuevas rutas para tu equipo...</p>
+                                </div>
+
+                                {/* TARJETA GRIS DE LA RUTA ANTERIOR */}
+                                {ultimaRutaCompletada && (
+                                    <div className="w-full mt-4">
+                                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest pl-2 mb-3"><i className="fas fa-history mr-1"></i> Tu Ruta Anterior:</p>
+                                        <div className="bg-slate-50 p-5 rounded-3xl border border-slate-200 relative overflow-hidden shadow-sm opacity-70 grayscale">
+                                            <div className="absolute top-0 right-0 bg-slate-400 text-white text-[9px] font-black uppercase px-3 py-1 rounded-bl-xl">{ultimaRutaCompletada.grupo}</div>
+                                            <h3 className="font-black text-slate-600 text-base mb-1 mt-1"><i className="fas fa-check-double text-slate-500 mr-2"></i>Ruta Finalizada</h3>
+                                            <p className="text-xs font-bold text-slate-500 mb-4 pl-7">Total asignado: {ultimaRutaCompletada.cantidad} Paquetes</p>
+                                            
+                                            <div className="space-y-2">
+                                                {(ultimaRutaCompletada.campos || [ultimaRutaCompletada.campo]).map(c => (
+                                                    <div key={c} className="flex justify-between items-center bg-white/50 p-2 px-3 rounded-xl border border-slate-200">
+                                                        <span className="text-xs font-bold text-slate-500 w-1/2 truncate">{c}</span>
+                                                        <span className="text-xs font-black text-slate-400">
+                                                            {ultimaRutaCompletada.detalles?.[c] || 0} entregados
+                                                        </span>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
                         ) : (
+                            // --- VISTA NORMAL DE RUTAS ACTIVAS ---
                             entregasPendientes.map(e => {
                                 const camposDeRuta = e.campos || [e.campo];
 
@@ -134,7 +169,6 @@ function LogisticaDashboard({ datosUsuarioActual, entregasLogistica, onActualiza
                                         <h3 className="font-black text-slate-800 text-lg mb-1 mt-1"><i className="fas fa-truck-loading text-amber-500 mr-2"></i>Misión de Reparto</h3>
                                         <p className="text-xs font-bold text-indigo-500 mb-5 pl-7">Total a llevar: {e.cantidad} Paquetes</p>
                                         
-                                        {/* LISTA DE CAMPOS CON BLOQUEO INDIVIDUAL */}
                                         <div className="space-y-3 mb-5">
                                             <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest pl-1 mb-2">Registro de entregas:</p>
                                             
@@ -159,7 +193,6 @@ function LogisticaDashboard({ datosUsuarioActual, entregasLogistica, onActualiza
                                                             </div>
                                                         </div>
                                                         
-                                                        {/* MENSAJES DE ESTADO */}
                                                         {bloqueadoPorOtro && (
                                                             <p className="text-[9px] text-rose-500 font-bold mt-2"><i className="fas fa-lock mr-1"></i> Registrado por {bloqueo.nombre}</p>
                                                         )}
