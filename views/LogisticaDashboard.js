@@ -1,13 +1,35 @@
-const { useState } = React;
+const { useState, useEffect } = React;
 
-function LogisticaDashboard({ datosUsuarioActual, entregasLogistica, onActualizarEntrega }) {
+function LogisticaDashboard({ datosUsuarioActual, entregasLogistica, onActualizarEntrega, onGuardarAvanceEntrega }) {
     const [vistaActual, setVistaActual] = useState('inicio'); 
+    
+    // Estado local para llevar la cuenta de los víveres entregados por campo
+    const [cantidadesDetalle, setCantidadesDetalle] = useState({});
     
     const nombreDisplay = datosUsuarioActual ? datosUsuarioActual.nombre.split(' ')[0] : '';
     const miGrupo = datosUsuarioActual?.grupo; 
     
     const entregasPendientes = entregasLogistica.filter(e => e.estado === 'Pendiente' && e.grupo === miGrupo);
     const entregasCompletadas = entregasLogistica.filter(e => e.estado === 'Entregado' && e.grupo === miGrupo);
+
+    // Si ya habían guardado un avance antes en la base de datos, lo cargamos
+    useEffect(() => {
+        const inicial = {};
+        entregasPendientes.forEach(e => {
+            if (e.detalles) inicial[e.id] = e.detalles;
+        });
+        setCantidadesDetalle(inicial);
+    }, [entregasLogistica]);
+
+    const handleCantidadChange = (idEntrega, campoRuta, valor) => {
+        setCantidadesDetalle(prev => ({
+            ...prev,
+            [idEntrega]: {
+                ...(prev[idEntrega] || {}),
+                [campoRuta]: valor
+            }
+        }));
+    };
 
     const NavButton = ({ id, icon, label, width = 'w-[100px]' }) => (
         <button onClick={() => setVistaActual(id)} className={`flex flex-col items-center justify-center ${width} h-14 rounded-2xl transition-all ${vistaActual === id ? 'text-indigo-600 bg-indigo-50 font-black' : 'text-slate-400 hover:text-slate-600 font-bold'}`}>
@@ -52,29 +74,58 @@ function LogisticaDashboard({ datosUsuarioActual, entregasLogistica, onActualiza
                 <div className="px-2 mb-6"><h2 className="text-2xl font-black text-slate-800">Rutas de Entrega</h2><p className="text-slate-400 text-xs">Destinos asignados a {miGrupo}</p></div>
                 
                 <div className="flex-1 bg-white rounded-t-[40px] shadow-[0_-10px_40px_rgba(0,0,0,0.05)] border-t border-slate-100 p-6 overflow-hidden flex flex-col">
-                    <div className="overflow-y-auto space-y-5 pb-24 pr-2">
+                    <div className="overflow-y-auto space-y-6 pb-24 pr-2">
                         {entregasPendientes.length === 0 ? (
                             <div className="text-center p-8 mt-10"><div className="w-24 h-24 bg-slate-50 text-slate-300 rounded-full flex items-center justify-center text-5xl mx-auto mb-4"><i className="fas fa-check-double"></i></div><h3 className="font-bold text-slate-700 text-lg">¡Ruta Limpia!</h3><p className="text-slate-400 text-sm mt-1">Tu grupo no tiene rutas pendientes por ahora.</p></div>
                         ) : (
                             entregasPendientes.map(e => (
                                 <div key={e.id} className="bg-slate-50 p-6 rounded-3xl border border-slate-200 relative overflow-hidden shadow-sm">
                                     <div className="absolute top-0 right-0 bg-amber-400 text-white text-[9px] font-black uppercase px-3 py-1 rounded-bl-xl shadow-sm">{e.grupo}</div>
+                                    <h3 className="font-black text-slate-800 text-lg mb-1 mt-1"><i className="fas fa-truck-loading text-amber-500 mr-2"></i>Misión de Reparto</h3>
+                                    <p className="text-xs font-bold text-indigo-500 mb-5 pl-7">Total a llevar: {e.cantidad} Paquetes</p>
                                     
-                                    <h3 className="font-black text-slate-800 text-sm mb-3 mt-1"><i className="fas fa-map-marked-alt text-amber-500 mr-2"></i>Campos a Visitar:</h3>
-                                    
-                                    <div className="flex flex-wrap gap-2 mb-5 pl-6">
+                                    {/* LISTA DE CAMPOS CON INPUT DE CANTIDAD */}
+                                    <div className="space-y-2 mb-5">
+                                        <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest pl-1 mb-2">Registro de entregas:</p>
+                                        
                                         {e.campos ? e.campos.map(c => (
-                                            <span key={c} className="bg-white border border-slate-200 text-slate-700 text-[11px] font-bold px-3 py-1.5 rounded-lg shadow-sm">{c}</span>
+                                            <div key={c} className="flex justify-between items-center bg-white p-2 px-3 rounded-xl border border-slate-100 shadow-sm">
+                                                <span className="text-xs font-bold text-slate-700 w-1/2 truncate">{c}</span>
+                                                <div className="w-1/2 flex justify-end">
+                                                    <input 
+                                                        type="number" 
+                                                        placeholder="Cant." 
+                                                        className="w-16 p-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-black text-center text-indigo-600 outline-none focus:border-indigo-400"
+                                                        value={cantidadesDetalle[e.id]?.[c] || ''}
+                                                        onChange={(ev) => handleCantidadChange(e.id, c, ev.target.value)}
+                                                    />
+                                                </div>
+                                            </div>
                                         )) : (
-                                            <span className="bg-white border border-slate-200 text-slate-700 text-[11px] font-bold px-3 py-1.5 rounded-lg shadow-sm">{e.campo}</span>
+                                            <div className="flex justify-between items-center bg-white p-2 px-3 rounded-xl border border-slate-100 shadow-sm">
+                                                <span className="text-xs font-bold text-slate-700 w-1/2 truncate">{e.campo}</span>
+                                                <div className="w-1/2 flex justify-end">
+                                                    <input 
+                                                        type="number" 
+                                                        placeholder="Cant." 
+                                                        className="w-16 p-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-black text-center text-indigo-600 outline-none focus:border-indigo-400"
+                                                        value={cantidadesDetalle[e.id]?.[e.campo] || ''}
+                                                        onChange={(ev) => handleCantidadChange(e.id, e.campo, ev.target.value)}
+                                                    />
+                                                </div>
+                                            </div>
                                         )}
                                     </div>
 
-                                    <p className="text-sm font-black text-indigo-600 mb-5 pl-6"><i className="fas fa-box-open mr-2 opacity-70"></i> Llevar {e.cantidad} Paquetes en total</p>
-                                    
-                                    <button onClick={() => onActualizarEntrega(e.id, 'Entregado')} className="w-full py-4 bg-emerald-500 hover:bg-emerald-600 text-white font-black rounded-2xl shadow-lg shadow-emerald-200 active:scale-95 transition-all flex items-center justify-center text-lg">
-                                        <i className="fas fa-check-circle mr-2"></i> Marcar Ruta Completada
-                                    </button>
+                                    {/* BOTONES DE ACCIÓN */}
+                                    <div className="flex space-x-2">
+                                        <button onClick={() => onGuardarAvanceEntrega(e.id, cantidadesDetalle[e.id] || {})} className="w-1/3 py-4 bg-white hover:bg-slate-100 text-indigo-500 border border-indigo-100 font-black rounded-2xl shadow-sm active:scale-95 transition-all flex flex-col items-center justify-center text-[10px] uppercase tracking-wide">
+                                            <i className="fas fa-save mb-1 text-base"></i> Avance
+                                        </button>
+                                        <button onClick={() => onActualizarEntrega(e.id, 'Entregado', cantidadesDetalle[e.id] || {})} className="w-2/3 py-4 bg-emerald-500 hover:bg-emerald-600 text-white font-black rounded-2xl shadow-lg shadow-emerald-200 active:scale-95 transition-all flex items-center justify-center text-sm">
+                                            <i className="fas fa-check-circle mr-2"></i> Finalizar Ruta
+                                        </button>
+                                    </div>
                                 </div>
                             ))
                         )}
