@@ -38,47 +38,16 @@ window.MaestrosService = {
         }
     },
 
-    // 4. ELIMINAR EN CASCADA (CORREGIDO: BORRADO ABSOLUTO POR CAMPO)
+    // 4. ELIMINAR SEGURO (SOLO EL USUARIO)
+    // Ya no borramos ni alumnos ni asistencia, para proteger los datos del campo.
     eliminarConAlumnos: async (idMaestro, campoMaestro) => {
         try {
-            const batch = window.db.batch();
-
-            if (campoMaestro) {
-                // A) BORRAR ALUMNOS (Buscar todos los alumnos de ese campo)
-                const snapshotAlumnos = await window.db.collection('alumnos')
-                    .where('campo', '==', campoMaestro)
-                    .get();
-                
-                snapshotAlumnos.docs.forEach(doc => {
-                    batch.delete(doc.ref);
-                });
-
-                // B) BORRAR ASISTENCIAS (CORREGIDO)
-                // Buscamos TODAS las asistencias asociadas a este campo, sin importar la fecha.
-                // Esto asegura que se eliminen las de hoy, ayer o la semana entera.
-                const snapshotAsistencias = await window.db.collection('asistencias')
-                    .where('campo', '==', campoMaestro)
-                    .get();
-
-                snapshotAsistencias.docs.forEach(doc => {
-                    batch.delete(doc.ref);
-                });
-            }
-
-            // C) BORRAR MAESTRO
-            const maestroRef = window.db.collection('maestros').doc(idMaestro);
-            batch.delete(maestroRef);
-
-            // EJECUTAR TODO EL LOTE
-            await batch.commit();
+            // Simplemente borramos el documento del maestro/auxiliar
+            await window.db.collection('maestros').doc(idMaestro).delete();
             return true;
         } catch (error) {
-            console.error("Error eliminando en cascada:", error);
-            // Si falla el lote (ej. demasiados documentos), intentamos borrar al menos al maestro
-            try {
-                await window.db.collection('maestros').doc(idMaestro).delete();
-                return true;
-            } catch (e) { throw e; }
+            console.error("Error al eliminar usuario:", error);
+            throw error;
         }
     },
 
