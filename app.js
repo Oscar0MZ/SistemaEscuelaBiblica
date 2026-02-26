@@ -1,5 +1,5 @@
 const { useState, useEffect } = React;
-const { AuthService, MaestrosService, AlumnosService, LoginView, DashboardView } = window;
+const { AuthService, MaestrosService, AlumnosService, LogisticaService, LoginView, DashboardView } = window; // <-- Agregado LogisticaService
 
 function App() {
     const [usuario, setUsuario] = useState(null);
@@ -11,14 +11,14 @@ function App() {
     const [datosGlobalesAsistencia, setDatosGlobalesAsistencia] = useState({ registros: [], rango: null });
     const [historialAsistencias, setHistorialAsistencias] = useState([]);
     
-    // NUEVO: ESTADO DE MANTENIMIENTO
-    const [mantenimiento, setMantenimiento] = useState(false);
+    // NUEVO: ESTADO DE LOGÍSTICA
+    const [entregasLogistica, setEntregasLogistica] = useState([]);
 
+    const [mantenimiento, setMantenimiento] = useState(false);
     const [modalAbierto, setModalAbierto] = useState(false);
     const [modalAlumno, setModalAlumno] = useState(false);
     const [maestroEdicion, setMaestroEdicion] = useState(null);
     const [maestroABorrar, setMaestroABorrar] = useState(null);
-    
     const [alumnoBorrar, setAlumnoBorrar] = useState(null); 
     const [alumnoEdicion, setAlumnoEdicion] = useState(null);
     const [campoABorrar, setCampoABorrar] = useState(null);
@@ -32,7 +32,6 @@ function App() {
         if (sesion) { setUsuario(sesion); if (datosGuardados) setDatosUsuarioActual(datosGuardados); }
     }, []);
 
-    // NUEVO: ESCUCHAR MANTENIMIENTO GLOBAL
     useEffect(() => { 
         if (MaestrosService) {
             const unsubMaestros = MaestrosService.suscribir(setMaestros); 
@@ -50,25 +49,30 @@ function App() {
         }
     }, [usuario, datosUsuarioActual]);
 
+    // CARGA DE DATOS CENTRALIZADA
     useEffect(() => {
-        if (!usuario || !AlumnosService) return;
+        if (!usuario) return;
+        
+        const unsubs = [];
+
         if (usuario === 'ADMIN') {
-            const unsub1 = AlumnosService.suscribirTodos(setTodosLosAlumnos);
-            const unsub2 = AlumnosService.suscribirAsistenciaSemanal(setDatosGlobalesAsistencia);
-            const unsub3 = AlumnosService.suscribirHistorialGlobal(setHistorialAsistencias);
-            return () => { unsub1(); unsub2(); unsub3(); };
+            unsubs.push(AlumnosService.suscribirTodos(setTodosLosAlumnos));
+            unsubs.push(AlumnosService.suscribirAsistenciaSemanal(setDatosGlobalesAsistencia));
+            unsubs.push(AlumnosService.suscribirHistorialGlobal(setHistorialAsistencias));
+            if(LogisticaService) unsubs.push(LogisticaService.suscribirTodas(setEntregasLogistica)); // Admin ve logística
+        } else if (usuario === 'LOGISTICA') {
+            if(LogisticaService) unsubs.push(LogisticaService.suscribirTodas(setEntregasLogistica)); // Logística ve entregas
         } else if (datosUsuarioActual && datosUsuarioActual.campo) {
-            const unsub1 = AlumnosService.suscribirPorCampo(datosUsuarioActual.campo, setAlumnos);
-            const unsub2 = AlumnosService.suscribirAsistenciaHoy(datosUsuarioActual.campo, setAsistenciaHoy);
-            const unsub3 = AlumnosService.suscribirHistorialPorCampo(datosUsuarioActual.campo, setHistorialAsistencias);
-            return () => { unsub1(); unsub2(); unsub3(); };
+            unsubs.push(AlumnosService.suscribirPorCampo(datosUsuarioActual.campo, setAlumnos));
+            unsubs.push(AlumnosService.suscribirAsistenciaHoy(datosUsuarioActual.campo, setAsistenciaHoy));
+            unsubs.push(AlumnosService.suscribirHistorialPorCampo(datosUsuarioActual.campo, setHistorialAsistencias));
         }
+
+        return () => { unsubs.forEach(unsub => unsub && unsub()); };
     }, [usuario, datosUsuarioActual]);
 
     const handleLogin = async (rol, clave, nombre, campo) => {
-        // Bloquear login si está en mantenimiento (solo admin pasa)
         if (mantenimiento && rol !== 'ADMIN') return { exito: false, mensaje: "El sistema está en Mantenimiento." };
-        
         if (!AuthService.verificar(rol, clave)) return { exito: false, mensaje: "Clave incorrecta." };
         if (rol === 'ADMIN') { setUsuario(rol); AuthService.guardarSesion(rol, null); return { exito: true }; }
         try {
@@ -78,7 +82,7 @@ function App() {
         } catch (error) { return { exito: false, mensaje: "Error conexión." }; }
     };
 
-    const handleLogout = () => { setUsuario(null); setDatosUsuarioActual(null); setAlumnos([]); setTodosLosAlumnos([]); setHistorialAsistencias([]); AuthService.cerrarSesion(); };
+    const handleLogout = () => { setUsuario(null); setDatosUsuarioActual(null); setAlumnos([]); setTodosLosAlumnos([]); setHistorialAsistencias([]); setEntregasLogistica([]); AuthService.cerrarSesion(); };
     const handleGuardar = async (e) => { e.preventDefault(); const d = Object.fromEntries(new FormData(e.target)); try { const n = await MaestrosService.guardar(d, maestroEdicion?.id, usuario); if (n && usuario !== 'ADMIN') MaestrosService.notificar(n); setModalAbierto(false); setMaestroEdicion(null); } catch (err) { alert("Error"); } };
     const calcularEdad = (f) => { if (!f) return null; const h = new Date(); const c = new Date(f); let e = h.getFullYear() - c.getFullYear(); if (h.getMonth() < c.getMonth() || (h.getMonth()===c.getMonth() && h.getDate()<c.getDate())) e--; return e; };
 
@@ -96,41 +100,55 @@ function App() {
     const handleBorrarAlumno = async () => { if (!alumnoBorrar) return; try { await AlumnosService.eliminar(alumnoBorrar.id, alumnoBorrar.campo); setAlumnoBorrar(null); alert("Alumno eliminado y asistencia actualizada correctamente."); } catch (e) { alert("Error al eliminar alumno"); } };
     const handleBorrarMaestro = async () => { if (!maestroABorrar) return; try { await MaestrosService.eliminarConAlumnos(maestroABorrar.id, null); setMaestroABorrar(null); } catch (e) { alert("Error"); } };
     const handleBorrarCampo = async () => { if (!campoABorrar) return; try { await AlumnosService.eliminarCampoCompleto(campoABorrar); setCampoABorrar(null); alert("🧹 Limpieza completada."); } catch (e) { alert("Error."); } };
-    
     const handleResetLecciones = async (campo, leccionBase) => { try { await AlumnosService.reiniciarLecciones(campo, leccionBase); alert(`✅ Material de ${campo} reiniciado a la Parte ${leccionBase === 0 ? '1' : '2'}.`); } catch (e) { alert("Error al reiniciar material."); } };
     const handleGuardarAsistencia = async (registros, leccion, leccionImpartida) => { const p = registros.filter(r=>r.estado==='Presente').length; const a = registros.filter(r=>r.estado==='Ausente').length; const per = registros.filter(r=>r.estado==='Permiso').length; try { await AlumnosService.guardarAsistencia({ fecha: new Date().toLocaleDateString('en-CA'), campo: datosUsuarioActual.campo, clase: 'General', maestro: datosUsuarioActual.nombre, registradoPorId: datosUsuarioActual.id, registros: registros, totales: { presentes: p, ausentes: a, permisos: per }, leccion: leccion, leccionImpartida: leccionImpartida, timestamp: Date.now() }); alert("Asistencia guardada con éxito"); return true; } catch (e) { return false; } };
 
-    // Toggle Mantenimiento
+    // --- NUEVAS FUNCIONES DE LOGÍSTICA ---
+    const handleCrearEntrega = async (e) => {
+        e.preventDefault();
+        const fd = new FormData(e.target);
+        const datos = { campo: fd.get('campo'), cantidad: parseInt(fd.get('cantidad')), grupo: fd.get('grupo'), asignadoPor: 'Director' };
+        try {
+            await LogisticaService.crear(datos);
+            e.target.reset();
+            alert("Víveres asignados correctamente.");
+        } catch (error) { alert("Error al asignar víveres."); }
+    };
+
+    const handleActualizarEntrega = async (id, estado) => {
+        try { await LogisticaService.actualizarEstado(id, estado); } catch (error) { alert("Error actualizando estado."); }
+    };
+
+    const handleBorrarEntrega = async (id) => {
+        try { await LogisticaService.eliminar(id); } catch (error) { alert("Error al borrar entrega."); }
+    };
+
     const handleToggleMantenimiento = () => { MaestrosService.toggleMantenimiento(mantenimiento); };
 
     if (!usuario) return <LoginView onLogin={handleLogin} />;
 
-    // PANTALLA DE BLOQUEO DE MANTENIMIENTO (Si no es Admin y el Mantenimiento está activo)
     if (mantenimiento && usuario !== 'ADMIN') {
         return (
             <div className="flex flex-col items-center justify-center h-screen max-w-md mx-auto bg-slate-900 p-8 text-center shadow-2xl animate-in zoom-in-95">
-                <div className="w-32 h-32 bg-rose-500/20 text-rose-500 rounded-full flex items-center justify-center text-6xl mb-8 animate-pulse shadow-[0_0_40px_rgba(244,63,94,0.3)]">
-                    <i className="fas fa-tools"></i>
-                </div>
+                <div className="w-32 h-32 bg-rose-500/20 text-rose-500 rounded-full flex items-center justify-center text-6xl mb-8 animate-pulse shadow-[0_0_40px_rgba(244,63,94,0.3)]"><i className="fas fa-tools"></i></div>
                 <h1 className="text-3xl font-black text-white mb-4">Sistema en<br/>Mantenimiento</h1>
-                <p className="text-slate-400 text-sm leading-relaxed mb-10">El Director está realizando ajustes en la base de datos (lecciones, campos o reportes). <br/><br/>El acceso está temporalmente bloqueado para evitar conflictos. Por favor, espera a que finalice.</p>
-                <button onClick={handleLogout} className="w-full py-4 bg-slate-800 hover:bg-slate-700 text-white font-black rounded-2xl transition-colors">
-                    Cerrar Sesión
-                </button>
+                <p className="text-slate-400 text-sm leading-relaxed mb-10">El Director está realizando ajustes en la base de datos.<br/><br/>El acceso está temporalmente bloqueado para evitar conflictos. Por favor, espera a que finalice.</p>
+                <button onClick={handleLogout} className="w-full py-4 bg-slate-800 hover:bg-slate-700 text-white font-black rounded-2xl transition-colors">Cerrar Sesión</button>
             </div>
         );
     }
 
     return (
         <div className="flex flex-col h-screen max-w-md mx-auto bg-white shadow-2xl overflow-hidden">
-            <header className="bg-white p-5 flex justify-between items-center border-b border-slate-100 z-10 relative"><div><p className="text-[10px] font-black uppercase tracking-widest text-indigo-500">Gestión Ministerial</p><h1 className="text-xl font-black text-slate-800">{usuario === 'ADMIN' ? 'Panel Director' : usuario}</h1>{!usuario === 'ADMIN' && datosUsuarioActual && <p className="text-[9px] text-slate-400 font-bold uppercase">{datosUsuarioActual.campo}</p>}</div><button onClick={handleLogout} className="w-10 h-10 bg-slate-50 text-slate-400 rounded-xl hover:text-rose-500 transition-all"><i className="fas fa-sign-out-alt"></i></button></header>
+            <header className="bg-white p-5 flex justify-between items-center border-b border-slate-100 z-10 relative"><div><p className="text-[10px] font-black uppercase tracking-widest text-indigo-500">Gestión Ministerial</p><h1 className="text-xl font-black text-slate-800">{usuario === 'ADMIN' ? 'Panel Director' : usuario}</h1>{!usuario === 'ADMIN' && datosUsuarioActual && <p className="text-[9px] text-slate-400 font-bold uppercase">{datosUsuarioActual.campo || 'Logística'}</p>}</div><button onClick={handleLogout} className="w-10 h-10 bg-slate-50 text-slate-400 rounded-xl hover:text-rose-500 transition-all"><i className="fas fa-sign-out-alt"></i></button></header>
             <main className="flex-1 overflow-y-auto p-5 pb-24 bg-slate-50/50 scroll-smooth">
                 <DashboardView 
                     maestros={maestros} alumnos={alumnos} todosLosAlumnos={todosLosAlumnos} 
                     asistenciaHoy={asistenciaHoy} datosGlobalesAsistencia={datosGlobalesAsistencia} 
                     historialAsistencias={historialAsistencias} 
+                    entregasLogistica={entregasLogistica} // <-- PASAMOS DATOS LOGÍSTICA
                     usuario={usuario} datosUsuarioActual={datosUsuarioActual}
-                    mantenimiento={mantenimiento} onToggleMantenimiento={handleToggleMantenimiento} // <-- PASAMOS LA FUNCIÓN
+                    mantenimiento={mantenimiento} onToggleMantenimiento={handleToggleMantenimiento}
                     onApprove={MaestrosService.aprobar} onDelete={setMaestroABorrar} onEdit={(m) => { setMaestroEdicion(m); setModalAbierto(true); }} onToggleModal={() => { setMaestroEdicion(null); setModalAbierto(true); }}
                     onSaveAsistencia={handleGuardarAsistencia}
                     onOpenAlumnoModal={() => { setAlumnoEdicion(null); setEdadCalculada(null); setModalAlumno(true); }}
@@ -138,10 +156,13 @@ function App() {
                     onDeleteAlumno={setAlumnoBorrar} 
                     onDeleteCampo={setCampoABorrar}
                     onResetLecciones={handleResetLecciones} 
+                    onCrearEntrega={handleCrearEntrega} // <-- PASAMOS FUNCIONES LOGÍSTICA
+                    onActualizarEntrega={handleActualizarEntrega}
+                    onBorrarEntrega={handleBorrarEntrega}
                 />
             </main>
 
-            {/* MODALES REUTILIZABLES */}
+            {/* MODALES REUTILIZABLES (Sin cambios) */}
             {modalAbierto && (<div className="fixed inset-0 bg-slate-900/40 backdrop-blur-md flex items-center justify-center z-50 p-4 animate-in fade-in"><div className="bg-white w-full max-w-md rounded-[32px] p-8 shadow-2xl animate-in slide-in-from-bottom max-h-[90vh] overflow-y-auto"><h2 className="text-2xl font-black text-slate-800 mb-6">{maestroEdicion ? 'Editar' : 'Inscribir'}</h2><form onSubmit={handleGuardar} className="space-y-4"><input type="text" name="nombre" required defaultValue={maestroEdicion?.nombre || ''} className="w-full p-4 bg-slate-50 rounded-2xl outline-none" placeholder="Nombre" /><select name="clase" defaultValue={maestroEdicion?.clase || 'MAESTRO'} className="w-full p-4 bg-slate-50 rounded-2xl outline-none bg-white border border-slate-100">{['MAESTRO', 'AUXILIAR', 'LOGISTICA', 'Dirección'].map(c => <option key={c} value={c}>{c}</option>)}</select><select name="campo" defaultValue={maestroEdicion?.campo || ''} className="w-full p-4 bg-slate-50 rounded-2xl outline-none bg-white border border-slate-100"><option value="">-- Ninguno --</option>{camposDisponibles.map(c => <option key={c} value={c}>{c}</option>)}</select><input type="tel" name="telefono" defaultValue={maestroEdicion?.telefono || ''} className="w-full p-4 bg-slate-50 rounded-2xl outline-none" placeholder="WhatsApp" /><div className="pt-4 flex flex-col space-y-3"><button type="submit" className="w-full py-4 bg-indigo-600 text-white font-black rounded-2xl shadow-xl">Guardar</button><button type="button" onClick={() => setModalAbierto(false)} className="text-slate-400 font-bold text-xs uppercase">Cancelar</button></div></form></div></div>)}
             {modalAlumno && (<div className="fixed inset-0 bg-slate-900/40 backdrop-blur-md flex items-center justify-center z-50 p-4 animate-in fade-in"><div className="bg-white w-full max-w-md rounded-[32px] p-8 shadow-2xl animate-in slide-in-from-bottom"><div className="w-16 h-16 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mx-auto mb-4 text-3xl"><i className="fas fa-child"></i></div><h2 className="text-2xl font-black text-slate-800 mb-2 text-center">{alumnoEdicion ? 'Editar' : 'Registrar'}</h2><form onSubmit={handleGuardarAlumno} className="space-y-4"><input type="text" name="nombre" required defaultValue={alumnoEdicion?.nombre || ''} placeholder="Nombre Completo" className="w-full p-4 bg-slate-50 rounded-2xl outline-none" /><input type="date" name="fechaNacimiento" required defaultValue={alumnoEdicion?.fechaNacimiento || ''} onChange={(e) => setEdadCalculada(calcularEdad(e.target.value))} className="w-full p-4 bg-slate-50 rounded-2xl outline-none" /><select name="genero" required defaultValue={alumnoEdicion?.genero || ''} className="w-full p-4 bg-slate-50 rounded-2xl outline-none bg-white border border-slate-100"><option value="">Seleccionar Género</option><option value="M">Masculino</option><option value="F">Femenino</option></select>{edadCalculada!==null && (<div className="bg-emerald-50 p-4 rounded-2xl border border-emerald-100 flex items-center justify-between"><span className="text-emerald-800 text-xs font-bold uppercase">Edad:</span><span className="text-2xl font-black text-emerald-600">{edadCalculada} Años</span></div>)}<div className="pt-2 flex flex-col space-y-3"><button type="submit" className="w-full py-4 bg-emerald-500 text-white font-black rounded-2xl shadow-xl">Guardar</button><button type="button" onClick={() => { setModalAlumno(false); setAlumnoEdicion(null); }} className="text-slate-400 font-bold text-xs uppercase">Cancelar</button></div></form></div></div>)}
             {maestroABorrar && (<div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-[60] p-6 animate-in fade-in"><div className="bg-white rounded-[32px] p-8 w-full max-w-xs text-center shadow-2xl animate-in zoom-in-95 border-2 border-indigo-100"><div className="w-16 h-16 bg-indigo-50 text-indigo-500 rounded-full flex items-center justify-center mx-auto mb-4 text-3xl"><i className="fas fa-user-minus"></i></div><h3 className="text-xl font-black text-slate-800 mb-2">Eliminar Usuario</h3><div className="text-slate-500 text-xs mb-4 leading-relaxed bg-slate-50 p-3 rounded-xl">Estás a punto de eliminar a: <br/> <b>{maestroABorrar.nombre}</b>.</div><div className="space-y-3"><button onClick={handleBorrarMaestro} className="w-full py-3 bg-indigo-600 text-white font-bold rounded-2xl shadow-lg active:scale-95 transition-all">Sí, eliminar</button><button onClick={() => setMaestroABorrar(null)} className="w-full py-2 text-slate-400 font-bold text-xs uppercase tracking-widest">Cancelar</button></div></div></div>)}
