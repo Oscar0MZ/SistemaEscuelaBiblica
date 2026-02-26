@@ -16,6 +16,9 @@ function AdminDashboard({
     const [edadMin, setEdadMin] = useState('');
     const [edadMax, setEdadMax] = useState('');
     const [camposRuta, setCamposRuta] = useState([]);
+    
+    // ESTADO PARA EL ACORDEÓN DE RUTAS COMPLETADAS
+    const [rutaCompletadaExp, setRutaCompletadaExp] = useState(null);
 
     const historialVisible = historialAsistencias.filter(h => !h.esReset);
     const todasAsistencias = datosGlobalesAsistencia?.registros || [];
@@ -262,54 +265,77 @@ function AdminDashboard({
                                 {entregasPendientes.length > 0 && (
                                     <div className="mb-6"><h4 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-3 px-2">Rutas Pendientes ({entregasPendientes.length})</h4>
                                     <div className="space-y-3">
-                                        {entregasPendientes.map(e => (
-                                            <div key={e.id} className="bg-white p-4 rounded-2xl border-l-4 border-l-amber-400 shadow-sm flex justify-between items-center">
-                                                <div className="w-3/4 pr-2">
-                                                    <p className="font-black text-slate-800 text-sm mb-1">{e.grupo}</p>
-                                                    <p className="text-[10px] text-slate-500 font-bold leading-relaxed"><i className="fas fa-map-marker-alt mr-1 text-amber-500"></i> {e.campos ? e.campos.join(', ') : e.campo}</p>
-                                                    <p className="text-xs text-indigo-500 font-bold mt-2 mb-1"><i className="fas fa-box mr-1"></i>{e.cantidad} Paquetes en total</p>
+                                        {entregasPendientes.map(e => {
+                                            // MATEMÁTICA EN TIEMPO REAL PARA EL ADMIN
+                                            const totalEntregado = e.detalles ? Object.values(e.detalles).reduce((sum, val) => sum + (Number(val) || 0), 0) : 0;
+                                            const diferencia = e.cantidad - totalEntregado;
+
+                                            return (
+                                                <div key={e.id} className="bg-white p-4 rounded-2xl border-l-4 border-l-amber-400 shadow-sm flex justify-between items-center">
+                                                    <div className="w-3/4 pr-2">
+                                                        <p className="font-black text-slate-800 text-sm mb-1">{e.grupo}</p>
+                                                        <p className="text-[10px] text-slate-500 font-bold leading-relaxed"><i className="fas fa-map-marker-alt mr-1 text-amber-500"></i> {e.campos ? e.campos.join(', ') : e.campo}</p>
+                                                        
+                                                        <div className="bg-slate-50 p-2 rounded-lg mt-3 flex justify-between text-[10px] font-bold border border-slate-100">
+                                                            <span className="text-indigo-600">Total: {e.cantidad}</span>
+                                                            <span className="text-emerald-600">Avance: {totalEntregado}</span>
+                                                            <span className={diferencia < 0 ? 'text-rose-500' : 'text-amber-600'}>En Vehículo: {diferencia}</span>
+                                                        </div>
+                                                    </div>
+                                                    <button onClick={() => onBorrarEntrega(e.id)} className="w-10 h-10 flex items-center justify-center bg-rose-50 text-rose-500 rounded-xl hover:bg-rose-500 hover:text-white transition-colors flex-shrink-0"><i className="fas fa-trash-alt"></i></button>
+                                                </div>
+                                            );
+                                        })}
+                                    </div></div>
+                                )}
+
+                                {entregasCompletadas.length > 0 && (
+                                    <div><h4 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-3 px-2">Completadas Hoy</h4>
+                                    <div className="space-y-3 opacity-95">
+                                        {entregasCompletadas.slice(0, 10).map(e => {
+                                            const isExpanded = rutaCompletadaExp === e.id;
+                                            const totalEntregado = e.detalles ? Object.values(e.detalles).reduce((sum, val) => sum + (Number(val) || 0), 0) : 0;
+                                            const diferencia = e.cantidad - totalEntregado;
+
+                                            return (
+                                                <div key={e.id} className="bg-slate-50 rounded-2xl border border-slate-200 overflow-hidden shadow-sm transition-all duration-300">
+                                                    {/* ACORDEÓN HEADER */}
+                                                    <button onClick={() => setRutaCompletadaExp(isExpanded ? null : e.id)} className="w-full p-4 flex justify-between items-center bg-white hover:bg-slate-50 transition-colors">
+                                                        <div className="text-left">
+                                                            <p className="font-black text-slate-700 text-sm">Ruta {e.grupo}</p>
+                                                            <p className="text-[10px] text-slate-500 font-bold mt-0.5">Asignado: {e.cantidad} | Entregado: {totalEntregado}</p>
+                                                        </div>
+                                                        <div className="flex items-center space-x-3">
+                                                            <span className="text-emerald-500 font-bold text-lg"><i className="fas fa-check-circle"></i></span>
+                                                            <i className={`fas fa-chevron-down text-slate-300 transition-transform duration-300 ${isExpanded ? 'rotate-180' : ''}`}></i>
+                                                        </div>
+                                                    </button>
                                                     
-                                                    {/* NUEVO: MUESTRA AVANCES PARCIALES AL DIRECTOR */}
-                                                    {e.detalles && Object.keys(e.detalles).length > 0 && (
-                                                        <div className="mt-2 text-[9px] text-emerald-500 font-bold flex flex-col space-y-1">
-                                                            {Object.entries(e.detalles).map(([c, cant]) => {
-                                                                const creador = e.bloqueos?.[c]?.nombre;
-                                                                return <span key={c}><i className="fas fa-check-circle mr-1"></i> {c}: {cant} {creador ? `(${creador})` : ''}</span>
-                                                            })}
+                                                    {/* ACORDEÓN CUERPO */}
+                                                    {isExpanded && (
+                                                        <div className="p-4 pt-0 border-t border-slate-100 bg-slate-50 animate-in slide-in-from-top-2 duration-200">
+                                                            <div className="flex justify-between items-center py-3 border-b border-slate-200 mb-3">
+                                                                <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Balance Final:</span>
+                                                                <span className={`text-[10px] font-black px-2 py-1 rounded-lg ${diferencia === 0 ? 'bg-emerald-100 text-emerald-700' : diferencia > 0 ? 'bg-amber-100 text-amber-700' : 'bg-rose-100 text-rose-700'}`}>
+                                                                    {diferencia === 0 ? 'Exacto (0)' : diferencia > 0 ? `Sobraron ${diferencia}` : `Faltaron ${Math.abs(diferencia)}`}
+                                                                </span>
+                                                            </div>
+                                                            <div className="grid grid-cols-1 gap-2">
+                                                                {e.detalles && Object.entries(e.detalles).map(([campo, cant]) => {
+                                                                    const creador = e.bloqueos?.[campo]?.nombre;
+                                                                    return (
+                                                                        <p key={campo} className="text-[10px] font-bold text-slate-500 truncate flex justify-between bg-white p-2 rounded-lg border border-slate-100">
+                                                                            <span><i className="fas fa-caret-right text-indigo-400 mr-1"></i> {campo}</span>
+                                                                            <span className="text-indigo-600 font-black">{cant} <span className="font-normal text-slate-400 ml-1">{creador ? `(${creador})` : ''}</span></span>
+                                                                        </p>
+                                                                    )
+                                                                })}
+                                                            </div>
                                                         </div>
                                                     )}
                                                 </div>
-                                                <button onClick={() => onBorrarEntrega(e.id)} className="w-10 h-10 flex items-center justify-center bg-rose-50 text-rose-500 rounded-xl hover:bg-rose-500 hover:text-white transition-colors flex-shrink-0"><i className="fas fa-trash-alt"></i></button>
-                                            </div>
-                                        ))}
-                                    </div></div>
-                                )}
-                                {entregasCompletadas.length > 0 && (
-                                    <div><h4 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-3 px-2">Completadas Hoy</h4>
-                                    <div className="space-y-3 opacity-90">
-                                        {entregasCompletadas.slice(0, 10).map(e => (
-                                            <div key={e.id} className="bg-slate-50 p-4 rounded-2xl border border-slate-200 flex flex-col justify-between shadow-sm">
-                                                <div className="flex justify-between items-center">
-                                                    <div><p className="font-bold text-slate-700 line-through decoration-slate-300">Ruta {e.grupo}</p><p className="text-[10px] text-slate-500 font-bold mt-0.5">Total Asignado: {e.cantidad} paquetes</p></div>
-                                                    <span className="text-emerald-500 font-bold text-xl"><i className="fas fa-check-circle"></i></span>
-                                                </div>
-                                                
-                                                {/* DESGLOSE EXACTO CON QUIÉN ENTREGÓ QUÉ */}
-                                                {e.detalles && Object.keys(e.detalles).length > 0 && (
-                                                    <div className="mt-3 pt-3 border-t border-slate-200 grid grid-cols-1 gap-2">
-                                                        {Object.entries(e.detalles).map(([campo, cant]) => {
-                                                            const creador = e.bloqueos?.[campo]?.nombre;
-                                                            return (
-                                                                <p key={campo} className="text-[10px] font-bold text-slate-500 truncate flex justify-between">
-                                                                    <span><i className="fas fa-caret-right text-indigo-400 mr-1"></i> {campo}</span>
-                                                                    <span className="text-indigo-600 font-black">{cant} <span className="font-normal text-slate-400 ml-1">{creador ? `(${creador})` : ''}</span></span>
-                                                                </p>
-                                                            )
-                                                        })}
-                                                    </div>
-                                                )}
-                                            </div>
-                                        ))}
+                                            )
+                                        })}
                                     </div></div>
                                 )}
                             </div>
