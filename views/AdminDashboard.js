@@ -10,7 +10,7 @@ function AdminDashboard({
     
     // ESTADOS ADMIN
     const [expandirFiltroAdmin, setExpandirFiltroAdmin] = useState(false);
-    const [campoExpandido, setCampoExpandido] = useState(null); // NUEVO: Controla el acordeón de las clases
+    const [campoExpandido, setCampoExpandido] = useState(null); 
     const [campoResetUI, setCampoResetUI] = useState(null);
     const [subVistaAdminLogistica, setSubVistaAdminLogistica] = useState('misiones'); 
     const [edadMin, setEdadMin] = useState('');
@@ -44,14 +44,12 @@ function AdminDashboard({
     const activos = maestros.filter(m => m.estado === 'Activo');
     const listaAdminVisible = maestros.filter(m => m.nombre.toLowerCase().includes(busqueda.toLowerCase()) || (m.campo && m.campo.toLowerCase().includes(busqueda.toLowerCase())));
     
-    // MAGIA: Los campos se "Activan" dinámicamente si hay un maestro, un alumno o historial de asistencia
     const camposActivos = [...new Set([
         ...maestros.filter(m => m.clase !== 'LOGISTICA' && m.campo).map(m => m.campo),
         ...todosLosAlumnos.map(a => a.campo),
         ...historialVisible.map(h => h.campo)
     ].filter(Boolean))].sort();
 
-    // Campos disponibles solo para el select de logística (se mantienen fijos para no perder la lista)
     const camposDisponiblesApp = ["La Isla", "Las Delicias", "El Amatal", "El Manguito", "Buenos Aires", "Corozal #1", "El Porvenir", "El Caulote", "Corozal #2", "Valle Encantado", "La Playa"];
 
     let contenidoAdmin;
@@ -140,7 +138,7 @@ function AdminDashboard({
 
                                 const prog = calcProgreso(ultimaLec);
                                 const isExpanded = campoExpandido === campo;
-                                const registrosCampo = historialVisible.filter(h => h.campo === campo); // Para el acordeón
+                                const registrosCampo = historialVisible.filter(h => h.campo === campo);
                                 
                                 return (
                                     <div key={campo} className="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm overflow-hidden transition-all duration-300">
@@ -148,12 +146,9 @@ function AdminDashboard({
                                             <span className="font-bold text-slate-700 text-lg truncate w-1/3">{campo}</span>
                                             <div className="flex items-center space-x-2">
                                                 <span className="bg-indigo-50 text-indigo-600 font-black text-[10px] px-2 py-1.5 rounded uppercase">{total} Alumnos</span>
-                                                
-                                                {/* BOTÓN ACORDEÓN PARA VER CLASES */}
                                                 <button onClick={() => setCampoExpandido(isExpanded ? null : campo)} className={`w-8 h-8 flex items-center justify-center rounded-lg transition-colors ${isExpanded ? 'bg-indigo-500 text-white' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'}`} title="Ver Historial de Clases">
                                                     <i className={`fas fa-chevron-down transition-transform duration-300 ${isExpanded ? 'rotate-180' : ''}`}></i>
                                                 </button>
-                                                
                                                 <button onClick={() => setCampoResetUI(campoResetUI === campo ? null : campo)} className="w-8 h-8 flex items-center justify-center bg-slate-100 text-slate-500 rounded-lg hover:bg-sky-500 hover:text-white transition-colors" title="Ajustar Material"><i className="fas fa-cog"></i></button>
                                                 <button onClick={() => onDeleteCampo(campo)} className="w-8 h-8 flex items-center justify-center bg-rose-50 text-rose-500 rounded-lg hover:bg-rose-500 hover:text-white transition-colors" title="Limpiar Campo"><i className="fas fa-trash-alt"></i></button>
                                             </div>
@@ -174,14 +169,13 @@ function AdminDashboard({
                                             </div>
                                         )}
 
-                                        {/* ACORDEÓN: HISTORIAL DE CLASES DEL CAMPO */}
                                         {isExpanded && (
                                             <div className="mt-4 pt-4 border-t border-slate-100 animate-in slide-in-from-top-2 duration-200">
                                                 <p className="text-[10px] font-black text-slate-400 mb-3 uppercase tracking-widest"><i className="fas fa-history mr-1"></i> Clases Impartidas ({registrosCampo.length})</p>
                                                 <div className="space-y-2 max-h-[250px] overflow-y-auto pr-1">
                                                     {registrosCampo.length === 0 ? <p className="text-xs text-slate-400 italic text-center py-2">Sin clases registradas aún.</p> : 
                                                     registrosCampo.map((h, i) => (
-                                                        <div key={i} className="bg-slate-50 p-3 rounded-xl border border-slate-100 flex justify-between items-center">
+                                                        <div key={i} className="bg-slate-50 p-3 rounded-xl border border-slate-100 flex justify-between items-center shadow-sm">
                                                             <div>
                                                                 <p className="font-black text-slate-700 text-xs">{formatoFecha(h.fecha)}</p>
                                                                 <p className="text-[9px] text-slate-400 uppercase mt-0.5"><i className="fas fa-user mr-1"></i>{h.maestro}</p>
@@ -233,11 +227,9 @@ function AdminDashboard({
                                         <div className="w-1/2">
                                             <select name="grupo" required className="w-full p-4 bg-white rounded-2xl outline-none border border-amber-100 text-sm font-bold text-slate-700">
                                                 <option value="">¿Qué Grupo?</option>
-                                                <option value="Grupo 1">Grupo 1</option>
-                                                <option value="Grupo 2">Grupo 2</option>
-                                                <option value="Grupo 3">Grupo 3</option>
-                                                <option value="Grupo 4">Grupo 4</option>
-                                                <option value="Grupo 5">Grupo 5</option>
+                                                {[1, 2, 3, 4, 5, 6, 7, 8].map(n => (
+                                                    <option key={n} value={`Grupo ${n}`}>Grupo {n}</option>
+                                                ))}
                                             </select>
                                         </div>
                                     </div>
@@ -266,17 +258,16 @@ function AdminDashboard({
                                                 <p className="font-bold text-slate-700 text-sm truncate">{p.nombre}</p>
                                             </div>
                                             <div className="w-1/2">
+                                                {/* ACTUALIZADO A VALUE CONTROLADO PARA RESPUESTA INMEDIATA */}
                                                 <select 
-                                                    defaultValue={p.grupo || ''} 
+                                                    value={p.grupo || ''} 
                                                     onChange={(e) => onAssignGroup(p.id, e.target.value)} 
                                                     className={`w-full p-2 rounded-xl text-xs font-bold outline-none border ${p.grupo ? 'bg-indigo-50 border-indigo-100 text-indigo-700' : 'bg-rose-50 border-rose-100 text-rose-500'}`}
                                                 >
                                                     <option value="">-- Sin Grupo --</option>
-                                                    <option value="Grupo 1">Grupo 1</option>
-                                                    <option value="Grupo 2">Grupo 2</option>
-                                                    <option value="Grupo 3">Grupo 3</option>
-                                                    <option value="Grupo 4">Grupo 4</option>
-                                                    <option value="Grupo 5">Grupo 5</option>
+                                                    {[1, 2, 3, 4, 5, 6, 7, 8].map(n => (
+                                                        <option key={n} value={`Grupo ${n}`}>Grupo {n}</option>
+                                                    ))}
                                                 </select>
                                             </div>
                                         </div>
@@ -307,7 +298,7 @@ function AdminDashboard({
     return (
         <>
             {contenidoAdmin}
-            {/* MENÚ INFERIOR REDUCIDO A 4 BOTONES */}
+            {/* MENÚ INFERIOR DE 4 BOTONES */}
             <div className="fixed bottom-0 left-0 right-0 max-w-md mx-auto bg-white/90 backdrop-blur-md border-t border-slate-100 flex justify-around items-center p-2 z-50 pb-safe shadow-[0_-10px_40px_rgba(0,0,0,0.05)]">
                 <NavButton id="inicio" icon="fa-home" label="Panel" width="w-[75px]" />
                 <NavButton id="poblacion" icon="fa-layer-group" label="Campos" width="w-[75px]" />
