@@ -16,7 +16,6 @@ function AdminDashboard({
     const [edadMin, setEdadMin] = useState('');
     const [edadMax, setEdadMax] = useState('');
 
-    // NUEVO: Array para capturar los campos que el admin selecciona para la Ruta
     const [camposRuta, setCamposRuta] = useState([]);
 
     const historialVisible = historialAsistencias.filter(h => !h.esReset);
@@ -47,34 +46,20 @@ function AdminDashboard({
     const activos = maestros.filter(m => m.estado === 'Activo');
     const listaAdminVisible = maestros.filter(m => m.nombre.toLowerCase().includes(busqueda.toLowerCase()) || (m.campo && m.campo.toLowerCase().includes(busqueda.toLowerCase())));
     
-    const camposActivos = [...new Set([
-        ...maestros.filter(m => m.clase !== 'LOGISTICA' && m.campo).map(m => m.campo),
-        ...todosLosAlumnos.map(a => a.campo),
-        ...historialVisible.map(h => h.campo)
-    ].filter(Boolean))].sort();
-
+    const camposActivos = [...new Set([...maestros.filter(m => m.clase !== 'LOGISTICA' && m.campo).map(m => m.campo), ...todosLosAlumnos.map(a => a.campo), ...historialVisible.map(h => h.campo)].filter(Boolean))].sort();
     const camposFijos = ["La Isla", "Las Delicias", "El Amatal", "El Manguito", "Buenos Aires", "Corozal #1", "El Porvenir", "El Caulote", "Corozal #2", "Valle Encantado", "La Playa"];
 
-    // FUNCIÓN PARA EL CHECKBOX MULTIPLE DE RUTAS
     const toggleCampoRuta = (c) => {
         if(camposRuta.includes(c)) setCamposRuta(camposRuta.filter(x => x !== c));
         else setCamposRuta([...camposRuta, c]);
     };
 
-    // EVITAR EL SUBMIT POR DEFECTO PARA ENVIAR EL ARRAY
     const submitMision = (e) => {
         e.preventDefault();
-        if(camposRuta.length === 0) {
-            alert("⚠️ Debes seleccionar al menos un campo para armar la ruta.");
-            return;
-        }
+        if(camposRuta.length === 0) { alert("⚠️ Debes seleccionar al menos un campo para armar la ruta."); return; }
         const fd = new FormData(e.target);
-        onCrearEntrega({
-            campos: camposRuta,
-            cantidad: parseInt(fd.get('cantidad')),
-            grupo: fd.get('grupo')
-        });
-        setCamposRuta([]); // Limpiar selección
+        onCrearEntrega({ campos: camposRuta, cantidad: parseInt(fd.get('cantidad')), grupo: fd.get('grupo') });
+        setCamposRuta([]); 
         e.target.reset();
     };
 
@@ -245,7 +230,6 @@ function AdminDashboard({
                                 <h3 className="font-bold text-amber-800 text-sm mb-4 flex items-center"><i className="fas fa-map-marked-alt mr-2"></i> Crear Ruta de Reparto</h3>
                                 <div className="space-y-4">
                                     
-                                    {/* GRID DE MULTIPLES CAMPOS */}
                                     <div>
                                         <p className="text-[10px] font-bold text-amber-700 uppercase mb-2">1. Selecciona los campos a visitar:</p>
                                         <div className="grid grid-cols-2 gap-2 max-h-32 overflow-y-auto p-3 bg-white rounded-2xl border border-amber-100 shadow-inner">
@@ -258,27 +242,20 @@ function AdminDashboard({
                                         </div>
                                     </div>
 
-                                    {/* CANTIDAD Y GRUPO */}
                                     <div>
                                         <p className="text-[10px] font-bold text-amber-700 uppercase mb-2">2. Asigna Cantidad y Equipo:</p>
                                         <div className="flex space-x-3">
-                                            <div className="w-1/2">
-                                                <input type="number" name="cantidad" required placeholder="Total Víveres" className="w-full p-4 bg-white rounded-2xl outline-none border border-amber-100 text-sm font-bold text-slate-700 text-center shadow-sm" />
-                                            </div>
+                                            <div className="w-1/2"><input type="number" name="cantidad" required placeholder="Total Víveres" className="w-full p-4 bg-white rounded-2xl outline-none border border-amber-100 text-sm font-bold text-slate-700 text-center shadow-sm" /></div>
                                             <div className="w-1/2">
                                                 <select name="grupo" required className="w-full p-4 bg-white rounded-2xl outline-none border border-amber-100 text-sm font-bold text-slate-700 shadow-sm">
                                                     <option value="">¿A qué Grupo?</option>
-                                                    {[1, 2, 3, 4, 5, 6, 7, 8].map(n => (
-                                                        <option key={n} value={`Grupo ${n}`}>Grupo {n}</option>
-                                                    ))}
+                                                    {[1, 2, 3, 4, 5, 6, 7, 8].map(n => (<option key={n} value={`Grupo ${n}`}>Grupo {n}</option>))}
                                                 </select>
                                             </div>
                                         </div>
                                     </div>
 
-                                    <button type="submit" className="w-full py-4 bg-amber-500 hover:bg-amber-600 text-white font-black rounded-2xl shadow-lg active:scale-95 transition-all mt-2">
-                                        Confirmar Ruta
-                                    </button>
+                                    <button type="submit" className="w-full py-4 bg-amber-500 hover:bg-amber-600 text-white font-black rounded-2xl shadow-lg active:scale-95 transition-all mt-2">Confirmar Ruta</button>
                                 </div>
                             </form>
 
@@ -292,6 +269,9 @@ function AdminDashboard({
                                                     <p className="font-black text-slate-800 text-sm mb-1">{e.grupo}</p>
                                                     <p className="text-[10px] text-slate-500 font-bold leading-relaxed"><i className="fas fa-map-marker-alt mr-1 text-amber-500"></i> {e.campos ? e.campos.join(', ') : e.campo}</p>
                                                     <p className="text-xs text-indigo-500 font-bold mt-2"><i className="fas fa-box mr-1"></i>{e.cantidad} Paquetes en total</p>
+                                                    {e.detalles && Object.keys(e.detalles).length > 0 && (
+                                                        <div className="mt-2 text-[9px] text-emerald-500 font-bold"><i className="fas fa-save mr-1"></i> Avance guardado en ruta...</div>
+                                                    )}
                                                 </div>
                                                 <button onClick={() => onBorrarEntrega(e.id)} className="w-10 h-10 flex items-center justify-center bg-rose-50 text-rose-500 rounded-xl hover:bg-rose-500 hover:text-white transition-colors flex-shrink-0"><i className="fas fa-trash-alt"></i></button>
                                             </div>
@@ -299,7 +279,26 @@ function AdminDashboard({
                                     </div></div>
                                 )}
                                 {entregasCompletadas.length > 0 && (
-                                    <div><h4 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-3 px-2">Completadas Hoy</h4><div className="space-y-3 opacity-60">{entregasCompletadas.slice(0, 5).map(e => (<div key={e.id} className="bg-slate-50 p-4 rounded-2xl border border-slate-100 flex justify-between items-center"><div><p className="font-bold text-slate-700 line-through decoration-slate-300">Ruta Entregada</p><p className="text-[10px] text-slate-400 mt-1 uppercase">Por {e.grupo}</p></div><span className="text-emerald-500 font-bold text-sm"><i className="fas fa-check-circle"></i></span></div>))}</div></div>
+                                    <div><h4 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-3 px-2">Completadas Hoy</h4>
+                                    <div className="space-y-3 opacity-90">
+                                        {entregasCompletadas.slice(0, 10).map(e => (
+                                            <div key={e.id} className="bg-slate-50 p-4 rounded-2xl border border-slate-200 flex flex-col justify-between shadow-sm">
+                                                <div className="flex justify-between items-center">
+                                                    <div><p className="font-bold text-slate-700 line-through decoration-slate-300">Ruta {e.grupo}</p><p className="text-[10px] text-slate-500 font-bold mt-0.5">Total Asignado: {e.cantidad} paquetes</p></div>
+                                                    <span className="text-emerald-500 font-bold text-xl"><i className="fas fa-check-circle"></i></span>
+                                                </div>
+                                                
+                                                {/* DESGLOSE DE ENTREGAS POR CAMPO */}
+                                                {e.detalles && Object.keys(e.detalles).length > 0 && (
+                                                    <div className="mt-3 pt-3 border-t border-slate-200 grid grid-cols-2 gap-2">
+                                                        {Object.entries(e.detalles).map(([campo, cant]) => (
+                                                            <p key={campo} className="text-[10px] font-bold text-slate-500 truncate"><i className="fas fa-caret-right text-indigo-400 mr-1"></i> {campo}: <span className="text-indigo-600 font-black">{cant}</span></p>
+                                                        ))}
+                                                    </div>
+                                                )}
+                                            </div>
+                                        ))}
+                                    </div></div>
                                 )}
                             </div>
                         </>
