@@ -6,7 +6,7 @@ function DashboardView({
     todosLosAlumnos = [], 
     asistenciaHoy, 
     datosGlobalesAsistencia = { registros: [], rango: null }, 
-    historialAsistencias = [], // <--- Recibimos el Historial Inmutable
+    historialAsistencias = [], 
     usuario, 
     datosUsuarioActual,
     onEdit, onDelete, onApprove, onToggleModal, 
@@ -17,18 +17,29 @@ function DashboardView({
     const [vistaActual, setVistaActual] = useState('inicio'); 
     const [listaAsistencia, setListaAsistencia] = useState({});
 
-    // ESTADOS DE FILTRO (Maestro/Admin)
+    // ESTADOS ADMIN
+    const [expandirPoblacion, setExpandirPoblacion] = useState(false);
+    const [expandirPersonal, setExpandirPersonal] = useState(false);
+    const [expandirFiltroAdmin, setExpandirFiltroAdmin] = useState(false);
+    const [campoHistorialExp, setCampoHistorialExp] = useState(null); // NUEVO: Para acordeón de historial por campo
+
+    // ESTADOS MAESTRO
+    const [expandirFiltroMaestro, setExpandirFiltroMaestro] = useState(false);
+    const [subVistaReporte, setSubVistaReporte] = useState('ranking');
+    
+    // FILTROS COMPARTIDOS
     const [edadMin, setEdadMin] = useState('');
     const [edadMax, setEdadMax] = useState('');
-    
-    // Sub-pestañas para Reportes de Maestro
-    const [subVistaReporte, setSubVistaReporte] = useState('ranking');
+
+    // NUEVO: FILTRO FECHAS PARA RANKING MAESTROS
+    const [fechaInicioRanking, setFechaInicioRanking] = useState('');
+    const [fechaFinRanking, setFechaFinRanking] = useState('');
 
     const { registros: todasAsistencias, rango } = datosGlobalesAsistencia;
     const formatoFecha = (f) => {
         if (!f) return '';
         const p = f.split('-');
-        return `${p[2]}/${p[1]}/${p[0]}`; // DD/MM/YYYY
+        return `${p[2]}/${p[1]}/${p[0]}`; 
     };
     const textoFechas = rango ? `${formatoFecha(rango.inicio).substring(0,5)} - ${formatoFecha(rango.fin).substring(0,5)}` : 'Calculando...';
 
@@ -115,32 +126,57 @@ function DashboardView({
             );
         }
 
-        // --- NUEVO: PESTAÑA HISTORIAL (SOLO LECTURA PARA ADMIN) ---
+        // --- HISTORIAL ADMIN (AHORA AGRUPADO POR CAMPO) ---
         if (vistaActual === 'historial') {
+            // Extraer campos que tengan al menos 1 registro en el historial
+            const camposConHistorial = [...new Set(historialAsistencias.map(h => h.campo))].sort();
+
             contenidoAdmin = (
                 <div className="space-y-4 animate-in slide-in-from-right duration-300 h-full flex flex-col">
                     <div className="px-2 mb-2">
                         <h2 className="text-2xl font-black text-slate-800">Historial Anual</h2>
-                        <p className="text-slate-400 text-xs">Registro inmutable de asistencia ({new Date().getFullYear()})</p>
+                        <p className="text-slate-400 text-xs">Asistencias agrupadas por campo ({new Date().getFullYear()})</p>
                     </div>
                     <div className="flex-1 overflow-y-auto space-y-3 pb-24 pr-2">
-                        {historialAsistencias.length === 0 ? (
+                        {camposConHistorial.length === 0 ? (
                             <div className="text-center p-8 bg-slate-50 rounded-[32px] border-2 border-dashed border-slate-200 mt-4"><i className="fas fa-folder-open text-4xl text-slate-300 mb-2"></i><p className="text-sm font-bold text-slate-500">Historial vacío</p></div>
                         ) : (
-                            historialAsistencias.map((h, i) => (
-                                <div key={i} className="bg-white p-4 rounded-2xl border border-slate-100 shadow-sm relative overflow-hidden">
-                                    <div className="absolute top-0 right-0 bottom-0 w-2 bg-emerald-400"></div>
-                                    <div className="flex justify-between items-start mb-3">
-                                        <div><p className="font-black text-slate-700">{formatoFecha(h.fecha)}</p><p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">{h.campo}</p></div>
-                                        <div className="text-right"><p className="text-[10px] text-slate-400"><i className="fas fa-lock mr-1"></i>Reportado por</p><p className="text-xs font-bold text-slate-600">{h.maestro}</p></div>
+                            camposConHistorial.map(campo => {
+                                const registrosCampo = historialAsistencias.filter(h => h.campo === campo);
+                                const isExpanded = campoHistorialExp === campo;
+                                
+                                return (
+                                    <div key={campo} className="bg-white rounded-[24px] border border-slate-100 shadow-sm overflow-hidden transition-all duration-300">
+                                        <button onClick={() => setCampoHistorialExp(isExpanded ? null : campo)} className="w-full flex items-center justify-between p-5 bg-white hover:bg-slate-50 transition-colors">
+                                            <div className="flex items-center">
+                                                <div className="w-10 h-10 bg-indigo-50 text-indigo-600 rounded-xl flex items-center justify-center mr-3"><i className="fas fa-map-marker-alt"></i></div>
+                                                <div className="text-left"><h3 className="font-bold text-slate-700 text-sm">{campo}</h3><p className="text-[10px] text-slate-400">{registrosCampo.length} registros guardados</p></div>
+                                            </div>
+                                            <i className={`fas fa-chevron-down text-slate-300 transition-transform duration-300 ${isExpanded ? 'rotate-180' : ''}`}></i>
+                                        </button>
+                                        
+                                        {isExpanded && (
+                                            <div className="p-4 pt-0 animate-in slide-in-from-top-2 duration-200 border-t border-slate-50 bg-slate-50/50">
+                                                <div className="space-y-2 mt-4 max-h-[300px] overflow-y-auto pr-1">
+                                                    {registrosCampo.map((h, i) => (
+                                                        <div key={i} className="bg-white p-3 rounded-xl border border-slate-100 flex justify-between items-center shadow-sm">
+                                                            <div>
+                                                                <p className="font-black text-slate-700 text-sm">{formatoFecha(h.fecha)}</p>
+                                                                <p className="text-[9px] text-slate-400 uppercase mt-0.5"><i className="fas fa-user mr-1"></i>{h.maestro}</p>
+                                                            </div>
+                                                            <div className="flex space-x-1 text-[10px] font-bold">
+                                                                <span className="bg-emerald-50 text-emerald-600 px-2 py-1 rounded-lg">P: {h.totales?.presentes || 0}</span>
+                                                                <span className="bg-rose-50 text-rose-600 px-2 py-1 rounded-lg">A: {h.totales?.ausentes || 0}</span>
+                                                                <span className="bg-amber-50 text-amber-600 px-2 py-1 rounded-lg">PE: {h.totales?.permisos || 0}</span>
+                                                            </div>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        )}
                                     </div>
-                                    <div className="flex space-x-2 text-xs font-bold">
-                                        <span className="bg-emerald-50 text-emerald-600 px-3 py-1 rounded-lg">P: {h.totales?.presentes || 0}</span>
-                                        <span className="bg-rose-50 text-rose-600 px-3 py-1 rounded-lg">A: {h.totales?.ausentes || 0}</span>
-                                        <span className="bg-amber-50 text-amber-600 px-3 py-1 rounded-lg">PER: {h.totales?.permisos || 0}</span>
-                                    </div>
-                                </div>
-                            ))
+                                );
+                            })
                         )}
                     </div>
                 </div>
@@ -167,7 +203,7 @@ function DashboardView({
                 <div className="fixed bottom-0 left-0 right-0 max-w-md mx-auto bg-white/90 backdrop-blur-md border-t border-slate-100 flex justify-around items-center p-2 z-50 pb-safe shadow-[0_-10px_40px_rgba(0,0,0,0.05)]">
                     <NavButton id="inicio" icon="fa-home" label="Panel" />
                     <NavButton id="poblacion" icon="fa-chart-pie" label="Población" />
-                    <NavButton id="historial" icon="fa-history" label="Historial" /> {/* NUEVO BOTÓN ADMIN */}
+                    <NavButton id="historial" icon="fa-history" label="Historial" />
                     <NavButton id="personal" icon="fa-address-book" label="Personal" />
                 </div>
             </>
@@ -185,17 +221,29 @@ function DashboardView({
         const nombreDisplay = datosUsuarioActual ? datosUsuarioActual.nombre.split(' ')[0] : '';
         const rolDisplay = usuario.charAt(0) + usuario.slice(1).toLowerCase();
 
-        // LÓGICA DE RANKING Y FILTRADO
+        // 1. Filtrado de Fechas para Ranking
+        const historialRankingFiltrado = historialAsistencias.filter(ha => {
+            if (!fechaInicioRanking && !fechaFinRanking) return true;
+            const f = ha.fecha; // Formato YYYY-MM-DD
+            if (fechaInicioRanking && f < fechaInicioRanking) return false;
+            if (fechaFinRanking && f > fechaFinRanking) return false;
+            return true;
+        });
+
+        // 2. Cálculo de Ranking con historial filtrado
         const alumnosConRanking = alumnos.map(a => {
             let asistenciasLogradas = 0;
-            historialAsistencias.forEach(ha => {
+            historialRankingFiltrado.forEach(ha => {
                 const registroAlumno = ha.registros?.find(r => r.idAlumno === a.id);
                 if (registroAlumno && registroAlumno.estado === 'Presente') asistenciasLogradas++;
             });
             return { ...a, asistenciasLogradas };
         });
 
-        const alumnosFiltrados = alumnosConRanking.filter(a => {
+        const rankingOrdenado = [...alumnosConRanking].sort((a,b) => b.asistenciasLogradas - a.asistenciasLogradas);
+
+        // 3. Lógica de Filtrado Demográfico
+        const alumnosFiltrados = alumnos.filter(a => {
             if (edadMin !== '' && a.edad < parseInt(edadMin)) return false;
             if (edadMax !== '' && a.edad > parseInt(edadMax)) return false;
             return true;
@@ -206,22 +254,13 @@ function DashboardView({
         if (vistaActual === 'inicio') {
             contenidoMaestro = (
                 <div className="flex flex-col h-full space-y-6 pt-4 animate-in fade-in duration-300">
-                    <div className="px-2">
-                        <h2 className="text-3xl font-black text-slate-800">Hola, {rolDisplay} {nombreDisplay}</h2>
-                        <p className="text-slate-400 text-sm mt-1">Resumen de tu campo: <b className="text-indigo-500">{datosUsuarioActual.campo}</b></p>
-                    </div>
-                    
+                    <div className="px-2"><h2 className="text-3xl font-black text-slate-800">Hola, {rolDisplay} {nombreDisplay}</h2><p className="text-slate-400 text-sm mt-1">Resumen de tu campo: <b className="text-indigo-500">{datosUsuarioActual.campo}</b></p></div>
                     <div className={`w-full p-6 rounded-[32px] text-left relative overflow-hidden group shadow-lg ${estaBloqueada ? 'bg-slate-50 border border-slate-200' : asistenciaTomada ? 'bg-white border border-slate-100' : 'bg-rose-500 text-white shadow-rose-200'}`}>
                         {asistenciaTomada ? (
                             <><div className="flex justify-between items-center mb-6"><h3 className={`font-bold text-sm flex items-center ${estaBloqueada ? 'text-slate-500' : 'text-slate-700'}`}><i className={`fas ${estaBloqueada ? 'fa-lock' : 'fa-clipboard-check'} mr-2 text-lg ${estaBloqueada ? 'text-slate-400' : 'text-emerald-500'}`}></i> {estaBloqueada ? 'Asistencia (Solo Lectura)' : 'Asistencia Completada'}</h3>{estaBloqueada ? (<span className="text-[9px] bg-slate-200 text-slate-500 px-2 py-1 rounded-lg font-bold uppercase">Bloqueada</span>) : (<span className="text-[10px] bg-emerald-100 text-emerald-700 px-2 py-1 rounded-lg font-bold">TUYA</span>)}</div><div className="flex justify-around text-center"><div><p className={`text-3xl font-black ${estaBloqueada ? 'text-slate-500' : 'text-emerald-500'}`}>{asistenciaHoy.totales.presentes}</p><p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">Presentes</p></div><div><p className={`text-3xl font-black ${estaBloqueada ? 'text-slate-500' : 'text-rose-500'}`}>{asistenciaHoy.totales.ausentes}</p><p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">Ausentes</p></div><div><p className={`text-3xl font-black ${estaBloqueada ? 'text-slate-500' : 'text-amber-500'}`}>{asistenciaHoy.totales.permisos}</p><p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">Permisos</p></div></div><div className="mt-6 text-center text-[10px] font-bold uppercase tracking-widest bg-slate-100 p-2 rounded-xl">{estaBloqueada ? (<span className="text-slate-500"><i className="fas fa-info-circle mr-1"></i> Tomada por: {asistenciaHoy.maestro}</span>) : (<span className="text-indigo-500">Ve a 'Lista' para editar</span>)}</div></>
                         ) : (<><div className="absolute top-0 right-0 w-32 h-32 bg-white opacity-10 rounded-bl-[100px] pointer-events-none"></div><div className="flex items-center space-x-4 relative z-10"><div className="w-16 h-16 bg-white/20 rounded-2xl flex items-center justify-center text-3xl backdrop-blur-sm animate-pulse"><i className="fas fa-clipboard-list"></i></div><div><h3 className="font-bold text-xl">Tomar Asistencia</h3><p className="text-rose-100 text-xs">Aún no registras el día de hoy</p></div></div></>)}
                     </div>
-                    
-                    <div className="w-full bg-indigo-600 p-6 rounded-[32px] text-white shadow-xl shadow-indigo-200 flex justify-between items-center relative overflow-hidden">
-                        <div className="absolute top-0 right-0 w-32 h-32 bg-white opacity-10 rounded-bl-[100px] pointer-events-none"></div>
-                        <div className="relative z-10"><p className="text-xs font-bold uppercase opacity-70 tracking-widest">Niños Totales</p><p className="text-5xl font-black tracking-tighter mt-1">{alumnos.length}</p></div>
-                        <div className="w-14 h-14 bg-white/20 rounded-2xl flex items-center justify-center text-3xl backdrop-blur-sm relative z-10"><i className="fas fa-users"></i></div>
-                    </div>
+                    <div className="w-full bg-indigo-600 p-6 rounded-[32px] text-white shadow-xl shadow-indigo-200 flex justify-between items-center relative overflow-hidden"><div className="absolute top-0 right-0 w-32 h-32 bg-white opacity-10 rounded-bl-[100px] pointer-events-none"></div><div className="relative z-10"><p className="text-xs font-bold uppercase opacity-70 tracking-widest">Niños Totales</p><p className="text-5xl font-black tracking-tighter mt-1">{alumnos.length}</p></div><div className="w-14 h-14 bg-white/20 rounded-2xl flex items-center justify-center text-3xl backdrop-blur-sm relative z-10"><i className="fas fa-users"></i></div></div>
                 </div>
             );
         }
@@ -244,13 +283,10 @@ function DashboardView({
             );
         }
 
-        // --- NUEVO: PESTAÑA REPORTES (FILTRO + RANKING HISTÓRICO) ---
         if (vistaActual === 'reportes') {
-            const rankingOrdenado = [...alumnosConRanking].sort((a,b) => b.asistenciasLogradas - a.asistenciasLogradas);
-            
             contenidoMaestro = (
                 <div className="flex flex-col h-full pt-4 animate-in slide-in-from-right duration-300">
-                    <div className="px-2 mb-4"><h2 className="text-2xl font-black text-slate-800">Reportes</h2><p className="text-slate-400 text-xs">Filtros y Rendimiento Anual</p></div>
+                    <div className="px-2 mb-4"><h2 className="text-2xl font-black text-slate-800">Reportes</h2><p className="text-slate-400 text-xs">Análisis y estadísticas de tu clase</p></div>
                     
                     {/* CONTROLES DE PESTAÑA INTERNA */}
                     <div className="flex px-2 space-x-2 mb-4">
@@ -261,9 +297,26 @@ function DashboardView({
 
                     <div className="flex-1 bg-white rounded-t-[40px] shadow-[0_-10px_40px_rgba(0,0,0,0.05)] border-t border-slate-100 p-6 overflow-hidden flex flex-col">
                         
+                        {/* --- PESTAÑA RANKING (CON FILTRO DE FECHAS) --- */}
                         {subVistaReporte === 'ranking' && (
                             <>
-                                <h3 className="text-sm font-bold text-slate-700 mb-4 px-2">Top Asistencia ({new Date().getFullYear()})</h3>
+                                <h3 className="text-sm font-bold text-slate-700 mb-3 px-2 flex items-center justify-between">
+                                    Top Asistencia
+                                    <span className="text-[9px] bg-amber-50 text-amber-600 px-2 py-1 rounded-lg uppercase tracking-widest">{historialRankingFiltrado.length} clases analizadas</span>
+                                </h3>
+                                
+                                {/* FILTRO DE FECHAS PARA RANKING */}
+                                <div className="bg-amber-50 p-3 rounded-2xl mb-4 border border-amber-100 flex space-x-3">
+                                    <div className="w-1/2">
+                                        <label className="text-[9px] font-bold text-amber-700 uppercase ml-1">Desde</label>
+                                        <input type="date" className="w-full p-2 mt-1 bg-white rounded-xl outline-none text-xs font-bold text-slate-600 border border-amber-100" value={fechaInicioRanking} onChange={e=>setFechaInicioRanking(e.target.value)} />
+                                    </div>
+                                    <div className="w-1/2">
+                                        <label className="text-[9px] font-bold text-amber-700 uppercase ml-1">Hasta</label>
+                                        <input type="date" className="w-full p-2 mt-1 bg-white rounded-xl outline-none text-xs font-bold text-slate-600 border border-amber-100" value={fechaFinRanking} onChange={e=>setFechaFinRanking(e.target.value)} />
+                                    </div>
+                                </div>
+
                                 <div className="overflow-y-auto space-y-3 pb-24 pr-2">
                                     {rankingOrdenado.map((nino, index) => (
                                         <div key={nino.id} className="flex items-center justify-between p-4 bg-slate-50 rounded-2xl border border-slate-100">
@@ -278,6 +331,7 @@ function DashboardView({
                             </>
                         )}
 
+                        {/* --- PESTAÑA HISTORIAL --- */}
                         {subVistaReporte === 'historial' && (
                             <>
                                 <h3 className="text-sm font-bold text-slate-700 mb-4 px-2">Días Anteriores (Solo Lectura)</h3>
@@ -293,17 +347,27 @@ function DashboardView({
                             </>
                         )}
 
+                        {/* --- PESTAÑA FILTRO EDADES --- */}
                         {subVistaReporte === 'filtro' && (
                             <>
                                 <div className="flex space-x-4 mb-5">
                                     <div className="w-1/2"><label className="text-[10px] font-bold text-sky-600 uppercase ml-2">Edad Mínima</label><input type="number" placeholder="Ej: 0" className="w-full p-4 mt-1 bg-sky-50 rounded-2xl outline-none border border-sky-100 focus:ring-2 focus:ring-sky-300 text-xl font-black text-slate-700 text-center" value={edadMin} onChange={e=>setEdadMin(e.target.value)} /></div>
                                     <div className="w-1/2"><label className="text-[10px] font-bold text-sky-600 uppercase ml-2">Edad Máxima</label><input type="number" placeholder="Ej: 5" className="w-full p-4 mt-1 bg-sky-50 rounded-2xl outline-none border border-sky-100 focus:ring-2 focus:ring-sky-300 text-xl font-black text-slate-700 text-center" value={edadMax} onChange={e=>setEdadMax(e.target.value)} /></div>
                                 </div>
-                                {(edadMin !== '' || edadMax !== '') && (<div className="flex justify-around items-center bg-sky-600 p-4 rounded-2xl shadow-sm mb-4"><div className="text-center"><p className="text-3xl font-black text-white">{alumnosFiltrados.length}</p><p className="text-[9px] font-bold text-sky-200 uppercase tracking-widest">Total</p></div><div className="text-center"><p className="text-2xl font-black text-white">{alumnosFiltrados.filter(a=>a.genero==='M').length}</p><p className="text-[9px] font-bold text-sky-200 uppercase tracking-widest">Niños</p></div><div className="text-center"><p className="text-2xl font-black text-white">{alumnosFiltrados.filter(a=>a.genero==='F').length}</p><p className="text-[9px] font-bold text-sky-200 uppercase tracking-widest">Niñas</p></div></div>)}
+                                {(edadMin !== '' || edadMax !== '') && (
+                                    <div className="flex justify-around items-center bg-sky-600 p-4 rounded-2xl shadow-sm mb-4">
+                                        <div className="text-center"><p className="text-3xl font-black text-white">{alumnosFiltrados.length}</p><p className="text-[9px] font-bold text-sky-200 uppercase tracking-widest">Total</p></div>
+                                        <div className="text-center"><p className="text-2xl font-black text-white">{alumnosFiltrados.filter(a=>a.genero==='M').length}</p><p className="text-[9px] font-bold text-sky-200 uppercase tracking-widest">Niños</p></div>
+                                        <div className="text-center"><p className="text-2xl font-black text-white">{alumnosFiltrados.filter(a=>a.genero==='F').length}</p><p className="text-[9px] font-bold text-sky-200 uppercase tracking-widest">Niñas</p></div>
+                                    </div>
+                                )}
                                 <div className="overflow-y-auto space-y-3 pb-24 pr-2">
-                                    {alumnosFiltrados.map(nino => (
+                                    {alumnosFiltrados.length === 0 ? (
+                                        <p className="text-center text-slate-400 text-sm italic mt-8 border border-dashed border-slate-200 p-8 rounded-3xl">No hay alumnos en este rango.</p>
+                                    ) : (
+                                        alumnosFiltrados.map(nino => (
                                         <div key={nino.id} className="flex items-center space-x-3 p-3 bg-slate-50 rounded-xl border border-slate-100"><div className={`w-8 h-8 rounded-xl flex items-center justify-center text-xs font-bold shadow-sm ${nino.genero === 'M' ? 'bg-sky-50 text-sky-600' : 'bg-pink-50 text-pink-600'}`}>{nino.nombre.charAt(0)}</div><div><p className="font-bold text-slate-700 text-xs">{nino.nombre}</p><p className="text-[9px] text-slate-400 font-bold tracking-wide mt-0.5">{nino.edad} Años</p></div></div>
-                                    ))}
+                                    )))}
                                 </div>
                             </>
                         )}
@@ -319,7 +383,7 @@ function DashboardView({
                     <NavButton id="inicio" icon="fa-home" label="Resumen" />
                     <NavButton id="asistencia" icon="fa-clipboard-check" label="Lista" />
                     <NavButton id="gestion" icon="fa-users" label="Alumnos" />
-                    <NavButton id="reportes" icon="fa-chart-bar" label="Reportes" /> {/* NUEVO BOTÓN */}
+                    <NavButton id="reportes" icon="fa-chart-bar" label="Reportes" />
                 </div>
             </>
         );
