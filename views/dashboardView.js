@@ -21,19 +21,19 @@ function DashboardView({
     const [expandirPoblacion, setExpandirPoblacion] = useState(false);
     const [expandirPersonal, setExpandirPersonal] = useState(false);
     const [expandirFiltroAdmin, setExpandirFiltroAdmin] = useState(false);
-    const [campoHistorialExp, setCampoHistorialExp] = useState(null); // NUEVO: Para acordeón de historial por campo
+    const [campoHistorialExp, setCampoHistorialExp] = useState(null); 
 
     // ESTADOS MAESTRO
-    const [expandirFiltroMaestro, setExpandirFiltroMaestro] = useState(false);
     const [subVistaReporte, setSubVistaReporte] = useState('ranking');
-    
-    // FILTROS COMPARTIDOS
-    const [edadMin, setEdadMin] = useState('');
-    const [edadMax, setEdadMax] = useState('');
-
-    // NUEVO: FILTRO FECHAS PARA RANKING MAESTROS
     const [fechaInicioRanking, setFechaInicioRanking] = useState('');
     const [fechaFinRanking, setFechaFinRanking] = useState('');
+    
+    // NUEVOS ESTADOS: MATERIAL DE CLASE (LECCIÓN)
+    const [leccionActual, setLeccionActual] = useState('');
+    const [leccionImpartida, setLeccionImpartida] = useState(true);
+
+    const [edadMin, setEdadMin] = useState('');
+    const [edadMax, setEdadMax] = useState('');
 
     const { registros: todasAsistencias, rango } = datosGlobalesAsistencia;
     const formatoFecha = (f) => {
@@ -43,21 +43,42 @@ function DashboardView({
     };
     const textoFechas = rango ? `${formatoFecha(rango.inicio).substring(0,5)} - ${formatoFecha(rango.fin).substring(0,5)}` : 'Calculando...';
 
+    // AUTO-CARGAR ESTADOS AL ENTRAR A ASISTENCIA
     React.useEffect(() => {
         if (vistaActual === 'asistencia' && alumnos.length > 0) {
             const inicial = {};
             if (asistenciaHoy && asistenciaHoy.registros) {
                 asistenciaHoy.registros.forEach(r => inicial[r.idAlumno] = r.estado);
+                // Si ya tomó asistencia hoy, carga lo que puso
+                setLeccionActual(asistenciaHoy.leccion || '');
+                setLeccionImpartida(asistenciaHoy.leccionImpartida !== false);
             } else {
                 alumnos.forEach(a => inicial[a.id] = 'Presente');
+                
+                // LÓGICA DE AUTOINCREMENTO DE LECCIÓN
+                if (historialAsistencias && historialAsistencias.length > 0) {
+                    const ultimo = historialAsistencias[0]; // El historial está ordenado del más reciente al más antiguo
+                    if (ultimo && ultimo.leccion) {
+                        // Si la última se impartió, toca la siguiente. Si no se impartió, toca repetir.
+                        setLeccionActual(ultimo.leccionImpartida ? parseInt(ultimo.leccion) + 1 : parseInt(ultimo.leccion));
+                    }
+                } else {
+                    setLeccionActual(''); // Es su primera vez
+                }
+                setLeccionImpartida(true);
             }
             setListaAsistencia(inicial);
         }
-    }, [vistaActual, alumnos, asistenciaHoy]);
+    }, [vistaActual, alumnos, asistenciaHoy, historialAsistencias]);
 
     const guardarLista = async () => {
+        if (!leccionActual) {
+            alert("Por favor, ingresa el número de la lección antes de guardar.");
+            return;
+        }
         const registros = alumnos.map(a => ({ idAlumno: a.id, nombre: a.nombre, estado: listaAsistencia[a.id] || 'Ausente' }));
-        const exito = await onSaveAsistencia(registros);
+        // Enviamos los nuevos datos de la lección
+        const exito = await onSaveAsistencia(registros, leccionActual, leccionImpartida);
         if (exito) setVistaActual('inicio');
     };
 
@@ -126,16 +147,14 @@ function DashboardView({
             );
         }
 
-        // --- HISTORIAL ADMIN (AHORA AGRUPADO POR CAMPO) ---
         if (vistaActual === 'historial') {
-            // Extraer campos que tengan al menos 1 registro en el historial
             const camposConHistorial = [...new Set(historialAsistencias.map(h => h.campo))].sort();
 
             contenidoAdmin = (
                 <div className="space-y-4 animate-in slide-in-from-right duration-300 h-full flex flex-col">
                     <div className="px-2 mb-2">
                         <h2 className="text-2xl font-black text-slate-800">Historial Anual</h2>
-                        <p className="text-slate-400 text-xs">Asistencias agrupadas por campo ({new Date().getFullYear()})</p>
+                        <p className="text-slate-400 text-xs">Asistencias y lecciones agrupadas por campo ({new Date().getFullYear()})</p>
                     </div>
                     <div className="flex-1 overflow-y-auto space-y-3 pb-24 pr-2">
                         {camposConHistorial.length === 0 ? (
@@ -150,7 +169,7 @@ function DashboardView({
                                         <button onClick={() => setCampoHistorialExp(isExpanded ? null : campo)} className="w-full flex items-center justify-between p-5 bg-white hover:bg-slate-50 transition-colors">
                                             <div className="flex items-center">
                                                 <div className="w-10 h-10 bg-indigo-50 text-indigo-600 rounded-xl flex items-center justify-center mr-3"><i className="fas fa-map-marker-alt"></i></div>
-                                                <div className="text-left"><h3 className="font-bold text-slate-700 text-sm">{campo}</h3><p className="text-[10px] text-slate-400">{registrosCampo.length} registros guardados</p></div>
+                                                <div className="text-left"><h3 className="font-bold text-slate-700 text-sm">{campo}</h3><p className="text-[10px] text-slate-400">{registrosCampo.length} clases impartidas</p></div>
                                             </div>
                                             <i className={`fas fa-chevron-down text-slate-300 transition-transform duration-300 ${isExpanded ? 'rotate-180' : ''}`}></i>
                                         </button>
@@ -163,6 +182,12 @@ function DashboardView({
                                                             <div>
                                                                 <p className="font-black text-slate-700 text-sm">{formatoFecha(h.fecha)}</p>
                                                                 <p className="text-[9px] text-slate-400 uppercase mt-0.5"><i className="fas fa-user mr-1"></i>{h.maestro}</p>
+                                                                {/* MOSTRAR LECCIÓN EN ADMIN */}
+                                                                {h.leccion && (
+                                                                    <p className={`text-[10px] font-bold mt-1 ${h.leccionImpartida ? 'text-indigo-500' : 'text-rose-500'}`}>
+                                                                        <i className="fas fa-book-open mr-1"></i>Lección {h.leccion} {h.leccionImpartida ? '✅' : '❌'}
+                                                                    </p>
+                                                                )}
                                                             </div>
                                                             <div className="flex space-x-1 text-[10px] font-bold">
                                                                 <span className="bg-emerald-50 text-emerald-600 px-2 py-1 rounded-lg">P: {h.totales?.presentes || 0}</span>
@@ -221,7 +246,7 @@ function DashboardView({
         const nombreDisplay = datosUsuarioActual ? datosUsuarioActual.nombre.split(' ')[0] : '';
         const rolDisplay = usuario.charAt(0) + usuario.slice(1).toLowerCase();
 
-        // 1. Filtrado de Fechas para Ranking
+        // 1. FILTRADO DE FECHAS (RANKING)
         const historialRankingFiltrado = historialAsistencias.filter(ha => {
             if (!fechaInicioRanking && !fechaFinRanking) return true;
             const f = ha.fecha; // Formato YYYY-MM-DD
@@ -230,7 +255,7 @@ function DashboardView({
             return true;
         });
 
-        // 2. Cálculo de Ranking con historial filtrado
+        // 2. CÁLCULO DE RANKING
         const alumnosConRanking = alumnos.map(a => {
             let asistenciasLogradas = 0;
             historialRankingFiltrado.forEach(ha => {
@@ -242,7 +267,7 @@ function DashboardView({
 
         const rankingOrdenado = [...alumnosConRanking].sort((a,b) => b.asistenciasLogradas - a.asistenciasLogradas);
 
-        // 3. Lógica de Filtrado Demográfico
+        // 3. FILTRADO DEMOGRÁFICO
         const alumnosFiltrados = alumnos.filter(a => {
             if (edadMin !== '' && a.edad < parseInt(edadMin)) return false;
             if (edadMax !== '' && a.edad > parseInt(edadMax)) return false;
@@ -265,11 +290,41 @@ function DashboardView({
             );
         }
 
+        // PANTALLA ASISTENCIA (CON MATERIAL DE CLASE)
         if (vistaActual === 'asistencia') { 
             if (estaBloqueada) {
-                contenidoMaestro = <div className="flex flex-col items-center justify-center h-full text-center p-8 animate-in fade-in"><div className="w-24 h-24 bg-slate-100 text-slate-400 rounded-full flex items-center justify-center text-5xl mb-6 shadow-inner"><i className="fas fa-lock"></i></div><h3 className="text-2xl font-black text-slate-700 mb-2">Acceso Bloqueado</h3><p className="text-slate-500 text-sm leading-relaxed">La asistencia de hoy ya fue registrada exitosamente por <b>{asistenciaHoy?.maestro}</b>.</p></div>;
+                contenidoMaestro = <div className="flex flex-col items-center justify-center h-full text-center p-8 animate-in fade-in"><div className="w-24 h-24 bg-slate-100 text-slate-400 rounded-full flex items-center justify-center text-5xl mb-6 shadow-inner"><i className="fas fa-lock"></i></div><h3 className="text-2xl font-black text-slate-700 mb-2">Acceso Bloqueado</h3><p className="text-slate-500 text-sm leading-relaxed">La asistencia de hoy ya fue registrada por <b>{asistenciaHoy?.maestro}</b>.</p></div>;
             } else {
-                contenidoMaestro = (<div className="flex flex-col h-full pt-4 animate-in slide-in-from-right duration-300"><div className="flex items-center space-x-4 mb-4 px-2"><div><h2 className="text-2xl font-black text-slate-800">Pasar Lista</h2><p className="text-slate-400 text-xs">{new Date().toLocaleDateString()}</p></div></div><div className="flex-1 bg-white rounded-t-[40px] shadow-lg border-t border-slate-100 p-6 overflow-hidden flex flex-col relative"><div className="overflow-y-auto space-y-4 pb-28 pr-2">{alumnos.map(a => (<div key={a.id} className="flex items-center justify-between p-3 bg-slate-50 rounded-2xl border border-slate-100"><div className="flex items-center space-x-3 w-1/3"><div className="w-10 h-10 bg-indigo-50 text-indigo-600 rounded-xl flex items-center justify-center text-sm font-bold">{a.nombre.charAt(0)}</div><p className="font-bold text-slate-700 text-sm truncate">{a.nombre.split(' ')[0]}</p></div><div className="flex space-x-2 flex-1 justify-end"><button onClick={() => setListaAsistencia({...listaAsistencia, [a.id]: 'Presente'})} className={`w-10 h-10 rounded-xl text-xs font-bold uppercase transition-all ${listaAsistencia[a.id] === 'Presente' ? 'bg-emerald-500 text-white shadow-md' : 'bg-white border border-slate-200 text-slate-400'}`}>P</button><button onClick={() => setListaAsistencia({...listaAsistencia, [a.id]: 'Ausente'})} className={`w-10 h-10 rounded-xl text-xs font-bold uppercase transition-all ${listaAsistencia[a.id] === 'Ausente' ? 'bg-rose-500 text-white shadow-md' : 'bg-white border border-slate-200 text-slate-400'}`}>A</button><button onClick={() => setListaAsistencia({...listaAsistencia, [a.id]: 'Permiso'})} className={`w-12 h-10 rounded-xl text-[10px] font-bold uppercase transition-all ${listaAsistencia[a.id] === 'Permiso' ? 'bg-amber-400 text-white shadow-md' : 'bg-white border border-slate-200 text-slate-400'}`}>PER</button></div></div>))}</div><div className="absolute bottom-6 left-6 right-6"><button onClick={guardarLista} className="w-full bg-indigo-600 p-4 rounded-2xl text-white font-black shadow-xl active:scale-95 transition-all text-lg">Guardar Asistencia</button></div></div></div>); 
+                contenidoMaestro = (
+                    <div className="flex flex-col h-full pt-4 animate-in slide-in-from-right duration-300">
+                        <div className="flex items-center space-x-4 mb-4 px-2"><div><h2 className="text-2xl font-black text-slate-800">Pasar Lista</h2><p className="text-slate-400 text-xs">{new Date().toLocaleDateString()}</p></div></div>
+                        
+                        <div className="flex-1 bg-white rounded-t-[40px] shadow-lg border-t border-slate-100 p-6 overflow-hidden flex flex-col relative">
+                            {/* NUEVO: PANEL DE LECCIÓN */}
+                            <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100 mb-4 flex-shrink-0">
+                                <h3 className="text-xs font-bold text-slate-500 uppercase tracking-widest mb-3 flex items-center"><i className="fas fa-book mr-2"></i> Material de Clase</h3>
+                                <div className="flex space-x-4 items-center">
+                                    <div className="w-1/3">
+                                        <label className="text-[10px] font-bold text-slate-400 uppercase ml-1 block mb-1">Lección N°</label>
+                                        <input type="number" className="w-full p-3 bg-white rounded-xl outline-none border border-slate-200 focus:border-indigo-400 text-center font-black text-indigo-600 text-lg shadow-sm" value={leccionActual} onChange={e=>setLeccionActual(e.target.value)} placeholder="Ej: 26" />
+                                    </div>
+                                    <div className="w-2/3">
+                                        <label className="text-[10px] font-bold text-slate-400 uppercase ml-1 block mb-1">¿Se impartió hoy?</label>
+                                        <div className="flex space-x-2">
+                                            <button onClick={() => setLeccionImpartida(true)} className={`flex-1 py-3 rounded-xl font-bold text-xs transition-colors ${leccionImpartida ? 'bg-emerald-500 text-white shadow-md' : 'bg-white border border-slate-200 text-slate-400'}`}>Sí ✅</button>
+                                            <button onClick={() => setLeccionImpartida(false)} className={`flex-1 py-3 rounded-xl font-bold text-xs transition-colors ${!leccionImpartida ? 'bg-rose-500 text-white shadow-md' : 'bg-white border border-slate-200 text-slate-400'}`}>No ❌</button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div className="overflow-y-auto space-y-4 pb-28 pr-2">
+                                {alumnos.map(a => (<div key={a.id} className="flex items-center justify-between p-3 bg-slate-50 rounded-2xl border border-slate-100"><div className="flex items-center space-x-3 w-1/3"><div className="w-10 h-10 bg-indigo-50 text-indigo-600 rounded-xl flex items-center justify-center text-sm font-bold">{a.nombre.charAt(0)}</div><p className="font-bold text-slate-700 text-sm truncate">{a.nombre.split(' ')[0]}</p></div><div className="flex space-x-2 flex-1 justify-end"><button onClick={() => setListaAsistencia({...listaAsistencia, [a.id]: 'Presente'})} className={`w-10 h-10 rounded-xl text-xs font-bold uppercase transition-all ${listaAsistencia[a.id] === 'Presente' ? 'bg-emerald-500 text-white shadow-md' : 'bg-white border border-slate-200 text-slate-400'}`}>P</button><button onClick={() => setListaAsistencia({...listaAsistencia, [a.id]: 'Ausente'})} className={`w-10 h-10 rounded-xl text-xs font-bold uppercase transition-all ${listaAsistencia[a.id] === 'Ausente' ? 'bg-rose-500 text-white shadow-md' : 'bg-white border border-slate-200 text-slate-400'}`}>A</button><button onClick={() => setListaAsistencia({...listaAsistencia, [a.id]: 'Permiso'})} className={`w-12 h-10 rounded-xl text-[10px] font-bold uppercase transition-all ${listaAsistencia[a.id] === 'Permiso' ? 'bg-amber-400 text-white shadow-md' : 'bg-white border border-slate-200 text-slate-400'}`}>PER</button></div></div>))}
+                            </div>
+                            <div className="absolute bottom-6 left-6 right-6"><button onClick={guardarLista} className="w-full bg-indigo-600 p-4 rounded-2xl text-white font-black shadow-xl active:scale-95 transition-all text-lg">Guardar Asistencia</button></div>
+                        </div>
+                    </div>
+                ); 
             }
         }
 
@@ -288,7 +343,6 @@ function DashboardView({
                 <div className="flex flex-col h-full pt-4 animate-in slide-in-from-right duration-300">
                     <div className="px-2 mb-4"><h2 className="text-2xl font-black text-slate-800">Reportes</h2><p className="text-slate-400 text-xs">Análisis y estadísticas de tu clase</p></div>
                     
-                    {/* CONTROLES DE PESTAÑA INTERNA */}
                     <div className="flex px-2 space-x-2 mb-4">
                         <button onClick={() => setSubVistaReporte('ranking')} className={`flex-1 py-2 rounded-xl text-xs font-bold transition-all ${subVistaReporte === 'ranking' ? 'bg-amber-100 text-amber-700' : 'bg-slate-50 text-slate-400'}`}><i className="fas fa-trophy mr-2"></i>Ranking</button>
                         <button onClick={() => setSubVistaReporte('historial')} className={`flex-1 py-2 rounded-xl text-xs font-bold transition-all ${subVistaReporte === 'historial' ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-50 text-slate-400'}`}><i className="fas fa-history mr-2"></i>Clases</button>
@@ -297,33 +351,19 @@ function DashboardView({
 
                     <div className="flex-1 bg-white rounded-t-[40px] shadow-[0_-10px_40px_rgba(0,0,0,0.05)] border-t border-slate-100 p-6 overflow-hidden flex flex-col">
                         
-                        {/* --- PESTAÑA RANKING (CON FILTRO DE FECHAS) --- */}
                         {subVistaReporte === 'ranking' && (
                             <>
-                                <h3 className="text-sm font-bold text-slate-700 mb-3 px-2 flex items-center justify-between">
-                                    Top Asistencia
-                                    <span className="text-[9px] bg-amber-50 text-amber-600 px-2 py-1 rounded-lg uppercase tracking-widest">{historialRankingFiltrado.length} clases analizadas</span>
-                                </h3>
+                                <h3 className="text-sm font-bold text-slate-700 mb-3 px-2 flex items-center justify-between">Top Asistencia<span className="text-[9px] bg-amber-50 text-amber-600 px-2 py-1 rounded-lg uppercase tracking-widest">{historialRankingFiltrado.length} clases analizadas</span></h3>
                                 
-                                {/* FILTRO DE FECHAS PARA RANKING */}
                                 <div className="bg-amber-50 p-3 rounded-2xl mb-4 border border-amber-100 flex space-x-3">
-                                    <div className="w-1/2">
-                                        <label className="text-[9px] font-bold text-amber-700 uppercase ml-1">Desde</label>
-                                        <input type="date" className="w-full p-2 mt-1 bg-white rounded-xl outline-none text-xs font-bold text-slate-600 border border-amber-100" value={fechaInicioRanking} onChange={e=>setFechaInicioRanking(e.target.value)} />
-                                    </div>
-                                    <div className="w-1/2">
-                                        <label className="text-[9px] font-bold text-amber-700 uppercase ml-1">Hasta</label>
-                                        <input type="date" className="w-full p-2 mt-1 bg-white rounded-xl outline-none text-xs font-bold text-slate-600 border border-amber-100" value={fechaFinRanking} onChange={e=>setFechaFinRanking(e.target.value)} />
-                                    </div>
+                                    <div className="w-1/2"><label className="text-[9px] font-bold text-amber-700 uppercase ml-1">Desde</label><input type="date" className="w-full p-2 mt-1 bg-white rounded-xl outline-none text-xs font-bold text-slate-600 border border-amber-100" value={fechaInicioRanking} onChange={e=>setFechaInicioRanking(e.target.value)} /></div>
+                                    <div className="w-1/2"><label className="text-[9px] font-bold text-amber-700 uppercase ml-1">Hasta</label><input type="date" className="w-full p-2 mt-1 bg-white rounded-xl outline-none text-xs font-bold text-slate-600 border border-amber-100" value={fechaFinRanking} onChange={e=>setFechaFinRanking(e.target.value)} /></div>
                                 </div>
 
                                 <div className="overflow-y-auto space-y-3 pb-24 pr-2">
                                     {rankingOrdenado.map((nino, index) => (
                                         <div key={nino.id} className="flex items-center justify-between p-4 bg-slate-50 rounded-2xl border border-slate-100">
-                                            <div className="flex items-center space-x-4">
-                                                <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-black ${index === 0 ? 'bg-amber-100 text-amber-600' : index === 1 ? 'bg-slate-200 text-slate-600' : index === 2 ? 'bg-orange-100 text-orange-800' : 'bg-white text-slate-300 border border-slate-200'}`}>#{index + 1}</div>
-                                                <p className="font-bold text-slate-700 text-sm">{nino.nombre.split(' ')[0]}</p>
-                                            </div>
+                                            <div className="flex items-center space-x-4"><div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-black ${index === 0 ? 'bg-amber-100 text-amber-600' : index === 1 ? 'bg-slate-200 text-slate-600' : index === 2 ? 'bg-orange-100 text-orange-800' : 'bg-white text-slate-300 border border-slate-200'}`}>#{index + 1}</div><p className="font-bold text-slate-700 text-sm">{nino.nombre.split(' ')[0]}</p></div>
                                             <span className="bg-emerald-50 text-emerald-600 font-black text-xs px-3 py-1.5 rounded-lg border border-emerald-100"><i className="fas fa-star mr-1"></i>{nino.asistenciasLogradas} Clases</span>
                                         </div>
                                     ))}
@@ -331,7 +371,6 @@ function DashboardView({
                             </>
                         )}
 
-                        {/* --- PESTAÑA HISTORIAL --- */}
                         {subVistaReporte === 'historial' && (
                             <>
                                 <h3 className="text-sm font-bold text-slate-700 mb-4 px-2">Días Anteriores (Solo Lectura)</h3>
@@ -339,35 +378,33 @@ function DashboardView({
                                     {historialAsistencias.length === 0 ? <p className="text-center text-slate-400 text-sm italic mt-8">Sin registros previos.</p> : 
                                     historialAsistencias.map((h, i) => (
                                         <div key={i} className="bg-slate-50 p-4 rounded-2xl border border-slate-100 flex justify-between items-center">
-                                            <div><p className="font-bold text-slate-700 text-sm">{formatoFecha(h.fecha)}</p><p className="text-[9px] text-slate-400 uppercase mt-1">Por: {h.maestro}</p></div>
-                                            <div className="flex space-x-1 text-[10px] font-bold"><span className="bg-emerald-100 text-emerald-700 px-2 py-1 rounded">P: {h.totales?.presentes||0}</span><span className="bg-rose-100 text-rose-700 px-2 py-1 rounded">A: {h.totales?.ausentes||0}</span></div>
+                                            <div>
+                                                <p className="font-bold text-slate-700 text-sm">{formatoFecha(h.fecha)}</p>
+                                                <p className="text-[9px] text-slate-400 uppercase mt-1">Por: {h.maestro}</p>
+                                                {/* NUEVO: MOSTRAR LECCIÓN EN MAESTRO */}
+                                                {h.leccion && (
+                                                    <p className={`text-[10px] font-bold mt-1 ${h.leccionImpartida ? 'text-indigo-500' : 'text-rose-500'}`}>
+                                                        <i className="fas fa-book-open mr-1"></i>Lección {h.leccion} {h.leccionImpartida ? '✅' : '❌'}
+                                                    </p>
+                                                )}
+                                            </div>
+                                            <div className="flex flex-col space-y-1">
+                                                <div className="flex space-x-1 text-[10px] font-bold"><span className="bg-emerald-100 text-emerald-700 px-2 py-1 rounded">P: {h.totales?.presentes||0}</span><span className="bg-rose-100 text-rose-700 px-2 py-1 rounded">A: {h.totales?.ausentes||0}</span></div>
+                                            </div>
                                         </div>
                                     ))}
                                 </div>
                             </>
                         )}
 
-                        {/* --- PESTAÑA FILTRO EDADES --- */}
                         {subVistaReporte === 'filtro' && (
                             <>
-                                <div className="flex space-x-4 mb-5">
-                                    <div className="w-1/2"><label className="text-[10px] font-bold text-sky-600 uppercase ml-2">Edad Mínima</label><input type="number" placeholder="Ej: 0" className="w-full p-4 mt-1 bg-sky-50 rounded-2xl outline-none border border-sky-100 focus:ring-2 focus:ring-sky-300 text-xl font-black text-slate-700 text-center" value={edadMin} onChange={e=>setEdadMin(e.target.value)} /></div>
-                                    <div className="w-1/2"><label className="text-[10px] font-bold text-sky-600 uppercase ml-2">Edad Máxima</label><input type="number" placeholder="Ej: 5" className="w-full p-4 mt-1 bg-sky-50 rounded-2xl outline-none border border-sky-100 focus:ring-2 focus:ring-sky-300 text-xl font-black text-slate-700 text-center" value={edadMax} onChange={e=>setEdadMax(e.target.value)} /></div>
-                                </div>
-                                {(edadMin !== '' || edadMax !== '') && (
-                                    <div className="flex justify-around items-center bg-sky-600 p-4 rounded-2xl shadow-sm mb-4">
-                                        <div className="text-center"><p className="text-3xl font-black text-white">{alumnosFiltrados.length}</p><p className="text-[9px] font-bold text-sky-200 uppercase tracking-widest">Total</p></div>
-                                        <div className="text-center"><p className="text-2xl font-black text-white">{alumnosFiltrados.filter(a=>a.genero==='M').length}</p><p className="text-[9px] font-bold text-sky-200 uppercase tracking-widest">Niños</p></div>
-                                        <div className="text-center"><p className="text-2xl font-black text-white">{alumnosFiltrados.filter(a=>a.genero==='F').length}</p><p className="text-[9px] font-bold text-sky-200 uppercase tracking-widest">Niñas</p></div>
-                                    </div>
-                                )}
+                                <div className="flex space-x-4 mb-5"><div className="w-1/2"><label className="text-[10px] font-bold text-sky-600 uppercase ml-2">Edad Mínima</label><input type="number" placeholder="Ej: 0" className="w-full p-4 mt-1 bg-sky-50 rounded-2xl outline-none border border-sky-100 focus:ring-2 focus:ring-sky-300 text-xl font-black text-slate-700 text-center" value={edadMin} onChange={e=>setEdadMin(e.target.value)} /></div><div className="w-1/2"><label className="text-[10px] font-bold text-sky-600 uppercase ml-2">Edad Máxima</label><input type="number" placeholder="Ej: 5" className="w-full p-4 mt-1 bg-sky-50 rounded-2xl outline-none border border-sky-100 focus:ring-2 focus:ring-sky-300 text-xl font-black text-slate-700 text-center" value={edadMax} onChange={e=>setEdadMax(e.target.value)} /></div></div>
+                                {(edadMin !== '' || edadMax !== '') && (<div className="flex justify-around items-center bg-sky-600 p-4 rounded-2xl shadow-sm mb-4"><div className="text-center"><p className="text-3xl font-black text-white">{alumnosFiltrados.length}</p><p className="text-[9px] font-bold text-sky-200 uppercase tracking-widest">Total</p></div><div className="text-center"><p className="text-2xl font-black text-white">{alumnosFiltrados.filter(a=>a.genero==='M').length}</p><p className="text-[9px] font-bold text-sky-200 uppercase tracking-widest">Niños</p></div><div className="text-center"><p className="text-2xl font-black text-white">{alumnosFiltrados.filter(a=>a.genero==='F').length}</p><p className="text-[9px] font-bold text-sky-200 uppercase tracking-widest">Niñas</p></div></div>)}
                                 <div className="overflow-y-auto space-y-3 pb-24 pr-2">
-                                    {alumnosFiltrados.length === 0 ? (
-                                        <p className="text-center text-slate-400 text-sm italic mt-8 border border-dashed border-slate-200 p-8 rounded-3xl">No hay alumnos en este rango.</p>
-                                    ) : (
-                                        alumnosFiltrados.map(nino => (
+                                    {alumnosFiltrados.map(nino => (
                                         <div key={nino.id} className="flex items-center space-x-3 p-3 bg-slate-50 rounded-xl border border-slate-100"><div className={`w-8 h-8 rounded-xl flex items-center justify-center text-xs font-bold shadow-sm ${nino.genero === 'M' ? 'bg-sky-50 text-sky-600' : 'bg-pink-50 text-pink-600'}`}>{nino.nombre.charAt(0)}</div><div><p className="font-bold text-slate-700 text-xs">{nino.nombre}</p><p className="text-[9px] text-slate-400 font-bold tracking-wide mt-0.5">{nino.edad} Años</p></div></div>
-                                    )))}
+                                    ))}
                                 </div>
                             </>
                         )}
