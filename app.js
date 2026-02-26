@@ -39,18 +39,28 @@ function App() {
         }
     }, []);
 
-    // --- AQUÍ ESTÁ LA MAGIA DE EXPULSIÓN EN TIEMPO REAL ---
+    // --- EXPULSIÓN EN TIEMPO REAL ---
     useEffect(() => {
         if (usuario && usuario !== 'ADMIN' && datosUsuarioActual?.id) {
             const unsubscribe = MaestrosService.vigilarUsuario(datosUsuarioActual.id, (u) => {
                 if (!u) { 
-                    // Si el documento del usuario se borra, se dispara este mensaje y se cierra la sesión
-                    alert("Tu usuario ha sido eliminado y no puedes acceder al sistema hasta que te vuelvas a registrar."); 
+                    // MENSAJE ESPECÍFICO PARA LOGÍSTICA
+                    if (usuario === 'LOGISTICA') {
+                        alert("Tu usuario ha sido eliminado y no puedes acceder al sistema hasta que te vuelvas a registrar.");
+                    } else {
+                        alert("Tu usuario ha sido eliminado.");
+                    }
                     handleLogout(); 
                 }
                 else { 
-                    setDatosUsuarioActual(u); 
-                    AuthService.guardarSesion(usuario, u); 
+                    setDatosUsuarioActual(prev => {
+                        if (!prev || prev.grupo !== u.grupo || prev.estado !== u.estado) {
+                            const newData = { id: prev.id, ...u }; 
+                            AuthService.guardarSesion(usuario, newData);
+                            return newData;
+                        }
+                        return prev;
+                    });
                 }
             });
             return () => unsubscribe();
@@ -74,7 +84,7 @@ function App() {
             unsubs.push(AlumnosService.suscribirHistorialPorCampo(datosUsuarioActual.campo, setHistorialAsistencias));
         }
         return () => { unsubs.forEach(unsub => unsub && unsub()); };
-    }, [usuario, datosUsuarioActual]);
+    }, [usuario, datosUsuarioActual?.campo]); 
 
     const handleLogin = async (rol, clave, nombre, campo) => {
         if (mantenimiento && rol !== 'ADMIN') return { exito: false, mensaje: "El sistema está en Mantenimiento." };
@@ -103,26 +113,16 @@ function App() {
     };
 
     const handleBorrarAlumno = async () => { if (!alumnoBorrar) return; try { await AlumnosService.eliminar(alumnoBorrar.id, alumnoBorrar.campo); setAlumnoBorrar(null); alert("Alumno eliminado y asistencia actualizada correctamente."); } catch (e) { alert("Error al eliminar alumno"); } };
-    
-    const handleBorrarMaestro = async () => { 
-        if (!maestroABorrar) return; 
-        try { 
-            const nombreUser = maestroABorrar.nombre;
-            await MaestrosService.eliminarConAlumnos(maestroABorrar.id, null); 
-            setMaestroABorrar(null); 
-            alert(`El usuario ${nombreUser} ha sido eliminado del sistema.`);
-        } catch (e) { alert("Error al eliminar usuario."); } 
-    };
-
+    const handleBorrarMaestro = async () => { if (!maestroABorrar) return; try { await MaestrosService.eliminarConAlumnos(maestroABorrar.id, null); setMaestroABorrar(null); alert("Usuario eliminado correctamente."); } catch (e) { alert("Error"); } };
     const handleBorrarCampo = async () => { if (!campoABorrar) return; try { await AlumnosService.eliminarCampoCompleto(campoABorrar); setCampoABorrar(null); alert("🧹 Limpieza completada."); } catch (e) { alert("Error."); } };
     const handleResetLecciones = async (campo, leccionBase) => { try { await AlumnosService.reiniciarLecciones(campo, leccionBase); alert(`✅ Material de ${campo} reiniciado a la Parte ${leccionBase === 0 ? '1' : '2'}.`); } catch (e) { alert("Error al reiniciar material."); } };
     const handleGuardarAsistencia = async (registros, leccion, leccionImpartida) => { const p = registros.filter(r=>r.estado==='Presente').length; const a = registros.filter(r=>r.estado==='Ausente').length; const per = registros.filter(r=>r.estado==='Permiso').length; try { await AlumnosService.guardarAsistencia({ fecha: new Date().toLocaleDateString('en-CA'), campo: datosUsuarioActual.campo, clase: 'General', maestro: datosUsuarioActual.nombre, registradoPorId: datosUsuarioActual.id, registros: registros, totales: { presentes: p, ausentes: a, permisos: per }, leccion: leccion, leccionImpartida: leccionImpartida, timestamp: Date.now() }); alert("Asistencia guardada con éxito"); return true; } catch (e) { return false; } };
 
+    // --- LOGÍSTICA: SOLAMENTE CANTIDAD Y GRUPO ---
     const handleCrearEntrega = async (e) => { 
         e.preventDefault(); 
         const fd = new FormData(e.target); 
         const datos = { 
-            campo: fd.get('campo'),
             cantidad: parseInt(fd.get('cantidad')), 
             grupo: fd.get('grupo'), 
             asignadoPor: 'Director' 
@@ -186,7 +186,7 @@ function App() {
             {modalAbierto && (<div className="fixed inset-0 bg-slate-900/40 backdrop-blur-md flex items-center justify-center z-50 p-4 animate-in fade-in"><div className="bg-white w-full max-w-md rounded-[32px] p-8 shadow-2xl animate-in slide-in-from-bottom max-h-[90vh] overflow-y-auto"><h2 className="text-2xl font-black text-slate-800 mb-6">{maestroEdicion ? 'Editar' : 'Inscribir'}</h2><form onSubmit={handleGuardar} className="space-y-4"><input type="text" name="nombre" required defaultValue={maestroEdicion?.nombre || ''} className="w-full p-4 bg-slate-50 rounded-2xl outline-none" placeholder="Nombre" /><select name="clase" defaultValue={maestroEdicion?.clase || 'MAESTRO'} className="w-full p-4 bg-slate-50 rounded-2xl outline-none bg-white border border-slate-100">{['MAESTRO', 'AUXILIAR', 'LOGISTICA', 'Dirección'].map(c => <option key={c} value={c}>{c}</option>)}</select><select name="campo" defaultValue={maestroEdicion?.campo || ''} className="w-full p-4 bg-slate-50 rounded-2xl outline-none bg-white border border-slate-100"><option value="">-- Ninguno --</option>{camposDisponibles.map(c => <option key={c} value={c}>{c}</option>)}</select><input type="tel" name="telefono" defaultValue={maestroEdicion?.telefono || ''} className="w-full p-4 bg-slate-50 rounded-2xl outline-none" placeholder="WhatsApp" /><div className="pt-4 flex flex-col space-y-3"><button type="submit" className="w-full py-4 bg-indigo-600 text-white font-black rounded-2xl shadow-xl">Guardar</button><button type="button" onClick={() => setModalAbierto(false)} className="text-slate-400 font-bold text-xs uppercase">Cancelar</button></div></form></div></div>)}
             {modalAlumno && (<div className="fixed inset-0 bg-slate-900/40 backdrop-blur-md flex items-center justify-center z-50 p-4 animate-in fade-in"><div className="bg-white w-full max-w-md rounded-[32px] p-8 shadow-2xl animate-in slide-in-from-bottom"><div className="w-16 h-16 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mx-auto mb-4 text-3xl"><i className="fas fa-child"></i></div><h2 className="text-2xl font-black text-slate-800 mb-2 text-center">{alumnoEdicion ? 'Editar' : 'Registrar'}</h2><form onSubmit={handleGuardarAlumno} className="space-y-4"><input type="text" name="nombre" required defaultValue={alumnoEdicion?.nombre || ''} placeholder="Nombre Completo" className="w-full p-4 bg-slate-50 rounded-2xl outline-none" /><input type="date" name="fechaNacimiento" required defaultValue={alumnoEdicion?.fechaNacimiento || ''} onChange={(e) => setEdadCalculada(calcularEdad(e.target.value))} className="w-full p-4 bg-slate-50 rounded-2xl outline-none" /><select name="genero" required defaultValue={alumnoEdicion?.genero || ''} className="w-full p-4 bg-slate-50 rounded-2xl outline-none bg-white border border-slate-100"><option value="">Seleccionar Género</option><option value="M">Masculino</option><option value="F">Femenino</option></select>{edadCalculada!==null && (<div className="bg-emerald-50 p-4 rounded-2xl border border-emerald-100 flex items-center justify-between"><span className="text-emerald-800 text-xs font-bold uppercase">Edad:</span><span className="text-2xl font-black text-emerald-600">{edadCalculada} Años</span></div>)}<div className="pt-2 flex flex-col space-y-3"><button type="submit" className="w-full py-4 bg-emerald-500 text-white font-black rounded-2xl shadow-xl">Guardar</button><button type="button" onClick={() => { setModalAlumno(false); setAlumnoEdicion(null); }} className="text-slate-400 font-bold text-xs uppercase">Cancelar</button></div></form></div></div>)}
             
-            {/* --- MODAL INTELIGENTE (SEPARANDO LOGÍSTICA DE MAESTROS) --- */}
+            {/* MODAL ELIMINAR USUARIO */}
             {maestroABorrar && (
                 <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-[60] p-6 animate-in fade-in">
                     <div className="bg-white rounded-[32px] p-8 w-full max-w-xs text-center shadow-2xl animate-in zoom-in-95 border-2 border-indigo-100">
@@ -197,7 +197,7 @@ function App() {
                         <div className="text-slate-500 text-xs mb-4 leading-relaxed bg-slate-50 p-4 rounded-xl text-left border border-slate-100">
                             Estás a punto de eliminar a: <br/> <b className="text-slate-700 text-sm">{maestroABorrar.nombre}</b> <span className="text-[10px] uppercase">({maestroABorrar.clase})</span>.<br/><br/>
                             {maestroABorrar.clase === 'LOGISTICA' ? (
-                                <span className="text-rose-600 font-bold"><i className="fas fa-exclamation-circle mr-1"></i> Sus datos de perfil se borrarán y será expulsado del sistema inmediatamente.</span>
+                                <span className="text-rose-600 font-bold"><i className="fas fa-exclamation-circle mr-1"></i> Sus datos se borrarán y será expulsado del sistema inmediatamente.</span>
                             ) : (
                                 <span className="text-emerald-600 font-bold"><i className="fas fa-shield-alt mr-1"></i> SEGURO: Los alumnos y la asistencia de su campo se conservarán seguros.</span>
                             )}
