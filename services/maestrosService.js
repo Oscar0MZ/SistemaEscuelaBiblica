@@ -1,7 +1,6 @@
 // services/maestrosService.js
 
 window.MaestrosService = {
-    // 1. Escuchar lista
     suscribir: (callback) => {
         return window.db.collection('maestros').onSnapshot((snapshot) => {
             const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
@@ -10,14 +9,12 @@ window.MaestrosService = {
         });
     },
 
-    // 2. Vigilar usuario
     vigilarUsuario: (id, callback) => {
         return window.db.collection('maestros').doc(id).onSnapshot((doc) => {
             callback(doc.exists ? doc.data() : null);
         });
     },
 
-    // 3. Guardar
     guardar: async (datos, id = null, usuarioActual) => {
         try {
             if (id) {
@@ -38,11 +35,8 @@ window.MaestrosService = {
         }
     },
 
-    // 4. ELIMINAR USUARIO (AHORA ES 100% SEGURO)
-    // Ya NO borra alumnos ni asistencias. Solo borra el acceso del personal.
     eliminarConAlumnos: async (idMaestro, campoMaestro) => {
         try {
-            // Únicamente eliminamos el documento del usuario en la colección 'maestros'
             await window.db.collection('maestros').doc(idMaestro).delete();
             return true;
         } catch (error) {
@@ -51,17 +45,14 @@ window.MaestrosService = {
         }
     },
 
-    // 5. Eliminar simple
     eliminar: async (id) => {
         await window.db.collection('maestros').doc(id).delete();
     },
 
-    // 6. Aprobar
     aprobar: async (id) => {
         await window.db.collection('maestros').doc(id).update({ estado: 'Activo' });
     },
 
-    // 7. Notificar
     notificar: (datos) => {
         if (window.emailjs) {
             window.emailjs.send("service_475d2ya", "template_516xc7k", {
@@ -71,5 +62,22 @@ window.MaestrosService = {
                 role: datos.clase
             });
         }
+    },
+
+    // NUEVO: CONTROL DE MANTENIMIENTO GLOBAL
+    suscribirMantenimiento: (callback) => {
+        return window.db.collection('sistema').doc('config').onSnapshot((doc) => {
+            if (doc.exists) {
+                callback(doc.data().mantenimiento || false);
+            } else {
+                callback(false); // Por defecto el sistema está abierto
+            }
+        });
+    },
+
+    toggleMantenimiento: async (estadoActual) => {
+        await window.db.collection('sistema').doc('config').set({ 
+            mantenimiento: !estadoActual 
+        }, { merge: true });
     }
 };
