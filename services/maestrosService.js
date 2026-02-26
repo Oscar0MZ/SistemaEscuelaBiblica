@@ -38,11 +38,11 @@ window.MaestrosService = {
         }
     },
 
-    // 4. ELIMINAR SEGURO (SOLO EL USUARIO)
-    // Ya no borramos ni alumnos ni asistencia, para proteger los datos del campo.
+    // 4. ELIMINAR USUARIO (AHORA ES 100% SEGURO)
+    // Ya NO borra alumnos ni asistencias. Solo borra el acceso del personal.
     eliminarConAlumnos: async (idMaestro, campoMaestro) => {
         try {
-            // Simplemente borramos el documento del maestro/auxiliar
+            // Únicamente eliminamos el documento del usuario en la colección 'maestros'
             await window.db.collection('maestros').doc(idMaestro).delete();
             return true;
         } catch (error) {
