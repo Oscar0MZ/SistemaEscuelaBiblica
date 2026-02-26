@@ -1,44 +1,30 @@
 // services/alumnosService.js
 
 window.AlumnosService = {
-    // 1. Registrar Alumno (CON VALIDACIÓN DE DUPLICADOS)
     registrar: async (datosAlumno) => {
         try {
-            // A) Verificar si ya existe en el mismo campo
             const busqueda = await window.db.collection('alumnos')
                 .where('campo', '==', datosAlumno.campo)
-                .where('nombre', '==', datosAlumno.nombre.trim()) // Buscamos nombre exacto
+                .where('nombre', '==', datosAlumno.nombre.trim())
                 .get();
 
-            if (!busqueda.empty) {
-                throw new Error("DUPLICADO");
-            }
+            if (!busqueda.empty) throw new Error("DUPLICADO");
 
-            // B) Si no existe, lo guardamos
-            await window.db.collection('alumnos').add({
-                ...datosAlumno,
-                createdAt: Date.now()
-            });
+            await window.db.collection('alumnos').add({ ...datosAlumno, createdAt: Date.now() });
             return true;
-        } catch (error) {
-            console.error("Error en servicio:", error);
-            throw error;
-        }
+        } catch (error) { console.error(error); throw error; }
     },
 
-    // 2. Actualizar
     actualizar: async (id, datosAlumno) => {
         await window.db.collection('alumnos').doc(id).update(datosAlumno);
         return true;
     },
 
-    // 3. Eliminar
     eliminar: async (id) => {
         await window.db.collection('alumnos').doc(id).delete();
         return true;
     },
 
-    // 4. Suscribir por Campo
     suscribirPorCampo: (campo, callback) => {
         return window.db.collection('alumnos').where('campo', '==', campo).onSnapshot((snapshot) => {
             const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
@@ -47,7 +33,6 @@ window.AlumnosService = {
         });
     },
 
-    // 5. Suscribir Todos
     suscribirTodos: (callback) => {
         return window.db.collection('alumnos').onSnapshot((snapshot) => {
             const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
@@ -55,13 +40,11 @@ window.AlumnosService = {
         });
     },
 
-    // 6. Guardar Asistencia
     guardarAsistencia: async (datos) => {
         const idDoc = `${datos.fecha}_${datos.campo.replace(/\s+/g, '')}`; 
         await window.db.collection('asistencias').doc(idDoc).set(datos);
     },
 
-    // 7. Suscribir Asistencia HOY
     suscribirAsistenciaHoy: (campo, callback) => {
         const hoy = new Date().toLocaleDateString('en-CA');
         const idDoc = `${hoy}_${campo.replace(/\s+/g, '')}`;
@@ -70,7 +53,6 @@ window.AlumnosService = {
         });
     },
 
-    // 8. Suscribir Semana (Admin)
     suscribirAsistenciaSemanal: (callback) => {
         const hoy = new Date();
         const diaSemana = hoy.getDay(); 
@@ -96,6 +78,35 @@ window.AlumnosService = {
                     registros: registros,
                     rango: { inicio: inicioSemanaStr, fin: finSemanaStr }
                 });
+            });
+    },
+
+    // 9. NUEVO: HISTORIAL ANUAL POR CAMPO (Para Ranking del Maestro)
+    suscribirHistorialPorCampo: (campo, callback) => {
+        // Establece el "Reinicio" el 1 de Enero del año actual
+        const inicioAnio = new Date(new Date().getFullYear(), 0, 1).getTime();
+        
+        return window.db.collection('asistencias')
+            .where('campo', '==', campo)
+            .onSnapshot((snapshot) => {
+                let data = snapshot.docs.map(doc => doc.data());
+                // Solo devuelve los de este año (El reinicio anual automático)
+                data = data.filter(d => d.timestamp && d.timestamp >= inicioAnio);
+                data.sort((a, b) => b.timestamp - a.timestamp); // Más recientes primero
+                callback(data);
+            });
+    },
+
+    // 10. NUEVO: HISTORIAL ANUAL GLOBAL (Para el Administrador)
+    suscribirHistorialGlobal: (callback) => {
+        const inicioAnio = new Date(new Date().getFullYear(), 0, 1).getTime();
+        
+        return window.db.collection('asistencias')
+            .onSnapshot((snapshot) => {
+                let data = snapshot.docs.map(doc => doc.data());
+                data = data.filter(d => d.timestamp && d.timestamp >= inicioAnio);
+                data.sort((a, b) => b.timestamp - a.timestamp);
+                callback(data);
             });
     }
 };
