@@ -47,7 +47,7 @@ function DashboardView({
     const historialVisible = historialAsistencias.filter(h => !h.esReset);
     const todasAsistencias = datosGlobalesAsistencia?.registros || [];
 
-    // CONSTANTE: CAMPOS FIJOS PARA EVITAR PANTALLA BLANCA SI LA DB ESTÁ VACÍA
+    // CONSTANTE DE SEGURIDAD: Evita pantalla blanca cuando la base de datos está vacía
     const camposFijos = ["La Isla", "Las Delicias", "El Amatal", "El Manguito", "Buenos Aires", "Corozal #1", "El Porvenir", "El Caulote", "Corozal #2", "Valle Encantado", "La Playa"];
 
     const formatoFecha = (f) => {
@@ -107,7 +107,7 @@ function DashboardView({
         const activos = maestros.filter(m => m.estado === 'Activo');
         const listaAdminVisible = maestros.filter(m => m.nombre.toLowerCase().includes(busqueda.toLowerCase()) || (m.campo && m.campo.toLowerCase().includes(busqueda.toLowerCase())));
         
-        // UNIMOS LOS CAMPOS FIJOS CON LOS EXISTENTES EN DB PARA QUE NUNCA SE QUEDE EN BLANCO
+        // UNIMOS LOS CAMPOS FIJOS PARA QUE NUNCA SE QUEDE EN BLANCO
         const todosLosCamposExistentes = [...new Set([
             ...camposFijos,
             ...todosLosAlumnos.map(a => a.campo),
@@ -269,7 +269,7 @@ function DashboardView({
             );
         }
 
-        // --- PESTAÑA LOGÍSTICA (RESTAURADA CON ASIGNACIÓN DE CAMPO) ---
+        // --- PESTAÑA LOGÍSTICA (SOLO CANTIDAD Y GRUPO) ---
         if (vistaActual === 'logistica') {
             const entregasPendientes = entregasLogistica.filter(e => e.estado === 'Pendiente');
             const entregasCompletadas = entregasLogistica.filter(e => e.estado === 'Entregado');
@@ -290,11 +290,6 @@ function DashboardView({
                                 <form onSubmit={onCrearEntrega} className="bg-amber-50 p-6 rounded-[32px] border border-amber-100 shadow-sm mx-1">
                                     <h3 className="font-bold text-amber-800 text-sm mb-4 flex items-center"><i className="fas fa-box-open mr-2"></i> Asignar Víveres</h3>
                                     <div className="space-y-3">
-                                        {/* EL SELECT DE CAMPO FUE RESTAURADO */}
-                                        <select name="campo" required className="w-full p-4 bg-white rounded-2xl outline-none border border-amber-100 text-sm font-bold text-slate-700">
-                                            <option value="">Seleccionar Campo Destino</option>
-                                            {camposFijos.map(c => <option key={c} value={c}>{c}</option>)}
-                                        </select>
                                         <div className="flex space-x-3">
                                             <div className="w-1/2">
                                                 <input type="number" name="cantidad" required placeholder="Cant. Víveres" className="w-full p-4 bg-white rounded-2xl outline-none border border-amber-100 text-sm font-bold text-slate-700 text-center" />
@@ -316,10 +311,10 @@ function DashboardView({
 
                                 <div className="mt-6 px-1">
                                     {entregasPendientes.length > 0 && (
-                                        <div className="mb-6"><h4 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-3 px-2">Pendientes ({entregasPendientes.length})</h4><div className="space-y-3">{entregasPendientes.map(e => (<div key={e.id} className="bg-white p-4 rounded-2xl border-l-4 border-l-amber-400 shadow-sm flex justify-between items-center"><div><p className="font-bold text-slate-700 text-lg">{e.campo}</p><p className="text-xs text-slate-500 font-bold mt-1"><i className="fas fa-users mr-1"></i>{e.grupo} <span className="mx-2 text-slate-300">|</span> <span className="text-indigo-500"><i className="fas fa-box mr-1"></i>{e.cantidad} Paquetes</span></p></div><button onClick={() => onBorrarEntrega(e.id)} className="w-10 h-10 flex items-center justify-center bg-rose-50 text-rose-500 rounded-xl hover:bg-rose-500 hover:text-white transition-colors"><i className="fas fa-trash-alt"></i></button></div>))}</div></div>
+                                        <div className="mb-6"><h4 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-3 px-2">Pendientes ({entregasPendientes.length})</h4><div className="space-y-3">{entregasPendientes.map(e => (<div key={e.id} className="bg-white p-4 rounded-2xl border-l-4 border-l-amber-400 shadow-sm flex justify-between items-center"><div><p className="font-bold text-slate-700 text-lg">Cargamento Asignado</p><p className="text-xs text-slate-500 font-bold mt-1"><i className="fas fa-users mr-1"></i>{e.grupo} <span className="mx-2 text-slate-300">|</span> <span className="text-indigo-500"><i className="fas fa-box mr-1"></i>{e.cantidad} Paquetes</span></p></div><button onClick={() => onBorrarEntrega(e.id)} className="w-10 h-10 flex items-center justify-center bg-rose-50 text-rose-500 rounded-xl hover:bg-rose-500 hover:text-white transition-colors"><i className="fas fa-trash-alt"></i></button></div>))}</div></div>
                                     )}
                                     {entregasCompletadas.length > 0 && (
-                                        <div><h4 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-3 px-2">Completadas Hoy</h4><div className="space-y-3 opacity-60">{entregasCompletadas.slice(0, 5).map(e => (<div key={e.id} className="bg-slate-50 p-4 rounded-2xl border border-slate-100 flex justify-between items-center"><div><p className="font-bold text-slate-700 line-through decoration-slate-300">{e.campo}</p><p className="text-[10px] text-slate-400 mt-1 uppercase">Entregado por {e.grupo}</p></div><span className="text-emerald-500 font-bold text-sm"><i className="fas fa-check-circle"></i></span></div>))}</div></div>
+                                        <div><h4 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-3 px-2">Completadas Hoy</h4><div className="space-y-3 opacity-60">{entregasCompletadas.slice(0, 5).map(e => (<div key={e.id} className="bg-slate-50 p-4 rounded-2xl border border-slate-100 flex justify-between items-center"><div><p className="font-bold text-slate-700 line-through decoration-slate-300">Cargamento Entregado</p><p className="text-[10px] text-slate-400 mt-1 uppercase">Entregado por {e.grupo}</p></div><span className="text-emerald-500 font-bold text-sm"><i className="fas fa-check-circle"></i></span></div>))}</div></div>
                                     )}
                                 </div>
                             </>
@@ -436,13 +431,13 @@ function DashboardView({
                     <div className="flex-1 bg-white rounded-t-[40px] shadow-[0_-10px_40px_rgba(0,0,0,0.05)] border-t border-slate-100 p-6 overflow-hidden flex flex-col">
                         <div className="overflow-y-auto space-y-4 pb-24 pr-2">
                             {entregasPendientes.length === 0 ? (
-                                <div className="text-center p-8 mt-10"><div className="w-24 h-24 bg-slate-50 text-slate-300 rounded-full flex items-center justify-center text-5xl mx-auto mb-4"><i className="fas fa-check-double"></i></div><h3 className="font-bold text-slate-700 text-lg">¡Ruta Limpia!</h3><p className="text-slate-400 text-sm mt-1">Tu grupo no tiene misiones pendientes.</p></div>
+                                <div className="text-center p-8 mt-10"><div className="w-24 h-24 bg-slate-50 text-slate-300 rounded-full flex items-center justify-center text-5xl mx-auto mb-4"><i className="fas fa-check-double"></i></div><h3 className="font-bold text-slate-700 text-lg">¡Todo Listo!</h3><p className="text-slate-400 text-sm mt-1">Tu grupo no tiene misiones pendientes.</p></div>
                             ) : (
                                 entregasPendientes.map(e => (
                                     <div key={e.id} className="bg-slate-50 p-5 rounded-3xl border border-slate-200 relative overflow-hidden">
                                         <div className="absolute top-0 right-0 bg-amber-400 text-white text-[9px] font-black uppercase px-3 py-1 rounded-bl-xl shadow-sm">{e.grupo}</div>
-                                        <h3 className="font-black text-slate-800 text-xl mb-1 mt-2"><i className="fas fa-map-marker-alt text-amber-500 mr-2"></i>{e.campo}</h3>
-                                        <p className="text-sm font-bold text-indigo-500 mb-5 pl-7">{e.cantidad} Paquetes a entregar</p>
+                                        <h3 className="font-black text-slate-800 text-xl mb-1 mt-2"><i className="fas fa-truck-loading text-amber-500 mr-2"></i>Misión de Reparto</h3>
+                                        <p className="text-sm font-bold text-indigo-500 mb-5 pl-8">{e.cantidad} Paquetes a entregar</p>
                                         <button onClick={() => onActualizarEntrega(e.id, 'Entregado')} className="w-full py-4 bg-emerald-500 hover:bg-emerald-600 text-white font-black rounded-2xl shadow-lg shadow-emerald-200 active:scale-95 transition-all flex items-center justify-center text-lg"><i className="fas fa-check-circle mr-2"></i> Marcar Entregado</button>
                                     </div>
                                 ))
