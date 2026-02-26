@@ -14,6 +14,9 @@ function App() {
     const [entregasLogistica, setEntregasLogistica] = useState([]);
     const [mantenimiento, setMantenimiento] = useState(false);
     
+    // NUEVO ESTADO: Inventario de Bodega
+    const [inventarioViveres, setInventarioViveres] = useState(0);
+
     const [modalAbierto, setModalAbierto] = useState(false);
     const [modalAlumno, setModalAlumno] = useState(false);
     const [maestroEdicion, setMaestroEdicion] = useState(null);
@@ -71,6 +74,14 @@ function App() {
             unsubs.push(AlumnosService.suscribirAsistenciaSemanal(setDatosGlobalesAsistencia));
             unsubs.push(AlumnosService.suscribirHistorialGlobal(setHistorialAsistencias));
             if(LogisticaService) unsubs.push(LogisticaService.suscribirTodas(setEntregasLogistica)); 
+            
+            // MAGIA: Escuchar el inventario en tiempo real
+            const unsubInv = window.db.collection('sistema').doc('inventario').onSnapshot(doc => {
+                if (doc.exists) setInventarioViveres(doc.data().total || 0);
+                else setInventarioViveres(0);
+            });
+            unsubs.push(unsubInv);
+
         } else if (usuario === 'LOGISTICA') {
             if(LogisticaService) unsubs.push(LogisticaService.suscribirTodas(setEntregasLogistica)); 
         } else if (datosUsuarioActual && datosUsuarioActual.campo) {
@@ -115,7 +126,6 @@ function App() {
 
     const handleCrearEntrega = async (datos) => { try { await LogisticaService.crear({ ...datos, asignadoPor: 'Director' }); alert("Ruta y víveres asignados correctamente al grupo."); } catch (error) { alert("Error al asignar la ruta."); } };
     
-    // --- NUEVA LÓGICA DE BLOQUEO POR CAMPO INDIVIDUAL ---
     const handleActualizarEntrega = async (id, estado, detalles = null, bloqueos = null) => { 
         try { 
             const payload = { estado: estado };
@@ -128,10 +138,7 @@ function App() {
 
     const handleGuardarAvanceEntrega = async (id, detalles, bloqueos) => {
         try { 
-            await window.db.collection('entregas').doc(id).update({ 
-                detalles: detalles,
-                bloqueos: bloqueos
-            }); 
+            await window.db.collection('entregas').doc(id).update({ detalles: detalles, bloqueos: bloqueos }); 
             alert("Avance guardado correctamente.");
         } catch (error) { alert("Error guardando avance."); }
     };
@@ -139,6 +146,16 @@ function App() {
     const handleBorrarEntrega = async (id) => { try { await LogisticaService.eliminar(id); } catch (error) { alert("Error al borrar entrega."); } };
     const handleToggleMantenimiento = () => { MaestrosService.toggleMantenimiento(mantenimiento); };
     const handleAssignGroup = async (idUsuario, nuevoGrupo) => { try { await window.db.collection('maestros').doc(idUsuario).update({ grupo: nuevoGrupo }); } catch (error) { alert("Error al asignar el grupo al usuario."); } };
+
+    // NUEVO: Función para actualizar el stock de la bodega
+    const handleActualizarInventario = async (nuevoTotal) => {
+        try {
+            await window.db.collection('sistema').doc('inventario').set({ total: nuevoTotal }, { merge: true });
+            alert("Stock inicial actualizado correctamente.");
+        } catch(e) {
+            alert("Error al guardar el inventario.");
+        }
+    };
 
     if (!usuario) return <LoginView onLogin={handleLogin} />;
 
@@ -164,6 +181,8 @@ function App() {
                     entregasLogistica={entregasLogistica} 
                     usuario={usuario} datosUsuarioActual={datosUsuarioActual}
                     mantenimiento={mantenimiento} onToggleMantenimiento={handleToggleMantenimiento}
+                    inventarioViveres={inventarioViveres} // PASAMOS EL INVENTARIO
+                    onActualizarInventario={handleActualizarInventario} // PASAMOS LA FUNCIÓN
                     onApprove={MaestrosService.aprobar} onDelete={setMaestroABorrar} onEdit={(m) => { setMaestroEdicion(m); setModalAbierto(true); }} onToggleModal={() => { setMaestroEdicion(null); setModalAbierto(true); }}
                     onSaveAsistencia={handleGuardarAsistencia}
                     onOpenAlumnoModal={() => { setAlumnoEdicion(null); setEdadCalculada(null); setModalAlumno(true); }}
