@@ -4,15 +4,12 @@ const { AuthService, MaestrosService, AlumnosService, LoginView, DashboardView }
 function App() {
     const [usuario, setUsuario] = useState(null);
     const [datosUsuarioActual, setDatosUsuarioActual] = useState(null);
-    
-    // Datos
     const [maestros, setMaestros] = useState([]);
     const [alumnos, setAlumnos] = useState([]);
-    const [todosLosAlumnos, setTodosLosAlumnos] = useState([]); 
+    const [todosLosAlumnos, setTodosLosAlumnos] = useState([]);
     const [asistenciaHoy, setAsistenciaHoy] = useState(null);
     const [datosGlobalesAsistencia, setDatosGlobalesAsistencia] = useState({ registros: [], rango: null });
     
-    // UI States
     const [modalAbierto, setModalAbierto] = useState(false);
     const [modalAlumno, setModalAlumno] = useState(false);
     const [maestroEdicion, setMaestroEdicion] = useState(null);
@@ -23,17 +20,14 @@ function App() {
 
     const camposDisponibles = ["La Isla", "Las Delicias", "El Amatal", "El Manguito", "Buenos Aires", "Corozal #1", "El Porvenir", "El Caulote", "Corozal #2", "Valle Encantado", "La Playa"];
 
-    // 1. Cargar Sesión
     useEffect(() => {
         const sesion = AuthService.obtenerSesion();
         const datosGuardados = AuthService.obtenerDatosUsuario();
         if (sesion) { setUsuario(sesion); if (datosGuardados) setDatosUsuarioActual(datosGuardados); }
     }, []);
 
-    // 2. Suscripciones
     useEffect(() => { if (MaestrosService) MaestrosService.suscribir(setMaestros); }, []);
 
-    // 3. Vigilancia
     useEffect(() => {
         if (usuario && usuario !== 'ADMIN' && datosUsuarioActual?.id) {
             const unsubscribe = MaestrosService.vigilarUsuario(datosUsuarioActual.id, (u) => {
@@ -43,7 +37,6 @@ function App() {
         }
     }, [usuario, datosUsuarioActual]);
 
-    // 4. Carga Datos
     useEffect(() => {
         if (!usuario || !AlumnosService) return;
         if (usuario === 'ADMIN') {
@@ -70,31 +63,31 @@ function App() {
     const handleLogout = () => { setUsuario(null); setDatosUsuarioActual(null); setAlumnos([]); setTodosLosAlumnos([]); AuthService.cerrarSesion(); };
 
     const handleGuardar = async (e) => { e.preventDefault(); const d = Object.fromEntries(new FormData(e.target)); try { const n = await MaestrosService.guardar(d, maestroEdicion?.id, usuario); if (n && usuario !== 'ADMIN') MaestrosService.notificar(n); setModalAbierto(false); setMaestroEdicion(null); } catch (err) { alert("Error"); } };
-    
     const calcularEdad = (f) => { if (!f) return null; const h = new Date(); const c = new Date(f); let e = h.getFullYear() - c.getFullYear(); if (h.getMonth() < c.getMonth() || (h.getMonth()===c.getMonth() && h.getDate()<c.getDate())) e--; return e; };
 
+    // --- GUARDAR ALUMNO CON GÉNERO ---
     const handleGuardarAlumno = async (e) => {
         e.preventDefault();
         const fd = new FormData(e.target);
         const nombre = fd.get('nombre').trim();
         const fecha = fd.get('fechaNacimiento');
+        const genero = fd.get('genero'); // Nuevo campo
         const edad = calcularEdad(fecha);
-        if (!nombre || !fecha) return;
+        
+        if (!nombre || !fecha || !genero) {
+            alert("Por favor completa todos los campos (Nombre, Fecha y Género)");
+            return;
+        }
 
         const datos = {
-            nombre: nombre, fechaNacimiento: fecha, edad: edad,
+            nombre: nombre, fechaNacimiento: fecha, edad: edad, genero: genero,
             maestroResponsable: datosUsuarioActual?.nombre, registradoPorId: datosUsuarioActual?.id,
             campo: datosUsuarioActual?.campo || 'Sin Campo', clase: 'General'
         };
 
         try {
-            if (alumnoEdicion) { 
-                await AlumnosService.actualizar(alumnoEdicion.id, datos); 
-                alert("Alumno actualizado"); 
-            } else { 
-                await AlumnosService.registrar(datos); 
-                alert("Alumno registrado exitosamente"); 
-            }
+            if (alumnoEdicion) { await AlumnosService.actualizar(alumnoEdicion.id, datos); alert("Alumno actualizado"); } 
+            else { await AlumnosService.registrar(datos); alert("Alumno registrado exitosamente"); }
             setModalAlumno(false); setAlumnoEdicion(null); setEdadCalculada(null);
         } catch (error) { 
             if (error.message === "DUPLICADO") { alert("⛔ ¡Error! Este alumno ya existe."); } 
@@ -103,17 +96,7 @@ function App() {
     };
 
     const handleBorrarAlumno = async () => { if (!idAlumnoBorrar) return; try { await AlumnosService.eliminar(idAlumnoBorrar); setIdAlumnoBorrar(null); } catch (e) { alert("Error"); } };
-    
-    // --- BORRAR MAESTRO (SEGURO) ---
-    const handleBorrarMaestro = async () => { 
-        if (!maestroABorrar) return; 
-        try { 
-            // Ya no borramos datos en cascada, solo al usuario
-            await MaestrosService.eliminarConAlumnos(maestroABorrar.id, null); 
-            setMaestroABorrar(null); 
-        } catch (e) { alert("Error al eliminar."); } 
-    };
-
+    const handleBorrarMaestro = async () => { if (!maestroABorrar) return; try { await MaestrosService.eliminarConAlumnos(maestroABorrar.id, null); setMaestroABorrar(null); } catch (e) { alert("Error"); } };
     const handleGuardarAsistencia = async (registros) => { const p = registros.filter(r=>r.estado==='Presente').length; const a = registros.filter(r=>r.estado==='Ausente').length; const per = registros.filter(r=>r.estado==='Permiso').length; try { await AlumnosService.guardarAsistencia({ fecha: new Date().toLocaleDateString('en-CA'), campo: datosUsuarioActual.campo, clase: 'General', maestro: datosUsuarioActual.nombre, registradoPorId: datosUsuarioActual.id, registros: registros, totales: { presentes: p, ausentes: a, permisos: per }, timestamp: Date.now() }); alert("Asistencia guardada"); return true; } catch (e) { return false; } };
 
     if (!usuario) return <LoginView onLogin={handleLogin} />;
@@ -134,29 +117,11 @@ function App() {
                     onDeleteAlumno={setIdAlumnoBorrar}
                 />
             </main>
-            {/* Modales (Resumidos) */}
+            {/* Modales */}
             {modalAbierto && (<div className="fixed inset-0 bg-slate-900/40 backdrop-blur-md flex items-center justify-center z-50 p-4 animate-in fade-in"><div className="bg-white w-full max-w-md rounded-[32px] p-8 shadow-2xl animate-in slide-in-from-bottom max-h-[90vh] overflow-y-auto"><h2 className="text-2xl font-black text-slate-800 mb-6">{maestroEdicion ? 'Editar' : 'Inscribir'}</h2><form onSubmit={handleGuardar} className="space-y-4"><input type="text" name="nombre" required defaultValue={maestroEdicion?.nombre || ''} className="w-full p-4 bg-slate-50 rounded-2xl outline-none" placeholder="Nombre" /><select name="clase" defaultValue={maestroEdicion?.clase || 'MAESTRO'} className="w-full p-4 bg-slate-50 rounded-2xl outline-none bg-white border border-slate-100">{['MAESTRO', 'AUXILIAR', 'LOGISTICA', 'Dirección'].map(c => <option key={c} value={c}>{c}</option>)}</select><select name="campo" defaultValue={maestroEdicion?.campo || ''} className="w-full p-4 bg-slate-50 rounded-2xl outline-none bg-white border border-slate-100"><option value="">-- Ninguno --</option>{camposDisponibles.map(c => <option key={c} value={c}>{c}</option>)}</select><input type="tel" name="telefono" defaultValue={maestroEdicion?.telefono || ''} className="w-full p-4 bg-slate-50 rounded-2xl outline-none" placeholder="WhatsApp" /><div className="pt-4 flex flex-col space-y-3"><button type="submit" className="w-full py-4 bg-indigo-600 text-white font-black rounded-2xl shadow-xl">Guardar</button><button type="button" onClick={() => setModalAbierto(false)} className="text-slate-400 font-bold text-xs uppercase">Cancelar</button></div></form></div></div>)}
-            {modalAlumno && (<div className="fixed inset-0 bg-slate-900/40 backdrop-blur-md flex items-center justify-center z-50 p-4 animate-in fade-in"><div className="bg-white w-full max-w-md rounded-[32px] p-8 shadow-2xl animate-in slide-in-from-bottom"><div className="w-16 h-16 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mx-auto mb-4 text-3xl"><i className="fas fa-child"></i></div><h2 className="text-2xl font-black text-slate-800 mb-2 text-center">{alumnoEdicion ? 'Editar' : 'Registrar'}</h2><form onSubmit={handleGuardarAlumno} className="space-y-4"><input type="text" name="nombre" required defaultValue={alumnoEdicion?.nombre || ''} placeholder="Nombre Completo" className="w-full p-4 bg-slate-50 rounded-2xl outline-none" /><input type="date" name="fechaNacimiento" required defaultValue={alumnoEdicion?.fechaNacimiento || ''} onChange={(e) => setEdadCalculada(calcularEdad(e.target.value))} className="w-full p-4 bg-slate-50 rounded-2xl outline-none" />{edadCalculada!==null && (<div className="bg-emerald-50 p-4 rounded-2xl border border-emerald-100 flex items-center justify-between"><span className="text-emerald-800 text-xs font-bold uppercase">Edad:</span><span className="text-2xl font-black text-emerald-600">{edadCalculada} Años</span></div>)}<div className="pt-2 flex flex-col space-y-3"><button type="submit" className="w-full py-4 bg-emerald-500 text-white font-black rounded-2xl shadow-xl">Guardar</button><button type="button" onClick={() => { setModalAlumno(false); setAlumnoEdicion(null); }} className="text-slate-400 font-bold text-xs uppercase">Cancelar</button></div></form></div></div>)}
-            
-            {/* MODAL BORRAR MAESTRO (ACTUALIZADO: MENSAJE SEGURO) */}
-            {maestroABorrar && (
-                <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-[60] p-6 animate-in fade-in">
-                    <div className="bg-white rounded-[32px] p-8 w-full max-w-xs text-center shadow-2xl animate-in zoom-in-95 border-2 border-indigo-100">
-                        <div className="w-16 h-16 bg-indigo-50 text-indigo-500 rounded-full flex items-center justify-center mx-auto mb-4 text-3xl"><i className="fas fa-user-minus"></i></div>
-                        <h3 className="text-xl font-black text-slate-800 mb-2">Eliminar Usuario</h3>
-                        <div className="text-slate-500 text-xs mb-4 leading-relaxed bg-slate-50 p-3 rounded-xl">
-                            Estás a punto de eliminar a: <br/> <b>{maestroABorrar.nombre}</b>.
-                            <br/><br/>
-                            <span className="text-emerald-600 font-bold"><i className="fas fa-shield-alt mr-1"></i> SEGURO:</span> Los datos de alumnos y asistencia del campo <b>SE CONSERVARÁN</b> para el próximo encargado.
-                        </div>
-                        <div className="space-y-3">
-                            <button onClick={handleBorrarMaestro} className="w-full py-3 bg-indigo-600 text-white font-bold rounded-2xl shadow-lg active:scale-95 transition-all">Sí, eliminar usuario</button>
-                            <button onClick={() => setMaestroABorrar(null)} className="w-full py-2 text-slate-400 font-bold text-xs uppercase tracking-widest">Cancelar</button>
-                        </div>
-                    </div>
-                </div>
-            )}
-
+            {/* MODAL ALUMNO ACTUALIZADO CON GÉNERO */}
+            {modalAlumno && (<div className="fixed inset-0 bg-slate-900/40 backdrop-blur-md flex items-center justify-center z-50 p-4 animate-in fade-in"><div className="bg-white w-full max-w-md rounded-[32px] p-8 shadow-2xl animate-in slide-in-from-bottom"><div className="w-16 h-16 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mx-auto mb-4 text-3xl"><i className="fas fa-child"></i></div><h2 className="text-2xl font-black text-slate-800 mb-2 text-center">{alumnoEdicion ? 'Editar' : 'Registrar'}</h2><form onSubmit={handleGuardarAlumno} className="space-y-4"><input type="text" name="nombre" required defaultValue={alumnoEdicion?.nombre || ''} placeholder="Nombre Completo" className="w-full p-4 bg-slate-50 rounded-2xl outline-none" /><input type="date" name="fechaNacimiento" required defaultValue={alumnoEdicion?.fechaNacimiento || ''} onChange={(e) => setEdadCalculada(calcularEdad(e.target.value))} className="w-full p-4 bg-slate-50 rounded-2xl outline-none" /><select name="genero" required defaultValue={alumnoEdicion?.genero || ''} className="w-full p-4 bg-slate-50 rounded-2xl outline-none bg-white border border-slate-100"><option value="">Seleccionar Género</option><option value="M">Masculino</option><option value="F">Femenino</option></select>{edadCalculada!==null && (<div className="bg-emerald-50 p-4 rounded-2xl border border-emerald-100 flex items-center justify-between"><span className="text-emerald-800 text-xs font-bold uppercase">Edad:</span><span className="text-2xl font-black text-emerald-600">{edadCalculada} Años</span></div>)}<div className="pt-2 flex flex-col space-y-3"><button type="submit" className="w-full py-4 bg-emerald-500 text-white font-black rounded-2xl shadow-xl">Guardar</button><button type="button" onClick={() => { setModalAlumno(false); setAlumnoEdicion(null); }} className="text-slate-400 font-bold text-xs uppercase">Cancelar</button></div></form></div></div>)}
+            {maestroABorrar && (<div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-[60] p-6 animate-in fade-in"><div className="bg-white rounded-[32px] p-8 w-full max-w-xs text-center shadow-2xl animate-in zoom-in-95 border-2 border-rose-100"><div className="w-16 h-16 bg-rose-50 text-rose-500 rounded-full flex items-center justify-center mx-auto mb-4 text-3xl"><i className="fas fa-user-minus"></i></div><h3 className="text-xl font-black text-slate-800 mb-2">Eliminar Usuario</h3><p className="text-slate-500 text-xs mb-4">Vas a eliminar a <b>{maestroABorrar.nombre}</b>. Los datos del campo <b>SE MANTENDRÁN</b>.</p><div className="space-y-3"><button onClick={handleBorrarMaestro} className="w-full py-3 bg-indigo-600 text-white font-bold rounded-2xl shadow-lg">Sí, eliminar usuario</button><button onClick={() => setMaestroABorrar(null)} className="w-full py-2 text-slate-400 font-bold text-xs uppercase">Cancelar</button></div></div></div>)}
             {idAlumnoBorrar && (<div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-[60] p-6 animate-in fade-in"><div className="bg-white rounded-[32px] p-8 w-full max-w-xs text-center shadow-2xl animate-in zoom-in-95"><div className="w-16 h-16 bg-rose-50 text-rose-500 rounded-full flex items-center justify-center mx-auto mb-4 text-2xl"><i className="fas fa-trash-alt"></i></div><h3 className="text-xl font-black text-slate-800 mb-2">¿Eliminar Alumno?</h3><div className="space-y-3"><button onClick={handleBorrarAlumno} className="w-full py-3 bg-rose-500 text-white font-bold rounded-2xl shadow-lg">Sí, borrar</button><button onClick={() => setIdAlumnoBorrar(null)} className="w-full py-2 text-slate-400 font-bold text-xs uppercase">Cancelar</button></div></div></div>)}
         </div>
     );
