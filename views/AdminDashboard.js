@@ -17,8 +17,8 @@ function AdminDashboard({
     const [edadMax, setEdadMax] = useState('');
     const [camposRuta, setCamposRuta] = useState([]);
     
-    // ESTADO PARA EL ACORDEÓN DE RUTAS COMPLETADAS
-    const [rutaCompletadaExp, setRutaCompletadaExp] = useState(null);
+    // ESTADO NUEVO PARA EL ACORDEÓN AGRUPADO DE RUTAS COMPLETADAS
+    const [grupoCompletadoExp, setGrupoCompletadoExp] = useState(null);
 
     const historialVisible = historialAsistencias.filter(h => !h.esReset);
     const todasAsistencias = datosGlobalesAsistencia?.registros || [];
@@ -216,6 +216,16 @@ function AdminDashboard({
         const entregasCompletadas = entregasLogistica.filter(e => e.estado === 'Entregado');
         const personalLogistica = activos.filter(m => m.clase === 'LOGISTICA'); 
 
+        // --- MAGIA: AGRUPAR RUTAS COMPLETADAS POR EL NOMBRE DEL GRUPO ---
+        const entregasCompletadasPorGrupo = {};
+        entregasCompletadas.forEach(e => {
+            if (!entregasCompletadasPorGrupo[e.grupo]) {
+                entregasCompletadasPorGrupo[e.grupo] = [];
+            }
+            entregasCompletadasPorGrupo[e.grupo].push(e);
+        });
+        const gruposCompletados = Object.keys(entregasCompletadasPorGrupo).sort();
+
         contenidoAdmin = (
             <div className="space-y-4 animate-in slide-in-from-right duration-300 h-full flex flex-col">
                 <div className="px-2 mb-2"><h2 className="text-2xl font-black text-slate-800">Logística</h2><p className="text-slate-400 text-xs">Administración de rutas y equipos</p></div>
@@ -266,7 +276,6 @@ function AdminDashboard({
                                     <div className="mb-6"><h4 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-3 px-2">Rutas Pendientes ({entregasPendientes.length})</h4>
                                     <div className="space-y-3">
                                         {entregasPendientes.map(e => {
-                                            // MATEMÁTICA EN TIEMPO REAL PARA EL ADMIN
                                             const totalEntregado = e.detalles ? Object.values(e.detalles).reduce((sum, val) => sum + (Number(val) || 0), 0) : 0;
                                             const diferencia = e.cantidad - totalEntregado;
 
@@ -289,21 +298,23 @@ function AdminDashboard({
                                     </div></div>
                                 )}
 
-                                {entregasCompletadas.length > 0 && (
-                                    <div><h4 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-3 px-2">Completadas Hoy</h4>
+                                {/* --- NUEVO HISTORIAL POR EQUIPO (ACORDEÓN) --- */}
+                                {gruposCompletados.length > 0 && (
+                                    <div><h4 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-3 px-2">Historial por Rutas (Completadas)</h4>
                                     <div className="space-y-3 opacity-95">
-                                        {entregasCompletadas.slice(0, 10).map(e => {
-                                            const isExpanded = rutaCompletadaExp === e.id;
-                                            const totalEntregado = e.detalles ? Object.values(e.detalles).reduce((sum, val) => sum + (Number(val) || 0), 0) : 0;
-                                            const diferencia = e.cantidad - totalEntregado;
+                                        {gruposCompletados.map(nombreGrupo => {
+                                            const isExpanded = grupoCompletadoExp === nombreGrupo;
+                                            // Ordenamos las rutas de este grupo de la más reciente a la más vieja
+                                            const entregasDelGrupo = entregasCompletadasPorGrupo[nombreGrupo].sort((a, b) => (b.fechaEntrega || 0) - (a.fechaEntrega || 0));
 
                                             return (
-                                                <div key={e.id} className="bg-slate-50 rounded-2xl border border-slate-200 overflow-hidden shadow-sm transition-all duration-300">
-                                                    {/* ACORDEÓN HEADER */}
-                                                    <button onClick={() => setRutaCompletadaExp(isExpanded ? null : e.id)} className="w-full p-4 flex justify-between items-center bg-white hover:bg-slate-50 transition-colors">
+                                                <div key={nombreGrupo} className="bg-slate-50 rounded-2xl border border-slate-200 overflow-hidden shadow-sm transition-all duration-300">
+                                                    
+                                                    {/* HEADER DEL ACORDEÓN: NOMBRE DEL GRUPO */}
+                                                    <button onClick={() => setGrupoCompletadoExp(isExpanded ? null : nombreGrupo)} className="w-full p-4 flex justify-between items-center bg-white hover:bg-slate-50 transition-colors">
                                                         <div className="text-left">
-                                                            <p className="font-black text-slate-700 text-sm">Ruta {e.grupo}</p>
-                                                            <p className="text-[10px] text-slate-500 font-bold mt-0.5">Asignado: {e.cantidad} | Entregado: {totalEntregado}</p>
+                                                            <p className="font-black text-slate-700 text-sm">{nombreGrupo}</p>
+                                                            <p className="text-[10px] text-slate-500 font-bold mt-0.5">{entregasDelGrupo.length} misiones finalizadas</p>
                                                         </div>
                                                         <div className="flex items-center space-x-3">
                                                             <span className="text-emerald-500 font-bold text-lg"><i className="fas fa-check-circle"></i></span>
@@ -311,23 +322,42 @@ function AdminDashboard({
                                                         </div>
                                                     </button>
                                                     
-                                                    {/* ACORDEÓN CUERPO */}
+                                                    {/* CUERPO DEL ACORDEÓN: LISTA DE RUTAS */}
                                                     {isExpanded && (
                                                         <div className="p-4 pt-0 border-t border-slate-100 bg-slate-50 animate-in slide-in-from-top-2 duration-200">
-                                                            <div className="flex justify-between items-center py-3 border-b border-slate-200 mb-3">
-                                                                <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Balance Final:</span>
-                                                                <span className={`text-[10px] font-black px-2 py-1 rounded-lg ${diferencia === 0 ? 'bg-emerald-100 text-emerald-700' : diferencia > 0 ? 'bg-amber-100 text-amber-700' : 'bg-rose-100 text-rose-700'}`}>
-                                                                    {diferencia === 0 ? 'Exacto (0)' : diferencia > 0 ? `Sobraron ${diferencia}` : `Faltaron ${Math.abs(diferencia)}`}
-                                                                </span>
-                                                            </div>
-                                                            <div className="grid grid-cols-1 gap-2">
-                                                                {e.detalles && Object.entries(e.detalles).map(([campo, cant]) => {
-                                                                    const creador = e.bloqueos?.[campo]?.nombre;
+                                                            <div className="space-y-4 mt-4 max-h-[400px] overflow-y-auto pr-1">
+                                                                {entregasDelGrupo.map(e => {
+                                                                    const totalEntregado = e.detalles ? Object.values(e.detalles).reduce((sum, val) => sum + (Number(val) || 0), 0) : 0;
+                                                                    const diferencia = e.cantidad - totalEntregado;
+                                                                    
+                                                                    // Formateamos la fecha exacta de entrega
+                                                                    const fechaObj = e.fechaEntrega ? new Date(e.fechaEntrega) : null;
+                                                                    const fechaFormateada = fechaObj ? `${fechaObj.toLocaleDateString()} a las ${fechaObj.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}` : 'Fecha no registrada';
+
                                                                     return (
-                                                                        <p key={campo} className="text-[10px] font-bold text-slate-500 truncate flex justify-between bg-white p-2 rounded-lg border border-slate-100">
-                                                                            <span><i className="fas fa-caret-right text-indigo-400 mr-1"></i> {campo}</span>
-                                                                            <span className="text-indigo-600 font-black">{cant} <span className="font-normal text-slate-400 ml-1">{creador ? `(${creador})` : ''}</span></span>
-                                                                        </p>
+                                                                        <div key={e.id} className="bg-white p-3 rounded-xl border border-slate-100 shadow-sm relative">
+                                                                            <div className="flex justify-between items-start border-b border-slate-100 pb-2 mb-2">
+                                                                                <div>
+                                                                                    <p className="text-[10px] font-bold text-indigo-500"><i className="far fa-calendar-alt mr-1"></i> {fechaFormateada}</p>
+                                                                                    <p className="text-xs font-black text-slate-700 mt-1">Asignado: {e.cantidad} | Entregado: {totalEntregado}</p>
+                                                                                </div>
+                                                                                <span className={`text-[9px] font-black px-2 py-1 rounded-lg ${diferencia === 0 ? 'bg-emerald-100 text-emerald-700' : diferencia > 0 ? 'bg-amber-100 text-amber-700' : 'bg-rose-100 text-rose-700'}`}>
+                                                                                    {diferencia === 0 ? 'Exacto (0)' : diferencia > 0 ? `Sobraron ${diferencia}` : `Faltaron ${Math.abs(diferencia)}`}
+                                                                                </span>
+                                                                            </div>
+
+                                                                            <div className="grid grid-cols-1 gap-1.5">
+                                                                                {e.detalles && Object.entries(e.detalles).map(([campo, cant]) => {
+                                                                                    const creador = e.bloqueos?.[campo]?.nombre;
+                                                                                    return (
+                                                                                        <p key={campo} className="text-[10px] font-bold text-slate-500 truncate flex justify-between bg-slate-50 p-1.5 rounded-lg">
+                                                                                            <span><i className="fas fa-map-marker-alt text-slate-400 mr-1"></i> {campo}</span>
+                                                                                            <span className="text-indigo-600 font-black">{cant} <span className="font-normal text-slate-400 ml-1">{creador ? `(${creador})` : ''}</span></span>
+                                                                                        </p>
+                                                                                    )
+                                                                                })}
+                                                                            </div>
+                                                                        </div>
                                                                     )
                                                                 })}
                                                             </div>
