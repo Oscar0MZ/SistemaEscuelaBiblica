@@ -7,10 +7,13 @@ function LogisticaDashboard({ datosUsuarioActual, entregasLogistica, onActualiza
     const nombreDisplay = datosUsuarioActual ? datosUsuarioActual.nombre.split(' ')[0] : '';
     const miGrupo = datosUsuarioActual?.grupo; 
     
-    const entregasPendientes = entregasLogistica.filter(e => e.estado === 'Pendiente' && e.grupo === miGrupo);
-    const entregasCompletadas = entregasLogistica.filter(e => e.estado === 'Entregado' && e.grupo === miGrupo);
+    // MAGIA: Filtramos para que no vean las rutas que tú ya "Archivaste" (Cerraste Jornada)
+    const entregasPendientes = entregasLogistica.filter(e => e.estado === 'Pendiente' && e.grupo === miGrupo && !e.archivado);
+    const entregasCompletadas = entregasLogistica.filter(e => e.estado === 'Entregado' && e.grupo === miGrupo && !e.archivado);
 
-    const entregasCompletadasOrdenadas = [...entregasCompletadas].sort((a, b) => (b.fechaEntrega || 0) - (a.fechaEntrega || 0));
+    // Para la tarjeta gris, buscamos la última que hicieron de todas formas
+    const todasMisCompletadas = entregasLogistica.filter(e => e.estado === 'Entregado' && e.grupo === miGrupo);
+    const entregasCompletadasOrdenadas = [...todasMisCompletadas].sort((a, b) => (b.fechaEntrega || 0) - (a.fechaEntrega || 0));
     const ultimaRutaCompletada = entregasCompletadasOrdenadas.length > 0 ? entregasCompletadasOrdenadas[0] : null;
 
     useEffect(() => {
@@ -152,7 +155,6 @@ function LogisticaDashboard({ datosUsuarioActual, entregasLogistica, onActualiza
                             entregasPendientes.map(e => {
                                 const camposDeRuta = e.campos || [e.campo];
                                 
-                                // --- MAGIA: CALCULADORA EN TIEMPO REAL ---
                                 const totalIngresado = camposDeRuta.reduce((sum, c) => {
                                     return sum + (Number(cantidadesDetalle[e.id]?.[c]) || Number(e.detalles?.[c]) || 0);
                                 }, 0);
@@ -163,7 +165,6 @@ function LogisticaDashboard({ datosUsuarioActual, entregasLogistica, onActualiza
                                         <div className="absolute top-0 right-0 bg-amber-400 text-white text-[9px] font-black uppercase px-3 py-1 rounded-bl-xl shadow-sm">{e.grupo}</div>
                                         <h3 className="font-black text-slate-800 text-lg mb-4 mt-1"><i className="fas fa-truck-loading text-amber-500 mr-2"></i>Ruta Activa</h3>
                                         
-                                        {/* PANEL DE BALANCE EN TIEMPO REAL */}
                                         <div className="bg-white p-3 rounded-2xl mb-5 flex justify-between items-center shadow-sm border border-slate-100">
                                             <div className="text-center w-1/3">
                                                 <p className="text-[9px] font-bold text-slate-400 uppercase">Carga Inicial</p>
