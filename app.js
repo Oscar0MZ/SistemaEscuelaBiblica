@@ -14,7 +14,8 @@ function App() {
     const [entregasLogistica, setEntregasLogistica] = useState([]);
     const [mantenimiento, setMantenimiento] = useState(false);
     
-    const [inventarioViveres, setInventarioViveres] = useState(0);
+    // NUEVO: Estado del inventario estructurado (Histórico vs Actual)
+    const [inventarioDatos, setInventarioDatos] = useState({ historicoRecibido: 0, actualRecibido: 0 });
 
     const [modalAbierto, setModalAbierto] = useState(false);
     const [modalAlumno, setModalAlumno] = useState(false);
@@ -75,8 +76,8 @@ function App() {
             if(LogisticaService) unsubs.push(LogisticaService.suscribirTodas(setEntregasLogistica)); 
             
             const unsubInv = window.db.collection('sistema').doc('inventario').onSnapshot(doc => {
-                if (doc.exists) setInventarioViveres(doc.data().total || 0);
-                else setInventarioViveres(0);
+                if (doc.exists) setInventarioDatos(doc.data());
+                else setInventarioDatos({ historicoRecibido: 0, actualRecibido: 0 });
             });
             unsubs.push(unsubInv);
 
@@ -129,18 +130,36 @@ function App() {
     const handleToggleMantenimiento = () => { MaestrosService.toggleMantenimiento(mantenimiento); };
     const handleAssignGroup = async (idUsuario, nuevoGrupo) => { try { await window.db.collection('maestros').doc(idUsuario).update({ grupo: nuevoGrupo }); } catch (error) { alert("Error al asignar el grupo al usuario."); } };
 
-    // --- MAGIA: SUMA AL STOCK ACTUAL EN LUGAR DE REEMPLAZARLO ---
+    // --- MAGIA: SUMA INVENTARIO Y REINICIA JORNADA ---
     const handleActualizarInventario = async (cantidadAgregada) => {
         try {
             const docRef = window.db.collection('sistema').doc('inventario');
-            const docSnap = await docRef.get();
-            const totalActual = docSnap.exists ? (docSnap.data().total || 0) : 0;
+            const data = inventarioDatos;
+            await docRef.set({ 
+                historicoRecibido: (data.historicoRecibido || 0) + cantidadAgregada,
+                actualRecibido: (data.actualRecibido || 0) + cantidadAgregada
+            }, { merge: true });
+            alert(`✅ Se agregaron ${cantidadAgregada} paquetes al stock actual y al histórico.`);
+        } catch(e) { alert("Error al guardar el inventario."); }
+    };
+
+    const handleCerrarJornada = async (rutasParaArchivar) => {
+        try {
+            // 1. Resetea el stock actual a 0
+            await window.db.collection('sistema').doc('inventario').set({ actualRecibido: 0 }, { merge: true });
             
-            // Sumamos lo que teníamos antes + lo nuevo que acaba de ingresar
-            await docRef.set({ total: totalActual + cantidadAgregada }, { merge: true });
-            alert(`✅ Se agregaron ${cantidadAgregada} paquetes. El nuevo stock está calculado.`);
-        } catch(e) {
-            alert("Error al guardar el inventario.");
+            // 2. Archiva las rutas completadas para que no cuenten en el actual ni le salgan a logística
+            if (rutasParaArchivar && rutasParaArchivar.length > 0) {
+                const batch = window.db.batch();
+                rutasParaArchivar.forEach(ruta => {
+                    const ref = window.db.collection('entregas').doc(ruta.id);
+                    batch.update(ref, { archivado: true });
+                });
+                await batch.commit();
+            }
+            alert("🏁 Jornada Finalizada. Los contadores actuales se han reiniciado a 0 para el próximo reparto.");
+        } catch (e) {
+            alert("Error al reiniciar la jornada.");
         }
     };
 
@@ -168,8 +187,9 @@ function App() {
                     entregasLogistica={entregasLogistica} 
                     usuario={usuario} datosUsuarioActual={datosUsuarioActual}
                     mantenimiento={mantenimiento} onToggleMantenimiento={handleToggleMantenimiento}
-                    inventarioViveres={inventarioViveres} 
+                    inventarioDatos={inventarioDatos} 
                     onActualizarInventario={handleActualizarInventario} 
+                    onCerrarJornada={handleCerrarJornada}
                     onApprove={MaestrosService.aprobar} onDelete={setMaestroABorrar} onEdit={(m) => { setMaestroEdicion(m); setModalAbierto(true); }} onToggleModal={() => { setMaestroEdicion(null); setModalAbierto(true); }}
                     onSaveAsistencia={handleGuardarAsistencia}
                     onOpenAlumnoModal={() => { setAlumnoEdicion(null); setEdadCalculada(null); setModalAlumno(true); }}
