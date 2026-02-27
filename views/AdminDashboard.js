@@ -4,7 +4,7 @@ function AdminDashboard({
     maestros, todosLosAlumnos, datosGlobalesAsistencia, historialAsistencias, entregasLogistica,
     mantenimiento, onToggleMantenimiento, onApprove, onDelete, onToggleModal, 
     onDeleteCampo, onResetLecciones, onCrearEntrega, onBorrarEntrega, onAssignGroup,
-    inventarioViveres, onActualizarInventario
+    inventarioDatos, onActualizarInventario, onCerrarJornada
 }) {
     const [busqueda, setBusqueda] = useState('');
     const [vistaActual, setVistaActual] = useState('inicio'); 
@@ -216,6 +216,7 @@ function AdminDashboard({
         const entregasCompletadas = entregasLogistica.filter(e => e.estado === 'Entregado');
         const personalLogistica = activos.filter(m => m.clase === 'LOGISTICA'); 
 
+        // Agrupar completadas
         const entregasCompletadasPorGrupo = {};
         entregasCompletadas.forEach(e => {
             if (!entregasCompletadasPorGrupo[e.grupo]) entregasCompletadasPorGrupo[e.grupo] = [];
@@ -223,15 +224,30 @@ function AdminDashboard({
         });
         const gruposCompletados = Object.keys(entregasCompletadasPorGrupo).sort();
 
-        let totalRepartidoHistorico = 0;
+        // --- CÁLCULO DE HISTÓRICO Y ACTUAL ---
+        const historicoRecibido = inventarioDatos?.historicoRecibido || 0;
+        const actualRecibido = inventarioDatos?.actualRecibido || 0;
+
+        let totalEntregadoHistorico = 0;
+        let totalEntregadoActual = 0;
+        const rutasParaArchivar = [];
+
         entregasLogistica.forEach(e => {
+            let sumRoute = 0;
             if (e.detalles) {
-                Object.values(e.detalles).forEach(val => {
-                    totalRepartidoHistorico += (Number(val) || 0);
-                });
+                Object.values(e.detalles).forEach(val => sumRoute += (Number(val) || 0));
+            }
+            totalEntregadoHistorico += sumRoute;
+            
+            // Si la ruta ya se entregó y NO está archivada, suma al "Actual"
+            if (e.estado === 'Entregado' && !e.archivado) {
+                totalEntregadoActual += sumRoute;
+                rutasParaArchivar.push(e); // Estas se borrarán del "Actual" al cerrar jornada
             }
         });
-        const enBodega = (inventarioViveres || 0) - totalRepartidoHistorico;
+
+        const stockFisico = historicoRecibido - totalEntregadoHistorico;
+        const restanActual = actualRecibido - totalEntregadoActual;
 
         contenidoAdmin = (
             <div className="space-y-4 animate-in slide-in-from-right duration-300 h-full flex flex-col">
@@ -245,41 +261,44 @@ function AdminDashboard({
 
                 <div className="flex-1 overflow-y-auto pb-24">
                     
-                    {/* --- PESTAÑA BODEGA ACTUALIZADA (AHORA ES PARA SUMAR) --- */}
                     {subVistaAdminLogistica === 'bodega' && (
                         <div className="animate-in slide-in-from-left duration-200 px-1">
                             <div className="bg-indigo-600 p-6 rounded-[32px] text-white shadow-xl shadow-indigo-200 relative overflow-hidden mb-5 mt-2">
                                 <div className="absolute top-0 right-0 w-32 h-32 bg-white opacity-10 rounded-bl-[100px] pointer-events-none"></div>
                                 <div className="relative z-10">
                                     <p className="text-xs font-bold uppercase opacity-80 tracking-widest mb-1">Stock Físico en Bodega</p>
-                                    <p className="text-6xl font-black tracking-tighter">{enBodega}</p>
+                                    <p className="text-6xl font-black tracking-tighter">{stockFisico}</p>
                                 </div>
                                 <div className="w-16 h-16 bg-white/20 rounded-2xl flex items-center justify-center text-3xl backdrop-blur-sm absolute bottom-6 right-6 z-10"><i className="fas fa-boxes"></i></div>
                             </div>
 
+                            {/* --- TABLA ACTUAL VS HISTÓRICO --- */}
+                            <div className="bg-slate-50 rounded-3xl p-5 mb-5 border border-slate-200 shadow-sm">
+                                <h3 className="font-black text-slate-700 text-xs uppercase tracking-widest mb-3 border-b border-slate-200 pb-2">Control Actual (Esta Jornada)</h3>
+                                <div className="flex justify-between items-center mb-4">
+                                    <div className="text-center w-1/3"><p className="text-[10px] font-bold text-slate-400 uppercase">Recibido</p><p className="text-xl font-black text-slate-700">{actualRecibido}</p></div>
+                                    <div className="text-center w-1/3 border-l border-r border-slate-200"><p className="text-[10px] font-bold text-slate-400 uppercase">Entregado</p><p className="text-xl font-black text-emerald-500">{totalEntregadoActual}</p></div>
+                                    <div className="text-center w-1/3"><p className="text-[10px] font-bold text-slate-400 uppercase">Por entregar</p><p className="text-xl font-black text-amber-500">{restanActual}</p></div>
+                                </div>
+                                <button onClick={() => onCerrarJornada(rutasParaArchivar)} className="w-full py-3 bg-white text-rose-500 border border-rose-200 font-bold rounded-xl shadow-sm text-[11px] uppercase tracking-widest active:scale-95 transition-all"><i className="fas fa-flag-checkered mr-2"></i> Cerrar Jornada (Reiniciar Actual)</button>
+                            </div>
+
                             <div className="flex space-x-3 mb-6">
                                 <div className="w-1/2 bg-white p-4 rounded-2xl border border-slate-100 shadow-sm text-center">
-                                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Total Histórico</p>
-                                    <p className="text-2xl font-black text-slate-700">{inventarioViveres}</p>
+                                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Histórico Recibido</p>
+                                    <p className="text-2xl font-black text-slate-700">{historicoRecibido}</p>
                                 </div>
                                 <div className="w-1/2 bg-white p-4 rounded-2xl border border-slate-100 shadow-sm text-center">
-                                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Entregados</p>
-                                    <p className="text-2xl font-black text-emerald-500">{totalRepartidoHistorico}</p>
+                                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Histórico Entregado</p>
+                                    <p className="text-2xl font-black text-emerald-500">{totalEntregadoHistorico}</p>
                                 </div>
                             </div>
 
-                            <form onSubmit={(e) => { 
-                                e.preventDefault(); 
-                                onActualizarInventario(Number(e.target.nuevoStock.value)); 
-                                e.target.reset(); // Limpia el cuadro después de sumar
-                            }} className="bg-slate-50 p-5 rounded-3xl border border-slate-200 shadow-sm">
-                                <h3 className="font-bold text-slate-700 text-sm mb-3 flex items-center"><i className="fas fa-plus-circle text-indigo-500 mr-2"></i> Agregar Nuevos Víveres</h3>
-                                <p className="text-[11px] text-slate-500 mb-4 leading-relaxed font-bold">¿Llegó más mercadería? Ingresa la cantidad recibida hoy y se sumará automáticamente al stock disponible.</p>
+                            <form onSubmit={(e) => { e.preventDefault(); onActualizarInventario(Number(e.target.nuevoStock.value)); e.target.reset(); }} className="bg-white p-5 rounded-3xl border border-slate-100 shadow-sm">
+                                <h3 className="font-bold text-slate-700 text-sm mb-3 flex items-center"><i className="fas fa-plus-circle text-indigo-500 mr-2"></i> Sumar Víveres Recibidos</h3>
                                 <div className="flex space-x-3">
-                                    <input type="number" name="nuevoStock" required min="1" placeholder="Ej: 100" className="w-2/3 p-4 bg-white rounded-2xl outline-none border border-slate-200 text-lg font-black text-slate-700 text-center shadow-sm focus:border-indigo-400" />
-                                    <button type="submit" className="w-1/3 bg-indigo-600 hover:bg-indigo-700 text-white font-black rounded-2xl shadow-lg active:scale-95 transition-all flex items-center justify-center">
-                                        Sumar <i className="fas fa-plus ml-2"></i>
-                                    </button>
+                                    <input type="number" name="nuevoStock" required min="1" placeholder="Ej: 100" className="w-2/3 p-4 bg-slate-50 rounded-2xl outline-none border border-slate-200 text-lg font-black text-slate-700 text-center focus:border-indigo-400" />
+                                    <button type="submit" className="w-1/3 bg-indigo-600 hover:bg-indigo-700 text-white font-black rounded-2xl shadow-md active:scale-95 transition-all flex items-center justify-center">Sumar</button>
                                 </div>
                             </form>
                         </div>
