@@ -37,7 +37,7 @@ function MaestroDashboard({
             let nextLec = 1;
             let impartida = true;
 
-            // --- MAGIA REPARADA: Lectura Estricta por Milisegundos ---
+            // --- MAGIA: Lectura Estricta por Milisegundos ---
             // Ordenamos todo para saber qué fue EXACTAMENTE lo último que pasó (Clase o Instrucción del Director)
             const historialOrdenado = [...historialAsistencias].sort((a, b) => b.timestamp - a.timestamp);
             const ultimoReg = historialOrdenado[0];
@@ -181,6 +181,7 @@ function MaestroDashboard({
                             </div>
                         </div>
                         <div className="overflow-y-auto space-y-4 pb-28 pr-2">
+                            {/* DISEÑO CON NOMBRES ARRIBA Y BOTONES ABAJO */}
                             {alumnos.map(a => (
                                 <div key={a.id} className="flex flex-col p-4 bg-slate-50 rounded-2xl border border-slate-100 shadow-sm">
                                     <div className="flex items-center space-x-3 mb-3">
@@ -216,7 +217,7 @@ function MaestroDashboard({
                 
                 <div className="flex-1 bg-white rounded-t-[40px] shadow-[0_-10px_40px_rgba(0,0,0,0.05)] border-t border-slate-100 p-6 overflow-hidden flex flex-col">
                     <div className="overflow-y-auto space-y-4 pb-24 pr-2">
-                        {/* --- NUEVO DISEÑO DE LISTA DE ALUMNOS (Acomodado en Columna) --- */}
+                        {/* --- NUEVO DISEÑO DE LISTA DE ALUMNOS EN GESTIÓN --- */}
                         {alumnos.map(nino => (
                             <div key={nino.id} className="flex flex-col p-4 bg-slate-50 rounded-3xl border border-slate-100 shadow-sm">
                                 <div className="flex items-center space-x-3 mb-3">
