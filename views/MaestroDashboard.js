@@ -21,7 +21,7 @@ function MaestroDashboard({
         return `${p[2]}/${p[1]}/${p[0]}`; 
     };
 
-    // --- MAGIA MATEMÁTICA CORREGIDA: Sin restas, números directos ---
+    // --- MAGIA MATEMÁTICA EXACTA: Sin restas ---
     const calcProgreso = (lec) => {
         const l = parseInt(lec) || 1;
         if (l <= 25) return { parte: 1, leccion: l, porc: Math.round((l/25)*100) };
@@ -29,35 +29,32 @@ function MaestroDashboard({
         return { parte: 'Extra', leccion: l, porc: 100 };
     };
 
-    // --- MAGIA EN TIEMPO REAL: Se calcula fuera del useEffect para reaccionar al instante ---
-    const historialCompleto = [...historialAsistencias].sort((a, b) => b.timestamp - a.timestamp);
-    const ultimoReg = historialCompleto.find(h => h.leccion !== undefined);
+    // LECTURA EN TIEMPO REAL FUERA DE USE-EFFECT PARA NO DEPENDER DEL REFRESH
+    const todosLosRegistros = [...historialAsistencias];
+    if (asistenciaHoy && !todosLosRegistros.some(r => r.timestamp === asistenciaHoy.timestamp)) {
+        todosLosRegistros.push(asistenciaHoy);
+    }
+    
+    const historialOrdenado = todosLosRegistros.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
+    const ultimoReg = historialOrdenado.find(h => h.leccion !== undefined);
 
-    let leccionAsignada = 1; // El número que se bloquea en el formulario
-    let leccionProgreso = 1; // El número que se muestra en la barra de resumen
+    let leccionAsignada = 1;
+    let leccionProgreso = 1;
 
     if (ultimoReg) {
         if (ultimoReg.esReset) {
-            // El Director forzó una lección. Maestro y Barra ven ese número exacto.
             leccionAsignada = parseInt(ultimoReg.leccion);
             leccionProgreso = parseInt(ultimoReg.leccion);
         } else {
-            // Si lo último fue una clase impartida por el maestro.
-            leccionProgreso = parseInt(ultimoReg.leccion); // La barra muestra la última que dio
-            leccionAsignada = ultimoReg.leccionImpartida ? parseInt(ultimoReg.leccion) + 1 : parseInt(ultimoReg.leccion); // Le toca la siguiente
+            leccionProgreso = parseInt(ultimoReg.leccion);
+            leccionAsignada = ultimoReg.leccionImpartida ? parseInt(ultimoReg.leccion) + 1 : parseInt(ultimoReg.leccion);
         }
-    }
-
-    // Si ya pasó asistencia HOY, se congela en ese número
-    if (asistenciaHoy && asistenciaHoy.leccion) {
-        leccionAsignada = parseInt(asistenciaHoy.leccion);
-        leccionProgreso = parseInt(asistenciaHoy.leccion);
     }
 
     React.useEffect(() => {
         if (vistaActual === 'asistencia' && alumnos.length > 0) {
             const inicial = {};
-            if (asistenciaHoy && asistenciaHoy.registros) {
+            if (asistenciaHoy && asistenciaHoy.registros && asistenciaHoy.timestamp >= (ultimoReg ? ultimoReg.timestamp : 0)) {
                 asistenciaHoy.registros.forEach(r => inicial[r.idAlumno] = r.estado);
                 setLeccionImpartida(asistenciaHoy.leccionImpartida !== false);
             } else {
@@ -66,12 +63,11 @@ function MaestroDashboard({
             }
             setListaAsistencia(inicial);
         }
-    }, [vistaActual, alumnos, asistenciaHoy]);
+    }, [vistaActual, alumnos, asistenciaHoy]); // Se quitó ultimoReg para evitar bucles infinitos en pantalla
 
     const guardarLista = async () => {
         if (alumnos.length === 0) { alert("Debes registrar alumnos primero."); return; }
         const registros = alumnos.map(a => ({ idAlumno: a.id, nombre: a.nombre, estado: listaAsistencia[a.id] || 'Ausente' }));
-        // Usa el número directo calculado en tiempo real
         const exito = await onSaveAsistencia(registros, leccionAsignada, leccionImpartida);
         if (exito) setVistaActual('inicio');
     };
@@ -88,7 +84,6 @@ function MaestroDashboard({
     const nombreDisplay = datosUsuarioActual ? datosUsuarioActual.nombre.split(' ')[0] : '';
     const rolDisplay = usuario.charAt(0) + usuario.slice(1).toLowerCase();
     
-    // Se usa el número matemático directo
     const progInicio = calcProgreso(leccionProgreso);
 
     const historialRankingFiltrado = historialVisible.filter(ha => {
@@ -153,7 +148,7 @@ function MaestroDashboard({
                         <div className="bg-indigo-50 p-4 rounded-2xl border border-indigo-100 mb-4 flex-shrink-0">
                             <h3 className="text-xs font-bold text-indigo-800 uppercase tracking-widest mb-3 flex items-center"><i className="fas fa-book mr-2"></i> Material de Clase</h3>
                             <div className="flex space-x-4 items-center">
-                                {/* EL INPUT ESTÁ TOTALMENTE BLOQUEADO PARA EL MAESTRO Y LEE LECCIONASIGNADA EN TIEMPO REAL */}
+                                {/* EL INPUT ESTÁ TOTALMENTE BLOQUEADO PARA EL MAESTRO Y LEE EN TIEMPO REAL */}
                                 <div className="w-1/3 relative">
                                     <label className="text-[10px] font-bold text-indigo-400 uppercase ml-1 block mb-1">Lección N°</label>
                                     <input 
@@ -162,7 +157,6 @@ function MaestroDashboard({
                                         value={leccionAsignada} 
                                         readOnly 
                                         disabled
-                                        title="Calculado automáticamente. Pide al Director si necesitas ajustarlo."
                                     />
                                     <div className="absolute top-1 right-1 bg-slate-300 rounded-full w-5 h-5 flex items-center justify-center shadow-sm">
                                         <i className="fas fa-lock text-slate-500 text-[9px]"></i>
@@ -179,7 +173,6 @@ function MaestroDashboard({
                             </div>
                         </div>
                         <div className="overflow-y-auto space-y-4 pb-28 pr-2">
-                            {/* DISEÑO CON NOMBRES ARRIBA Y BOTONES ABAJO */}
                             {alumnos.map(a => (
                                 <div key={a.id} className="flex flex-col p-4 bg-slate-50 rounded-2xl border border-slate-100 shadow-sm">
                                     <div className="flex items-center space-x-3 mb-3">
