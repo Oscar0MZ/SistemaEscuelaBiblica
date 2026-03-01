@@ -21,15 +21,14 @@ function MaestroDashboard({
         return `${p[2]}/${p[1]}/${p[0]}`; 
     };
 
-    // --- MAGIA MATEMÁTICA EXACTA: Sin restas ---
     const calcProgreso = (lec) => {
-        const l = parseInt(lec) || 1;
+        const l = parseInt(lec);
+        if (isNaN(l) || l === 0) return { parte: 1, leccion: 0, porc: 0 };
         if (l <= 25) return { parte: 1, leccion: l, porc: Math.round((l/25)*100) };
         if (l <= 54) return { parte: 2, leccion: l - 25, porc: Math.round(((l-25)/29)*100) };
         return { parte: 'Extra', leccion: l, porc: 100 };
     };
 
-    // LECTURA EN TIEMPO REAL FUERA DE USE-EFFECT PARA NO DEPENDER DEL REFRESH
     const todosLosRegistros = [...historialAsistencias];
     if (asistenciaHoy && !todosLosRegistros.some(r => r.timestamp === asistenciaHoy.timestamp)) {
         todosLosRegistros.push(asistenciaHoy);
@@ -38,8 +37,9 @@ function MaestroDashboard({
     const historialOrdenado = todosLosRegistros.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
     const ultimoReg = historialOrdenado.find(h => h.leccion !== undefined);
 
-    let leccionAsignada = 1;
-    let leccionProgreso = 1;
+    // MAGIA: Inician en 0 para forzar el bloqueo si el director no ha asignado nada
+    let leccionAsignada = 0;
+    let leccionProgreso = 0;
 
     if (ultimoReg) {
         if (ultimoReg.esReset) {
@@ -49,6 +49,11 @@ function MaestroDashboard({
             leccionProgreso = parseInt(ultimoReg.leccion);
             leccionAsignada = ultimoReg.leccionImpartida ? parseInt(ultimoReg.leccion) + 1 : parseInt(ultimoReg.leccion);
         }
+    }
+
+    if (asistenciaHoy && asistenciaHoy.leccion) {
+        leccionAsignada = parseInt(asistenciaHoy.leccion);
+        leccionProgreso = parseInt(asistenciaHoy.leccion);
     }
 
     React.useEffect(() => {
@@ -63,10 +68,11 @@ function MaestroDashboard({
             }
             setListaAsistencia(inicial);
         }
-    }, [vistaActual, alumnos, asistenciaHoy]); // Se quitó ultimoReg para evitar bucles infinitos en pantalla
+    }, [vistaActual, alumnos, asistenciaHoy]); 
 
     const guardarLista = async () => {
         if (alumnos.length === 0) { alert("Debes registrar alumnos primero."); return; }
+        if (!ultimoReg) { alert("Por favor, espera a que el Director asigne la lección inicial."); return; }
         const registros = alumnos.map(a => ({ idAlumno: a.id, nombre: a.nombre, estado: listaAsistencia[a.id] || 'Ausente' }));
         const exito = await onSaveAsistencia(registros, leccionAsignada, leccionImpartida);
         if (exito) setVistaActual('inicio');
@@ -121,7 +127,7 @@ function MaestroDashboard({
                         <>
                             <div className="flex justify-between items-center mb-6"><h3 className={`font-bold text-sm flex items-center ${estaBloqueada ? 'text-slate-500' : 'text-slate-700'}`}><i className={`fas ${estaBloqueada ? 'fa-lock' : 'fa-clipboard-check'} mr-2 text-lg ${estaBloqueada ? 'text-slate-400' : 'text-emerald-500'}`}></i> {estaBloqueada ? 'Asistencia (Solo Lectura)' : 'Asistencia Completada'}</h3>{estaBloqueada ? (<span className="text-[9px] bg-slate-200 text-slate-500 px-2 py-1 rounded-lg font-bold uppercase">Bloqueada</span>) : (<span className="text-[10px] bg-emerald-100 text-emerald-700 px-2 py-1 rounded-lg font-bold">TUYA</span>)}</div>
                             <div className="flex justify-around text-center mb-6"><div><p className={`text-3xl font-black ${estaBloqueada ? 'text-slate-500' : 'text-emerald-500'}`}>{asistenciaHoy.totales.presentes}</p><p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">Presentes</p></div><div><p className={`text-3xl font-black ${estaBloqueada ? 'text-slate-500' : 'text-rose-500'}`}>{asistenciaHoy.totales.ausentes}</p><p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">Ausentes</p></div><div><p className={`text-3xl font-black ${estaBloqueada ? 'text-slate-500' : 'text-amber-500'}`}>{asistenciaHoy.totales.permisos}</p><p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">Permisos</p></div></div>
-                            <div className={`pt-4 border-t ${estaBloqueada ? 'border-slate-200' : 'border-slate-50'}`}><div className="flex justify-between text-[10px] font-bold text-slate-400 mb-2"><span>Material: Parte {progInicio.parte} • Lección {progInicio.leccion}</span><span className="text-indigo-400">{progInicio.porc}%</span></div><div className="w-full bg-slate-100 rounded-full h-1.5 overflow-hidden"><div className="bg-indigo-400 h-1.5 rounded-full" style={{width: `${progInicio.porc}%`}}></div></div></div>
+                            <div className={`pt-4 border-t ${estaBloqueada ? 'border-slate-200' : 'border-slate-50'}`}><div className="flex justify-between text-[10px] font-bold text-slate-400 mb-2"><span>{!ultimoReg ? 'Material: Sin asignar' : `Material: Parte ${progInicio.parte} • Lección ${progInicio.leccion}`}</span><span className="text-indigo-400">{progInicio.porc}%</span></div><div className="w-full bg-slate-100 rounded-full h-1.5 overflow-hidden"><div className="bg-indigo-400 h-1.5 rounded-full" style={{width: `${progInicio.porc}%`}}></div></div></div>
                         </>
                     ) : (<><div className="absolute top-0 right-0 w-32 h-32 bg-white opacity-10 rounded-bl-[100px] pointer-events-none"></div><div className="flex items-center space-x-4 relative z-10"><div className="w-16 h-16 bg-white/20 rounded-2xl flex items-center justify-center text-3xl backdrop-blur-sm animate-pulse"><i className="fas fa-clipboard-list"></i></div><div><h3 className="font-bold text-xl">Tomar Asistencia</h3><p className="text-rose-100 text-xs">Aún no registras el día de hoy</p></div></div></>)}
                 </div>
@@ -140,6 +146,18 @@ function MaestroDashboard({
             );
         } else if (estaBloqueada) {
             contenidoMaestro = <div className="flex flex-col items-center justify-center h-full text-center p-8 animate-in fade-in"><div className="w-24 h-24 bg-slate-100 text-slate-400 rounded-full flex items-center justify-center text-5xl mb-6 shadow-inner"><i className="fas fa-lock"></i></div><h3 className="text-2xl font-black text-slate-700 mb-2">Acceso Bloqueado</h3><p className="text-slate-500 text-sm leading-relaxed">La asistencia de hoy ya fue registrada por <b>{asistenciaHoy?.maestro}</b>.</p></div>;
+        } else if (!ultimoReg) {
+            // --- NUEVO: PANTALLA DE BLOQUEO HASTA QUE EL DIRECTOR ASIGNE LECCIÓN ---
+            contenidoMaestro = (
+                <div className="flex flex-col h-full pt-4 animate-in slide-in-from-right duration-300">
+                    <div className="px-2 mb-4"><div><h2 className="text-2xl font-black text-slate-800">Pasar Lista</h2></div></div>
+                    <div className="flex-1 bg-white rounded-t-[40px] shadow-lg border-t border-slate-100 p-8 flex flex-col items-center justify-center text-center">
+                        <div className="w-24 h-24 bg-amber-50 text-amber-500 rounded-full flex items-center justify-center text-5xl mb-6 shadow-sm animate-bounce"><i className="fas fa-lock"></i></div>
+                        <h3 className="text-xl font-black text-slate-700 mb-2">Material no asignado</h3>
+                        <p className="text-slate-500 text-sm leading-relaxed mb-8">Por favor, comunícate con el Director e infórmale en qué <b>lección exacta</b> vas a iniciar hoy.<br/><br/>Una vez que él la asigne en su panel, esta pantalla se desbloqueará automáticamente y podrás pasar lista.</p>
+                    </div>
+                </div>
+            );
         } else {
             contenidoMaestro = (
                 <div className="flex flex-col h-full pt-4 animate-in slide-in-from-right duration-300">
@@ -148,7 +166,6 @@ function MaestroDashboard({
                         <div className="bg-indigo-50 p-4 rounded-2xl border border-indigo-100 mb-4 flex-shrink-0">
                             <h3 className="text-xs font-bold text-indigo-800 uppercase tracking-widest mb-3 flex items-center"><i className="fas fa-book mr-2"></i> Material de Clase</h3>
                             <div className="flex space-x-4 items-center">
-                                {/* EL INPUT ESTÁ TOTALMENTE BLOQUEADO PARA EL MAESTRO Y LEE EN TIEMPO REAL */}
                                 <div className="w-1/3 relative">
                                     <label className="text-[10px] font-bold text-indigo-400 uppercase ml-1 block mb-1">Lección N°</label>
                                     <input 
