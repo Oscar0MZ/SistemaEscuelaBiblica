@@ -1,19 +1,18 @@
 function DashboardView(props) {
-    const { usuario } = props;
-
-    if (usuario === 'ADMIN') {
-        return <AdminDashboard {...props} />;
+    if (props.usuario === 'ADMIN') {
+        return <window.AdminDashboard {...props} />;
+    }
+    
+    // --- REDIRECCIÓN PARA LA SECRETARIA ---
+    if (props.usuario === 'SECRETARIA') {
+        return <window.SecretariaDashboard {...props} />;
     }
 
-    if (usuario === 'LOGISTICA') {
-        return <LogisticaDashboard {...props} />;
+    if (props.usuario === 'LOGISTICA') {
+        return <window.LogisticaDashboard {...props} />;
     }
 
-    if (usuario === 'MAESTRO' || usuario === 'AUXILIAR') {
-        return <MaestroDashboard {...props} />;
-    }
-
-    return null; // Si no es ninguno, no muestra nada
+    return <window.MaestroDashboard {...props} />;
 }
 
 window.DashboardView = DashboardView;
