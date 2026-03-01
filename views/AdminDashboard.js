@@ -141,20 +141,23 @@ function AdminDashboard({
                             } 
                             else {
                                 const total = todosLosAlumnos.filter(a => a.campo === campo).length; 
-                                const histCampo = historialVisible.find(h => h.campo === campo && h.leccion !== undefined); 
-                                const resetCampo = historialAsistencias.find(h => h.campo === campo && h.esReset); 
                                 
-                                // --- MAGIA: Calcula la lección impartida para la barra de progreso ---
+                                // --- MAGIA REPARADA: ORDENAMIENTO EN EL ADMIN TAMBIÉN ---
+                                const registrosCampoTodo = historialAsistencias.filter(h => h.campo === campo && h.leccion !== undefined);
+                                const registrosOrdenados = registrosCampoTodo.sort((a, b) => b.timestamp - a.timestamp);
+                                const ultimoReg = registrosOrdenados[0];
+                                
                                 let ultimaLec = 0;
-                                if (histCampo && resetCampo) { 
-                                    if (histCampo.timestamp > resetCampo.timestamp) { ultimaLec = parseInt(histCampo.leccion); } 
-                                    else { ultimaLec = parseInt(resetCampo.leccion) - 1; }
-                                } 
-                                else if (histCampo) { ultimaLec = parseInt(histCampo.leccion); } 
-                                else if (resetCampo) { ultimaLec = parseInt(resetCampo.leccion) - 1; }
-                                
-                                if (ultimaLec < 0) ultimaLec = 0; // Evitar números negativos en la barra
-                                
+                                if (ultimoReg) {
+                                    if (ultimoReg.esReset) {
+                                        // Si lo último es un reset (ej. 7), significa que la barra de progreso debe mostrar lo anterior (6) completado.
+                                        ultimaLec = parseInt(ultimoReg.leccion) - 1;
+                                    } else {
+                                        ultimaLec = parseInt(ultimoReg.leccion);
+                                    }
+                                }
+                                if (ultimaLec < 0) ultimaLec = 0;
+
                                 const prog = calcProgreso(ultimaLec);
                                 const isExpanded = campoExpandido === campo;
                                 const registrosCampo = historialVisible.filter(h => h.campo === campo);
@@ -176,7 +179,7 @@ function AdminDashboard({
                                             <div className="w-full bg-slate-100 rounded-full h-2 overflow-hidden"><div className="bg-indigo-500 h-2 rounded-full transition-all duration-1000" style={{width: `${prog.porc}%`}}></div></div>
                                         </div>
 
-                                        {/* --- MAGIA: Formulario para ingresar la lección exacta --- */}
+                                        {/* --- MAGIA: FORMULARIO PARA ASIGNAR LECCIÓN EXACTA AL MAESTRO --- */}
                                         {campoResetUI === campo && (
                                             <div className="mt-4 p-4 bg-slate-50 rounded-xl border border-slate-200 animate-in slide-in-from-top-2 duration-200">
                                                 <p className="text-[10px] font-black text-slate-500 mb-3 uppercase tracking-widest text-center"><i className="fas fa-cog mr-1"></i> Asignar Próxima Lección</p>
