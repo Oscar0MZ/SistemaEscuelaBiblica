@@ -144,11 +144,17 @@ function AdminDashboard({
                                 const histCampo = historialVisible.find(h => h.campo === campo && h.leccion !== undefined); 
                                 const resetCampo = historialAsistencias.find(h => h.campo === campo && h.esReset); 
                                 
+                                // --- MAGIA: Calcula la lección impartida para la barra de progreso ---
                                 let ultimaLec = 0;
-                                if (histCampo && resetCampo) { ultimaLec = histCampo.timestamp > resetCampo.timestamp ? parseInt(histCampo.leccion) : parseInt(resetCampo.leccion); } 
+                                if (histCampo && resetCampo) { 
+                                    if (histCampo.timestamp > resetCampo.timestamp) { ultimaLec = parseInt(histCampo.leccion); } 
+                                    else { ultimaLec = parseInt(resetCampo.leccion) - 1; }
+                                } 
                                 else if (histCampo) { ultimaLec = parseInt(histCampo.leccion); } 
-                                else if (resetCampo) { ultimaLec = parseInt(resetCampo.leccion); }
-
+                                else if (resetCampo) { ultimaLec = parseInt(resetCampo.leccion) - 1; }
+                                
+                                if (ultimaLec < 0) ultimaLec = 0; // Evitar números negativos en la barra
+                                
                                 const prog = calcProgreso(ultimaLec);
                                 const isExpanded = campoExpandido === campo;
                                 const registrosCampo = historialVisible.filter(h => h.campo === campo);
@@ -170,13 +176,18 @@ function AdminDashboard({
                                             <div className="w-full bg-slate-100 rounded-full h-2 overflow-hidden"><div className="bg-indigo-500 h-2 rounded-full transition-all duration-1000" style={{width: `${prog.porc}%`}}></div></div>
                                         </div>
 
+                                        {/* --- MAGIA: Formulario para ingresar la lección exacta --- */}
                                         {campoResetUI === campo && (
                                             <div className="mt-4 p-4 bg-slate-50 rounded-xl border border-slate-200 animate-in slide-in-from-top-2 duration-200">
-                                                <p className="text-[10px] font-black text-slate-500 mb-3 uppercase tracking-widest text-center"><i className="fas fa-sync-alt mr-1"></i> Reiniciar Material</p>
-                                                <div className="flex space-x-2">
-                                                    <button onClick={() => { onResetLecciones(campo, 0); setCampoResetUI(null); }} className="flex-1 py-3 bg-indigo-500 text-white rounded-lg text-xs font-bold shadow-md active:scale-95 transition-all">Empezar Parte 1</button>
-                                                    <button onClick={() => { onResetLecciones(campo, 25); setCampoResetUI(null); }} className="flex-1 py-3 bg-sky-500 text-white rounded-lg text-xs font-bold shadow-md active:scale-95 transition-all">Empezar Parte 2</button>
-                                                </div>
+                                                <p className="text-[10px] font-black text-slate-500 mb-3 uppercase tracking-widest text-center"><i className="fas fa-cog mr-1"></i> Asignar Próxima Lección</p>
+                                                <form onSubmit={(e) => { 
+                                                    e.preventDefault(); 
+                                                    onResetLecciones(campo, parseInt(e.target.leccion.value)); 
+                                                    setCampoResetUI(null); 
+                                                }} className="flex space-x-2">
+                                                    <input type="number" name="leccion" min="1" required placeholder="Ej: 7" className="w-1/2 p-3 bg-white rounded-lg text-xs font-black text-slate-700 text-center shadow-sm border border-slate-200 outline-none focus:border-indigo-400" />
+                                                    <button type="submit" className="w-1/2 py-3 bg-indigo-600 text-white rounded-lg text-xs font-bold shadow-md active:scale-95 transition-all">Guardar</button>
+                                                </form>
                                             </div>
                                         )}
 
@@ -216,7 +227,6 @@ function AdminDashboard({
         const entregasCompletadas = entregasLogistica.filter(e => e.estado === 'Entregado');
         const personalLogistica = activos.filter(m => m.clase === 'LOGISTICA'); 
 
-        // Agrupar completadas
         const entregasCompletadasPorGrupo = {};
         entregasCompletadas.forEach(e => {
             if (!entregasCompletadasPorGrupo[e.grupo]) entregasCompletadasPorGrupo[e.grupo] = [];
@@ -224,7 +234,6 @@ function AdminDashboard({
         });
         const gruposCompletados = Object.keys(entregasCompletadasPorGrupo).sort();
 
-        // --- CÁLCULO DE HISTÓRICO Y ACTUAL ---
         const historicoRecibido = inventarioDatos?.historicoRecibido || 0;
         const actualRecibido = inventarioDatos?.actualRecibido || 0;
 
@@ -239,10 +248,9 @@ function AdminDashboard({
             }
             totalEntregadoHistorico += sumRoute;
             
-            // Si la ruta ya se entregó y NO está archivada, suma al "Actual"
             if (e.estado === 'Entregado' && !e.archivado) {
                 totalEntregadoActual += sumRoute;
-                rutasParaArchivar.push(e); // Estas se borrarán del "Actual" al cerrar jornada
+                rutasParaArchivar.push(e);
             }
         });
 
@@ -272,7 +280,6 @@ function AdminDashboard({
                                 <div className="w-16 h-16 bg-white/20 rounded-2xl flex items-center justify-center text-3xl backdrop-blur-sm absolute bottom-6 right-6 z-10"><i className="fas fa-boxes"></i></div>
                             </div>
 
-                            {/* --- TABLA ACTUAL VS HISTÓRICO --- */}
                             <div className="bg-slate-50 rounded-3xl p-5 mb-5 border border-slate-200 shadow-sm">
                                 <h3 className="font-black text-slate-700 text-xs uppercase tracking-widest mb-3 border-b border-slate-200 pb-2">Control Actual (Esta Jornada)</h3>
                                 <div className="flex justify-between items-center mb-4">
