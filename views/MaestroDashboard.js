@@ -22,6 +22,7 @@ function MaestroDashboard({
         return `${p[2]}/${p[1]}/${p[0]}`; 
     };
 
+    // Actualizado para contemplar las 54 lecciones (Material 1 y 2)
     const calcProgreso = (impartidas) => {
         const l = parseInt(impartidas) || 0;
         if (l === 0) return { parte: 1, impartidas: 0, faltan: 25, porc: 0 };
@@ -33,32 +34,37 @@ function MaestroDashboard({
     React.useEffect(() => {
         if (vistaActual === 'asistencia' && alumnos.length > 0) {
             const inicial = {};
-            if (asistenciaHoy && asistenciaHoy.registros) {
+            let nextLec = 1;
+            let impartida = true;
+
+            // --- MAGIA REPARADA: Lectura Estricta por Milisegundos ---
+            // Ordenamos todo para saber qué fue EXACTAMENTE lo último que pasó (Clase o Instrucción del Director)
+            const historialOrdenado = [...historialAsistencias].sort((a, b) => b.timestamp - a.timestamp);
+            const ultimoReg = historialOrdenado[0];
+            
+            const timestampHoy = asistenciaHoy ? (asistenciaHoy.timestamp || Date.now()) : 0;
+            const timestampUltimo = ultimoReg ? (ultimoReg.timestamp || 0) : 0;
+
+            // Si hay asistencia hoy, y NO hay un reinicio más reciente del director
+            if (asistenciaHoy && asistenciaHoy.registros && timestampHoy >= timestampUltimo) {
                 asistenciaHoy.registros.forEach(r => inicial[r.idAlumno] = r.estado);
-                setLeccionActual(asistenciaHoy.leccion || '');
-                setLeccionImpartida(asistenciaHoy.leccionImpartida !== false);
+                nextLec = parseInt(asistenciaHoy.leccion || 1);
+                impartida = asistenciaHoy.leccionImpartida !== false;
             } else {
+                // Si no hay asistencia hoy, o el Director acaba de forzar un cambio de material
                 alumnos.forEach(a => inicial[a.id] = 'Presente');
-                
-                // --- MAGIA: Lógica de auto-incremento exacto basado en tiempo real ---
-                let nextLec = 1;
-                if (historialAsistencias && historialAsistencias.length > 0) {
-                    const historialOrdenado = [...historialAsistencias].sort((a, b) => b.timestamp - a.timestamp);
-                    const ultimo = historialOrdenado.find(h => h.leccion !== undefined);
-                    
-                    if (ultimo) { 
-                        if (ultimo.esReset) {
-                            // El Director forzó una lección. El maestro la da hoy.
-                            nextLec = parseInt(ultimo.leccion);
-                        } else {
-                            // Clase normal anterior. Sumamos 1 solo si sí la impartieron.
-                            nextLec = ultimo.leccionImpartida ? parseInt(ultimo.leccion) + 1 : parseInt(ultimo.leccion); 
-                        }
+                if (ultimoReg) {
+                    if (ultimoReg.esReset) {
+                        nextLec = parseInt(ultimoReg.leccion);
+                    } else {
+                        nextLec = ultimoReg.leccionImpartida ? parseInt(ultimoReg.leccion) + 1 : parseInt(ultimoReg.leccion);
                     }
-                } 
-                setLeccionActual(nextLec);
-                setLeccionImpartida(true);
+                }
+                impartida = true;
             }
+
+            setLeccionActual(nextLec);
+            setLeccionImpartida(impartida);
             setListaAsistencia(inicial);
         }
     }, [vistaActual, alumnos, asistenciaHoy, historialAsistencias]);
@@ -83,11 +89,7 @@ function MaestroDashboard({
     const nombreDisplay = datosUsuarioActual ? datosUsuarioActual.nombre.split(' ')[0] : '';
     const rolDisplay = usuario.charAt(0) + usuario.slice(1).toLowerCase();
     
-    // Cálculo preciso de la barra de progreso para el Maestro
     let impartidasParaProgreso = parseInt(leccionActual) - 1;
-    if (asistenciaTomada && asistenciaHoy) {
-        impartidasParaProgreso = asistenciaHoy.leccionImpartida ? parseInt(asistenciaHoy.leccion) : parseInt(asistenciaHoy.leccion) - 1;
-    }
     if (impartidasParaProgreso < 0 || isNaN(impartidasParaProgreso)) impartidasParaProgreso = 0;
     const progInicio = calcProgreso(impartidasParaProgreso);
 
@@ -179,7 +181,6 @@ function MaestroDashboard({
                             </div>
                         </div>
                         <div className="overflow-y-auto space-y-4 pb-28 pr-2">
-                            {/* DISEÑO CON NOMBRES ARRIBA Y BOTONES ABAJO */}
                             {alumnos.map(a => (
                                 <div key={a.id} className="flex flex-col p-4 bg-slate-50 rounded-2xl border border-slate-100 shadow-sm">
                                     <div className="flex items-center space-x-3 mb-3">
@@ -212,7 +213,36 @@ function MaestroDashboard({
             <div className="flex flex-col h-full pt-4 animate-in slide-in-from-right duration-300">
                 <div className="px-2 mb-6"><h2 className="text-2xl font-black text-slate-800">Directorio Alumnos</h2><p className="text-slate-400 text-xs">{alumnos.length} Registrados en tu campo</p></div>
                 <button onClick={onOpenAlumnoModal} className="w-full bg-emerald-500 p-5 rounded-[24px] shadow-lg shadow-emerald-200 active:scale-95 transition-all text-white flex items-center justify-between mb-6"><div className="flex items-center space-x-4"><div className="w-12 h-12 bg-white/20 rounded-xl flex items-center justify-center text-xl backdrop-blur-sm"><i className="fas fa-plus"></i></div><span className="font-bold text-lg">Inscribir Nuevo</span></div><i className="fas fa-chevron-right opacity-50 text-xl"></i></button>
-                <div className="flex-1 bg-white rounded-t-[40px] shadow-[0_-10px_40px_rgba(0,0,0,0.05)] border-t border-slate-100 p-6 overflow-hidden flex flex-col"><div className="overflow-y-auto space-y-3 pb-24 pr-2">{alumnos.map(nino => (<div key={nino.id} className="flex items-center justify-between p-4 bg-slate-50 rounded-2xl border border-slate-100"><div className="flex items-center space-x-4 flex-1 pr-2"><div className={`w-12 h-12 rounded-xl flex items-center justify-center text-lg font-bold shrink-0 shadow-sm ${nino.genero === 'M' ? 'bg-sky-100 text-sky-600' : nino.genero === 'F' ? 'bg-pink-100 text-pink-600' : 'bg-white text-slate-400 border border-slate-200'}`}>{nino.nombre.charAt(0)}</div><div><p className="font-bold text-slate-700 text-sm leading-tight">{nino.nombre}</p><p className="text-[10px] text-slate-400 font-bold tracking-wide mt-1"><i className="fas fa-birthday-cake mr-1 text-rose-300"></i>{nino.edad} Años <span className="mx-1 text-slate-300">|</span> <span className={nino.genero === 'M' ? 'text-sky-500' : 'text-pink-500'}>{nino.genero === 'M' ? 'Niño' : nino.genero === 'F' ? 'Niña' : '-'}</span></p></div></div><div className="flex space-x-2 shrink-0"><button onClick={() => onEditAlumno(nino)} className="text-indigo-400 w-10 h-10 flex items-center justify-center bg-indigo-50 hover:bg-indigo-100 rounded-xl transition-colors"><i className="fas fa-edit"></i></button><button onClick={() => onDeleteAlumno(nino)} className="text-rose-400 w-10 h-10 flex items-center justify-center bg-rose-50 hover:bg-rose-100 rounded-xl transition-colors"><i className="fas fa-trash"></i></button></div></div>))}</div></div>
+                
+                <div className="flex-1 bg-white rounded-t-[40px] shadow-[0_-10px_40px_rgba(0,0,0,0.05)] border-t border-slate-100 p-6 overflow-hidden flex flex-col">
+                    <div className="overflow-y-auto space-y-4 pb-24 pr-2">
+                        {/* --- NUEVO DISEÑO DE LISTA DE ALUMNOS (Acomodado en Columna) --- */}
+                        {alumnos.map(nino => (
+                            <div key={nino.id} className="flex flex-col p-4 bg-slate-50 rounded-3xl border border-slate-100 shadow-sm">
+                                <div className="flex items-center space-x-3 mb-3">
+                                    <div className={`w-12 h-12 rounded-xl flex items-center justify-center text-lg font-black shrink-0 shadow-sm ${nino.genero === 'M' ? 'bg-sky-100 text-sky-600' : nino.genero === 'F' ? 'bg-pink-100 text-pink-600' : 'bg-white text-slate-400 border border-slate-200'}`}>
+                                        {nino.nombre.charAt(0)}
+                                    </div>
+                                    <div className="flex-1">
+                                        <p className="font-black text-slate-700 text-base leading-tight">{nino.nombre}</p>
+                                    </div>
+                                </div>
+                                
+                                <div className="flex justify-between items-center bg-white p-2 pl-3 rounded-2xl border border-slate-100 shadow-sm">
+                                    <p className="text-[11px] text-slate-500 font-bold tracking-wide">
+                                        <i className="fas fa-birthday-cake mr-1.5 text-rose-300"></i>{nino.edad} Años 
+                                        <span className="mx-2 text-slate-200">|</span> 
+                                        <span className={nino.genero === 'M' ? 'text-sky-500' : 'text-pink-500'}>{nino.genero === 'M' ? 'Niño' : nino.genero === 'F' ? 'Niña' : '-'}</span>
+                                    </p>
+                                    <div className="flex space-x-1.5">
+                                        <button onClick={() => onEditAlumno(nino)} className="w-10 h-10 flex items-center justify-center bg-indigo-50 text-indigo-500 hover:bg-indigo-100 rounded-xl transition-colors shadow-sm"><i className="fas fa-edit"></i></button>
+                                        <button onClick={() => onDeleteAlumno(nino)} className="w-10 h-10 flex items-center justify-center bg-rose-50 text-rose-500 hover:bg-rose-100 rounded-xl transition-colors shadow-sm"><i className="fas fa-trash"></i></button>
+                                    </div>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                </div>
             </div>
         );
     }
