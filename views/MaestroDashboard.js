@@ -41,7 +41,14 @@ function MaestroDashboard({
                 alumnos.forEach(a => inicial[a.id] = 'Presente');
                 if (historialAsistencias && historialAsistencias.length > 0) {
                     const ultimo = historialAsistencias.find(h => h.leccion !== undefined);
-                    if (ultimo) { setLeccionActual(ultimo.leccionImpartida ? parseInt(ultimo.leccion) + 1 : parseInt(ultimo.leccion)); } 
+                    if (ultimo) { 
+                        // MAGIA: Si la última es un reseteo del admin, tomar ese número exacto
+                        if (ultimo.esReset) {
+                            setLeccionActual(parseInt(ultimo.leccion));
+                        } else {
+                            setLeccionActual(ultimo.leccionImpartida ? parseInt(ultimo.leccion) + 1 : parseInt(ultimo.leccion)); 
+                        }
+                    } 
                     else { setLeccionActual(1); }
                 } else { setLeccionActual(1); }
                 setLeccionImpartida(true);
@@ -133,21 +140,34 @@ function MaestroDashboard({
                         <div className="bg-indigo-50 p-4 rounded-2xl border border-indigo-100 mb-4 flex-shrink-0">
                             <h3 className="text-xs font-bold text-indigo-800 uppercase tracking-widest mb-3 flex items-center"><i className="fas fa-book mr-2"></i> Material de Clase</h3>
                             <div className="flex space-x-4 items-center">
-                                <div className="w-1/3"><label className="text-[10px] font-bold text-indigo-400 uppercase ml-1 block mb-1">Lección N°</label><input type="number" className="w-full p-3 bg-white rounded-xl outline-none border border-indigo-100 focus:border-indigo-400 text-center font-black text-indigo-600 text-lg shadow-sm" value={leccionActual} onChange={e=>setLeccionActual(e.target.value)} placeholder="0" /></div>
-                                <div className="w-2/3"><label className="text-[10px] font-bold text-indigo-400 uppercase ml-1 block mb-1">¿Se impartió hoy?</label><div className="flex space-x-2"><button onClick={() => setLeccionImpartida(true)} className={`flex-1 py-3 rounded-xl font-bold text-xs transition-colors ${leccionImpartida ? 'bg-emerald-500 text-white shadow-md' : 'bg-white border border-indigo-100 text-indigo-400 hover:bg-indigo-100'}`}>Sí ✅</button><button onClick={() => setLeccionImpartida(false)} className={`flex-1 py-3 rounded-xl font-bold text-xs transition-colors ${!leccionImpartida ? 'bg-rose-500 text-white shadow-md' : 'bg-white border border-indigo-100 text-indigo-400 hover:bg-indigo-100'}`}>No ❌</button></div></div>
+                                {/* MAGIA: INPUT BLOQUEADO AUTOMÁTICAMENTE */}
+                                <div className="w-1/3">
+                                    <label className="text-[10px] font-bold text-indigo-400 uppercase ml-1 block mb-1">Lección N°</label>
+                                    <input 
+                                        type="number" 
+                                        className="w-full p-3 bg-slate-100 rounded-xl outline-none border border-slate-200 text-center font-black text-slate-500 text-lg shadow-inner cursor-not-allowed" 
+                                        value={leccionActual} 
+                                        readOnly 
+                                        title="Calculado automáticamente. Pide al Director si necesitas ajustarlo."
+                                    />
+                                    <p className="text-[8px] text-slate-400 text-center mt-1"><i className="fas fa-lock mr-1"></i>Auto.</p>
+                                </div>
+                                <div className="w-2/3">
+                                    <label className="text-[10px] font-bold text-indigo-400 uppercase ml-1 block mb-1">¿Se impartió hoy?</label>
+                                    <div className="flex space-x-2">
+                                        <button onClick={() => setLeccionImpartida(true)} className={`flex-1 py-3 rounded-xl font-bold text-xs transition-colors ${leccionImpartida ? 'bg-emerald-500 text-white shadow-md' : 'bg-white border border-indigo-100 text-indigo-400 hover:bg-indigo-100'}`}>Sí ✅</button>
+                                        <button onClick={() => setLeccionImpartida(false)} className={`flex-1 py-3 rounded-xl font-bold text-xs transition-colors ${!leccionImpartida ? 'bg-rose-500 text-white shadow-md' : 'bg-white border border-indigo-100 text-indigo-400 hover:bg-indigo-100'}`}>No ❌</button>
+                                    </div>
+                                </div>
                             </div>
                         </div>
                         <div className="overflow-y-auto space-y-4 pb-28 pr-2">
-                            {/* --- AQUÍ ESTÁ EL CAMBIO DE DISEÑO ESTÉTICO EN COLUMNA --- */}
                             {alumnos.map(a => (
                                 <div key={a.id} className="flex flex-col p-4 bg-slate-50 rounded-2xl border border-slate-100 shadow-sm">
-                                    {/* ARRIBA: EL NOMBRE COMPLETO */}
                                     <div className="flex items-center space-x-3 mb-3">
                                         <div className="w-10 h-10 bg-indigo-50 text-indigo-600 rounded-xl flex items-center justify-center text-sm font-bold shrink-0">{a.nombre.charAt(0)}</div>
                                         <p className="font-bold text-slate-700 text-sm leading-tight">{a.nombre}</p>
                                     </div>
-                                    
-                                    {/* ABAJO: LOS BOTONES COMPLETOS */}
                                     <div className="grid grid-cols-3 gap-2">
                                         <button onClick={() => setListaAsistencia({...listaAsistencia, [a.id]: 'Presente'})} className={`py-2 rounded-xl text-[11px] font-bold uppercase transition-all ${listaAsistencia[a.id] === 'Presente' ? 'bg-emerald-500 text-white shadow-md' : 'bg-white border border-slate-200 text-slate-400 hover:bg-slate-100'}`}>
                                             Presente
