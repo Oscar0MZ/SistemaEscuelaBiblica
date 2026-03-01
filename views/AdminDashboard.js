@@ -13,7 +13,6 @@ function AdminDashboard({
     const [expandirFiltroAdmin, setExpandirFiltroAdmin] = useState(false);
     const [campoExpandido, setCampoExpandido] = useState(null); 
     const [campoResetUI, setCampoResetUI] = useState(null); 
-    const [materialConfig, setMaterialConfig] = useState(null); // NUEVO: Controla qué material seleccionó
     
     const [subVistaAdminLogistica, setSubVistaAdminLogistica] = useState('bodega'); 
     const [edadMin, setEdadMin] = useState('');
@@ -170,7 +169,7 @@ function AdminDashboard({
                                             <div className="flex items-center space-x-2">
                                                 <span className="bg-indigo-50 text-indigo-600 font-black text-[10px] px-2 py-1.5 rounded uppercase">{total} Alumnos</span>
                                                 <button onClick={() => setCampoExpandido(isExpanded ? null : campo)} className={`w-8 h-8 flex items-center justify-center rounded-lg transition-colors ${isExpanded ? 'bg-indigo-500 text-white' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'}`} title="Ver Historial de Clases"><i className={`fas fa-chevron-down transition-transform duration-300 ${isExpanded ? 'rotate-180' : ''}`}></i></button>
-                                                <button onClick={() => { setCampoResetUI(campoResetUI === campo ? null : campo); setMaterialConfig(null); }} className="w-8 h-8 flex items-center justify-center bg-slate-100 text-slate-500 rounded-lg hover:bg-sky-500 hover:text-white transition-colors" title="Ajustar Material"><i className="fas fa-cog"></i></button>
+                                                <button onClick={() => setCampoResetUI(campoResetUI === campo ? null : campo)} className="w-8 h-8 flex items-center justify-center bg-slate-100 text-slate-500 rounded-lg hover:bg-sky-500 hover:text-white transition-colors" title="Ajustar Material"><i className="fas fa-cog"></i></button>
                                                 <button onClick={() => onDeleteCampo(campo)} className="w-8 h-8 flex items-center justify-center bg-rose-50 text-rose-500 rounded-lg hover:bg-rose-500 hover:text-white transition-colors" title="Limpiar Campo"><i className="fas fa-trash-alt"></i></button>
                                             </div>
                                         </div>
@@ -180,50 +179,29 @@ function AdminDashboard({
                                             <div className="w-full bg-slate-100 rounded-full h-2 overflow-hidden"><div className="bg-indigo-500 h-2 rounded-full transition-all duration-1000" style={{width: `${prog.porc}%`}}></div></div>
                                         </div>
 
-                                        {/* --- MAGIA: FLUJO GUIADO DE MATERIAL Y LECCIÓN --- */}
+                                        {/* --- MAGIA SIMPLE: SOLO ESCRIBE EL NÚMERO Y APLICA --- */}
                                         {campoResetUI === campo && (
                                             <div className="mt-4 p-4 bg-slate-50 rounded-xl border border-slate-200 animate-in slide-in-from-top-2 duration-200 shadow-inner">
-                                                <p className="text-[10px] font-black text-slate-500 mb-3 uppercase tracking-widest text-center"><i className="fas fa-layer-group mr-1"></i> Configurar Material de Clase</p>
-                                                
-                                                {!materialConfig ? (
-                                                    <div className="flex space-x-2">
-                                                        <button onClick={() => setMaterialConfig(1)} className="flex-1 py-3 bg-indigo-500 hover:bg-indigo-600 text-white rounded-xl text-xs font-bold shadow-md transition-all active:scale-95 flex flex-col items-center">
-                                                            Material 1 <span className="text-[9px] font-normal opacity-80 mt-0.5">Lección 1 a 25</span>
-                                                        </button>
-                                                        <button onClick={() => setMaterialConfig(2)} className="flex-1 py-3 bg-sky-500 hover:bg-sky-600 text-white rounded-xl text-xs font-bold shadow-md transition-all active:scale-95 flex flex-col items-center">
-                                                            Material 2 <span className="text-[9px] font-normal opacity-80 mt-0.5">Lección 26 a 54</span>
-                                                        </button>
-                                                    </div>
-                                                ) : (
-                                                    <form onSubmit={(e) => { 
-                                                        e.preventDefault(); 
-                                                        onResetLecciones(campo, parseInt(e.target.leccion.value)); 
-                                                        setCampoResetUI(null); 
-                                                        setMaterialConfig(null);
-                                                    }} className="flex flex-col space-y-3 animate-in fade-in">
-                                                        <p className="text-xs font-bold text-slate-600 text-center">
-                                                            Asignar Material {materialConfig}
-                                                        </p>
-                                                        <div className="flex space-x-2">
-                                                            <div className="w-1/2 relative">
-                                                                <input 
-                                                                    type="number" 
-                                                                    name="leccion" 
-                                                                    min={materialConfig === 1 ? 1 : 26} 
-                                                                    max={materialConfig === 1 ? 25 : 54} 
-                                                                    required 
-                                                                    placeholder={`Ej: ${materialConfig === 1 ? 8 : 30}`} 
-                                                                    className="w-full p-3 bg-white rounded-xl text-sm font-black text-slate-700 text-center shadow-sm border border-slate-200 outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 transition-all" 
-                                                                />
-                                                                <p className="text-[8px] text-slate-400 text-center mt-1 uppercase font-bold tracking-widest">Lección Inicial</p>
-                                                            </div>
-                                                            <button type="submit" className="w-1/2 h-[46px] bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl text-xs font-black shadow-md active:scale-95 transition-all flex items-center justify-center">
-                                                                <i className="fas fa-check mr-2"></i>Confirmar
-                                                            </button>
-                                                        </div>
-                                                        <button type="button" onClick={() => setMaterialConfig(null)} className="text-[10px] font-bold text-slate-400 uppercase text-center py-2 hover:bg-slate-200 rounded-lg transition-colors">Volver Atrás</button>
-                                                    </form>
-                                                )}
+                                                <p className="text-[10px] font-black text-slate-500 mb-3 uppercase tracking-widest text-center"><i className="fas fa-cog mr-1"></i> Asignar Lección Exacta</p>
+                                                <form onSubmit={(e) => { 
+                                                    e.preventDefault(); 
+                                                    onResetLecciones(campo, parseInt(e.target.leccion.value)); 
+                                                    setCampoResetUI(null); 
+                                                }} className="flex space-x-2">
+                                                    <input 
+                                                        type="number" 
+                                                        name="leccion" 
+                                                        min="1" 
+                                                        max="54" 
+                                                        required 
+                                                        placeholder="N° (1 al 54)" 
+                                                        className="w-1/2 p-3 bg-white rounded-xl text-sm font-black text-slate-700 text-center shadow-sm border border-slate-200 outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 transition-all" 
+                                                    />
+                                                    <button type="submit" className="w-1/2 py-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-black shadow-md active:scale-95 transition-all">
+                                                        <i className="fas fa-check mr-2"></i>Aplicar
+                                                    </button>
+                                                </form>
+                                                <p className="text-[9px] text-slate-400 text-center mt-2 font-bold">1 al 25 = Mat 1 | 26 al 54 = Mat 2</p>
                                             </div>
                                         )}
 
