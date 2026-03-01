@@ -2,106 +2,123 @@ const { useState } = React;
 
 function LoginView({ onLogin }) {
     const [rol, setRol] = useState('');
-    const [clave, setClave] = useState('');
     const [nombre, setNombre] = useState('');
-    const [campo, setCampo] = useState(''); // Nuevo estado para el Campo
+    const [campo, setCampo] = useState('');
+    const [clave, setClave] = useState('');
     const [error, setError] = useState('');
-    const [mensaje, setMensaje] = useState('');
+    const [loading, setLoading] = useState(false);
 
-    // Lista de Campos
-    const camposDisponibles = [
-        "La Isla",
-        "Las Delicias",
-        "El Amatal",
-        "El Manguito",
-        "Buenos Aires",
-        "Corozal #1",
-        "El Porvenir",
-        "El Caulote",
-        "Corozal #2",
-        "Valle Encantado",
-        "La Playa"
-    ];
+    const camposDisponibles = ["La Isla", "Las Delicias", "El Amatal", "El Manguito", "Buenos Aires", "Corozal #1", "El Porvenir", "El Caulote", "Corozal #2", "Valle Encantado", "La Playa"];
 
     const handleSubmit = async (e) => {
         e.preventDefault();
         setError('');
-        setMensaje('');
-
-        // Validaciones
-        if (rol !== 'ADMIN' && !nombre.trim()) {
-            setError('Por favor escribe tu nombre completo.');
-            return;
-        }
-
-        // Validación de Campo (Solo para Maestros y Auxiliares)
-        if ((rol === 'MAESTRO' || rol === 'AUXILIAR') && !campo) {
-            setError('Debes seleccionar el Campo donde estás asignado.');
-            return;
-        }
-
-        // Enviamos los datos (incluyendo el campo si aplica)
-        const respuesta = await onLogin(rol, clave, nombre, campo);
+        setLoading(true);
         
-        if (!respuesta.exito) {
-            setError(respuesta.mensaje);
-        } else if (respuesta.mensaje) {
-            setMensaje(respuesta.mensaje);
-            setClave('');
+        // A la Secretaria, Logística y Admin NO se les exige Campo
+        if (rol !== 'ADMIN' && rol !== 'LOGISTICA' && rol !== 'SECRETARIA' && !campo) {
+            setError('Debes seleccionar un campo.');
+            setLoading(false);
+            return;
         }
+
+        if (rol !== 'ADMIN' && !nombre.trim()) {
+            setError('Debes ingresar tu nombre.');
+            setLoading(false);
+            return;
+        }
+
+        const res = await onLogin(rol, clave, nombre, campo);
+        if (!res.exito) {
+            setError(res.mensaje || 'Error al iniciar sesión');
+        } else if (res.mensaje) {
+            alert(res.mensaje); // Alerta de "Solicitud enviada, espera aprobación"
+            setRol(''); setNombre(''); setCampo(''); setClave('');
+        }
+        setLoading(false);
     };
 
     return (
-        <div className="flex items-center justify-center h-full bg-indigo-600 p-6">
-            <div className="bg-white rounded-[40px] p-8 w-full max-w-sm shadow-2xl">
-                <div className="text-center mb-8">
-                    <div className="bg-indigo-100 w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-4 text-indigo-600">
-                        <i className="fas fa-church text-3xl"></i>
-                    </div>
-                    <h2 className="text-2xl font-bold text-slate-800">Control Escolar</h2>
-                    <p className="text-slate-500 text-sm">Sistema de Asistencia</p>
+        <div className="flex flex-col items-center justify-center min-h-[100dvh] px-6 bg-slate-100">
+            <div className="w-full max-w-sm bg-white p-8 rounded-[32px] shadow-2xl animate-in zoom-in-95">
+                <div className="w-20 h-20 bg-indigo-50 text-indigo-600 rounded-full flex items-center justify-center text-4xl mx-auto mb-6 shadow-inner">
+                    <i className="fas fa-church"></i>
                 </div>
-                
+                <h1 className="text-2xl font-black text-slate-800 text-center mb-2">Bienvenido</h1>
+                <p className="text-sm text-slate-500 text-center mb-8">Ingresa tus datos para continuar</p>
+
                 <form onSubmit={handleSubmit} className="space-y-4">
-                    {/* SELECCIÓN DE ROL */}
-                    <select required className="w-full p-4 bg-slate-50 border border-slate-100 rounded-2xl outline-none font-medium text-slate-600"
-                        value={rol} onChange={(e) => setRol(e.target.value)}>
-                        <option value="">¿Quién eres?</option>
-                        <option value="ADMIN">Director (Admin)</option>
-                        <option value="MAESTRO">Maestro</option>
-                        <option value="AUXILIAR">Auxiliar</option>
-                        <option value="LOGISTICA">Logística</option>
-                    </select>
-
-                    {/* NOMBRE COMPLETO (No Admin) */}
-                    {rol && rol !== 'ADMIN' && (
-                        <input type="text" required placeholder="Tu Nombre Completo"
-                            className="w-full p-4 bg-slate-50 border border-slate-100 rounded-2xl outline-none focus:ring-2 focus:ring-indigo-500 transition-all"
-                            value={nombre} onChange={(e) => setNombre(e.target.value)} />
-                    )}
-
-                    {/* SELECCIÓN DE CAMPO (Solo Maestros y Auxiliares) */}
-                    {(rol === 'MAESTRO' || rol === 'AUXILIAR') && (
-                        <select required className="w-full p-4 bg-slate-50 border border-slate-100 rounded-2xl outline-none font-medium text-slate-600 animate-in fade-in slide-in-from-top-2"
-                            value={campo} onChange={(e) => setCampo(e.target.value)}>
-                            <option value="">Selecciona tu Campo</option>
-                            {camposDisponibles.map(c => (
-                                <option key={c} value={c}>{c}</option>
-                            ))}
+                    <div>
+                        <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-2 mb-1 block">¿Cuál es tu rol?</label>
+                        <select 
+                            className="w-full p-4 bg-slate-50 rounded-2xl outline-none border border-slate-100 focus:border-indigo-400 font-bold text-slate-700 transition-colors"
+                            value={rol} 
+                            onChange={(e) => { setRol(e.target.value); setError(''); }}
+                            required
+                        >
+                            <option value="" disabled>Selecciona un rol...</option>
+                            <option value="MAESTRO">Maestro</option>
+                            <option value="AUXILIAR">Auxiliar</option>
+                            <option value="LOGISTICA">Logística</option>
+                            {/* AQUÍ ESTÁ EL NUEVO ROL DE SECRETARÍA */}
+                            <option value="SECRETARIA">Secretaría</option>
+                            <option value="ADMIN">Director (Admin)</option>
                         </select>
+                    </div>
+
+                    {rol && rol !== 'ADMIN' && (
+                        <div className="animate-in fade-in slide-in-from-top-2">
+                            <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-2 mb-1 block">Tu Nombre Completo</label>
+                            <input 
+                                type="text" 
+                                placeholder="Ej: Ana Pérez" 
+                                className="w-full p-4 bg-slate-50 rounded-2xl outline-none border border-slate-100 focus:border-indigo-400 font-bold text-slate-700 transition-colors"
+                                value={nombre}
+                                onChange={(e) => setNombre(e.target.value)}
+                                required
+                            />
+                        </div>
                     )}
-                    
-                    {/* CLAVE */}
-                    <input type="password" required placeholder="Clave de acceso"
-                        className="w-full p-4 bg-slate-50 border border-slate-100 rounded-2xl outline-none text-center text-xl tracking-[0.5em] focus:ring-2 focus:ring-indigo-500 transition-all"
-                        value={clave} onChange={(e) => setClave(e.target.value)} />
-                    
-                    {/* MENSAJES */}
-                    {error && <div className="bg-rose-50 text-rose-500 p-3 rounded-xl text-xs text-center font-bold border border-rose-100"><i className="fas fa-exclamation-circle mr-1"></i> {error}</div>}
-                    {mensaje && <div className="bg-amber-50 text-amber-600 p-3 rounded-xl text-xs text-center font-bold border border-amber-100"><i className="fas fa-clock mr-1"></i> {mensaje}</div>}
-                    
-                    <button type="submit" className="w-full bg-indigo-600 text-white py-4 rounded-2xl font-bold shadow-lg active:scale-95 transition-all">
-                        {rol === 'ADMIN' ? 'Entrar' : 'Solicitar Acceso'}
+
+                    {rol && rol !== 'ADMIN' && rol !== 'LOGISTICA' && rol !== 'SECRETARIA' && (
+                        <div className="animate-in fade-in slide-in-from-top-2">
+                            <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-2 mb-1 block">Tu Campo Asignado</label>
+                            <select 
+                                className="w-full p-4 bg-slate-50 rounded-2xl outline-none border border-slate-100 focus:border-indigo-400 font-bold text-slate-700 transition-colors"
+                                value={campo} 
+                                onChange={(e) => setCampo(e.target.value)}
+                                required
+                            >
+                                <option value="" disabled>Selecciona tu campo...</option>
+                                {camposDisponibles.map(c => (
+                                    <option key={c} value={c}>{c}</option>
+                                ))}
+                            </select>
+                        </div>
+                    )}
+
+                    {rol && (
+                        <div className="animate-in fade-in slide-in-from-top-2">
+                            <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-2 mb-1 block">Contraseña de Acceso</label>
+                            <input 
+                                type="password" 
+                                placeholder="****" 
+                                className="w-full p-4 bg-slate-50 rounded-2xl outline-none border border-slate-100 focus:border-indigo-400 font-black text-slate-700 tracking-widest transition-colors"
+                                value={clave}
+                                onChange={(e) => setClave(e.target.value)}
+                                required
+                            />
+                        </div>
+                    )}
+
+                    {error && <p className="text-xs font-bold text-rose-500 text-center animate-pulse"><i className="fas fa-exclamation-circle mr-1"></i>{error}</p>}
+
+                    <button 
+                        type="submit" 
+                        disabled={loading || !rol}
+                        className={`w-full mt-4 py-4 rounded-2xl font-black text-white shadow-xl transition-all ${!rol ? 'bg-slate-300 shadow-none' : 'bg-indigo-600 hover:bg-indigo-700 active:scale-95 shadow-indigo-200'}`}
+                    >
+                        {loading ? 'Verificando...' : rol === 'ADMIN' ? 'Ingresar al Panel' : 'Solicitar Acceso'}
                     </button>
                 </form>
             </div>
