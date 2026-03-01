@@ -22,13 +22,12 @@ function MaestroDashboard({
         return `${p[2]}/${p[1]}/${p[0]}`; 
     };
 
-    // Actualizado para contemplar las 54 lecciones (Material 1 y 2)
-    const calcProgreso = (impartidas) => {
-        const l = parseInt(impartidas) || 0;
-        if (l === 0) return { parte: 1, impartidas: 0, faltan: 25, porc: 0 };
-        if (l <= 25) return { parte: 1, impartidas: l, faltan: 25 - l, porc: Math.round((l/25)*100) };
-        if (l <= 54) return { parte: 2, impartidas: l - 25, faltan: 54 - l, porc: Math.round(((l-25)/29)*100) };
-        return { parte: 'Extra', impartidas: l, faltan: 0, porc: 100 };
+    // --- MAGIA CORREGIDA: Matemática exacta ---
+    const calcProgreso = (lec) => {
+        const l = parseInt(lec) || 1;
+        if (l <= 25) return { parte: 1, leccion: l, porc: Math.round((l/25)*100) };
+        if (l <= 54) return { parte: 2, leccion: l - 25, porc: Math.round(((l-25)/29)*100) };
+        return { parte: 'Extra', leccion: l, porc: 100 };
     };
 
     React.useEffect(() => {
@@ -37,21 +36,17 @@ function MaestroDashboard({
             let nextLec = 1;
             let impartida = true;
 
-            // --- MAGIA: Lectura Estricta por Milisegundos ---
-            // Ordenamos todo para saber qué fue EXACTAMENTE lo último que pasó (Clase o Instrucción del Director)
             const historialOrdenado = [...historialAsistencias].sort((a, b) => b.timestamp - a.timestamp);
             const ultimoReg = historialOrdenado[0];
             
             const timestampHoy = asistenciaHoy ? (asistenciaHoy.timestamp || Date.now()) : 0;
             const timestampUltimo = ultimoReg ? (ultimoReg.timestamp || 0) : 0;
 
-            // Si hay asistencia hoy, y NO hay un reinicio más reciente del director
             if (asistenciaHoy && asistenciaHoy.registros && timestampHoy >= timestampUltimo) {
                 asistenciaHoy.registros.forEach(r => inicial[r.idAlumno] = r.estado);
                 nextLec = parseInt(asistenciaHoy.leccion || 1);
                 impartida = asistenciaHoy.leccionImpartida !== false;
             } else {
-                // Si no hay asistencia hoy, o el Director acaba de forzar un cambio de material
                 alumnos.forEach(a => inicial[a.id] = 'Presente');
                 if (ultimoReg) {
                     if (ultimoReg.esReset) {
@@ -89,9 +84,7 @@ function MaestroDashboard({
     const nombreDisplay = datosUsuarioActual ? datosUsuarioActual.nombre.split(' ')[0] : '';
     const rolDisplay = usuario.charAt(0) + usuario.slice(1).toLowerCase();
     
-    let impartidasParaProgreso = parseInt(leccionActual) - 1;
-    if (impartidasParaProgreso < 0 || isNaN(impartidasParaProgreso)) impartidasParaProgreso = 0;
-    const progInicio = calcProgreso(impartidasParaProgreso);
+    const progInicio = calcProgreso(leccionActual || 1);
 
     const historialRankingFiltrado = historialVisible.filter(ha => {
         if (!fechaInicioRanking && !fechaFinRanking) return true;
@@ -128,7 +121,7 @@ function MaestroDashboard({
                         <>
                             <div className="flex justify-between items-center mb-6"><h3 className={`font-bold text-sm flex items-center ${estaBloqueada ? 'text-slate-500' : 'text-slate-700'}`}><i className={`fas ${estaBloqueada ? 'fa-lock' : 'fa-clipboard-check'} mr-2 text-lg ${estaBloqueada ? 'text-slate-400' : 'text-emerald-500'}`}></i> {estaBloqueada ? 'Asistencia (Solo Lectura)' : 'Asistencia Completada'}</h3>{estaBloqueada ? (<span className="text-[9px] bg-slate-200 text-slate-500 px-2 py-1 rounded-lg font-bold uppercase">Bloqueada</span>) : (<span className="text-[10px] bg-emerald-100 text-emerald-700 px-2 py-1 rounded-lg font-bold">TUYA</span>)}</div>
                             <div className="flex justify-around text-center mb-6"><div><p className={`text-3xl font-black ${estaBloqueada ? 'text-slate-500' : 'text-emerald-500'}`}>{asistenciaHoy.totales.presentes}</p><p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">Presentes</p></div><div><p className={`text-3xl font-black ${estaBloqueada ? 'text-slate-500' : 'text-rose-500'}`}>{asistenciaHoy.totales.ausentes}</p><p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">Ausentes</p></div><div><p className={`text-3xl font-black ${estaBloqueada ? 'text-slate-500' : 'text-amber-500'}`}>{asistenciaHoy.totales.permisos}</p><p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">Permisos</p></div></div>
-                            <div className={`pt-4 border-t ${estaBloqueada ? 'border-slate-200' : 'border-slate-50'}`}><div className="flex justify-between text-[10px] font-bold text-slate-400 mb-2"><span>Material: Parte {progInicio.parte} • {progInicio.impartidas} Dadas</span><span className="text-indigo-400">{progInicio.porc}%</span></div><div className="w-full bg-slate-100 rounded-full h-1.5 overflow-hidden"><div className="bg-indigo-400 h-1.5 rounded-full" style={{width: `${progInicio.porc}%`}}></div></div></div>
+                            <div className={`pt-4 border-t ${estaBloqueada ? 'border-slate-200' : 'border-slate-50'}`}><div className="flex justify-between text-[10px] font-bold text-slate-400 mb-2"><span>Material: Parte {progInicio.parte} • Lección {progInicio.leccion}</span><span className="text-indigo-400">{progInicio.porc}%</span></div><div className="w-full bg-slate-100 rounded-full h-1.5 overflow-hidden"><div className="bg-indigo-400 h-1.5 rounded-full" style={{width: `${progInicio.porc}%`}}></div></div></div>
                         </>
                     ) : (<><div className="absolute top-0 right-0 w-32 h-32 bg-white opacity-10 rounded-bl-[100px] pointer-events-none"></div><div className="flex items-center space-x-4 relative z-10"><div className="w-16 h-16 bg-white/20 rounded-2xl flex items-center justify-center text-3xl backdrop-blur-sm animate-pulse"><i className="fas fa-clipboard-list"></i></div><div><h3 className="font-bold text-xl">Tomar Asistencia</h3><p className="text-rose-100 text-xs">Aún no registras el día de hoy</p></div></div></>)}
                 </div>
@@ -155,7 +148,6 @@ function MaestroDashboard({
                         <div className="bg-indigo-50 p-4 rounded-2xl border border-indigo-100 mb-4 flex-shrink-0">
                             <h3 className="text-xs font-bold text-indigo-800 uppercase tracking-widest mb-3 flex items-center"><i className="fas fa-book mr-2"></i> Material de Clase</h3>
                             <div className="flex space-x-4 items-center">
-                                {/* EL INPUT ESTÁ TOTALMENTE BLOQUEADO PARA EL MAESTRO */}
                                 <div className="w-1/3 relative">
                                     <label className="text-[10px] font-bold text-indigo-400 uppercase ml-1 block mb-1">Lección N°</label>
                                     <input 
@@ -181,7 +173,6 @@ function MaestroDashboard({
                             </div>
                         </div>
                         <div className="overflow-y-auto space-y-4 pb-28 pr-2">
-                            {/* DISEÑO CON NOMBRES ARRIBA Y BOTONES ABAJO */}
                             {alumnos.map(a => (
                                 <div key={a.id} className="flex flex-col p-4 bg-slate-50 rounded-2xl border border-slate-100 shadow-sm">
                                     <div className="flex items-center space-x-3 mb-3">
@@ -217,7 +208,6 @@ function MaestroDashboard({
                 
                 <div className="flex-1 bg-white rounded-t-[40px] shadow-[0_-10px_40px_rgba(0,0,0,0.05)] border-t border-slate-100 p-6 overflow-hidden flex flex-col">
                     <div className="overflow-y-auto space-y-4 pb-24 pr-2">
-                        {/* --- NUEVO DISEÑO DE LISTA DE ALUMNOS EN GESTIÓN --- */}
                         {alumnos.map(nino => (
                             <div key={nino.id} className="flex flex-col p-4 bg-slate-50 rounded-3xl border border-slate-100 shadow-sm">
                                 <div className="flex items-center space-x-3 mb-3">
