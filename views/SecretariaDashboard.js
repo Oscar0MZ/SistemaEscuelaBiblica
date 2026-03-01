@@ -6,7 +6,6 @@ function SecretariaDashboard({
     const [vistaActual, setVistaActual] = useState('inicio'); 
     const [campoExpandido, setCampoExpandido] = useState(null); 
 
-    // Filtramos los registros del sistema que son solo para resetear lecciones
     const historialVisible = historialAsistencias.filter(h => !h.esReset);
     const todasAsistencias = datosGlobalesAsistencia?.registros || [];
 
@@ -17,10 +16,8 @@ function SecretariaDashboard({
     };
     const textoFechas = datosGlobalesAsistencia?.rango ? `${formatoFecha(datosGlobalesAsistencia.rango.inicio).substring(0,5)} - ${formatoFecha(datosGlobalesAsistencia.rango.fin).substring(0,5)}` : 'Calculando...';
 
-    // Saludo personalizado con el nombre de ella
     const nombreDisplay = datosUsuarioActual ? datosUsuarioActual.nombre.split(' ')[0] : '';
     
-    // Obtenemos los campos activos del sistema
     const camposActivos = [...new Set([...maestros.filter(m => m.clase !== 'LOGISTICA' && m.campo).map(m => m.campo), ...todosLosAlumnos.map(a => a.campo), ...historialVisible.map(h => h.campo)].filter(Boolean))].sort();
 
     const NavButton = ({ id, icon, label }) => (
@@ -42,12 +39,12 @@ function SecretariaDashboard({
                     <p className="text-slate-400 text-sm mt-1">Panel de Control de Asistencia</p>
                 </div>
 
-                {/* TARJETA ASISTENCIA GLOBAL */}
                 <div className="bg-white rounded-[32px] border border-slate-100 p-6 shadow-sm">
                     <div className="flex justify-between items-center mb-4">
                         <div>
                             <h3 className="font-bold text-slate-700 text-sm flex items-center"><i className="fas fa-globe text-pink-500 mr-2"></i> Asistencia Global</h3>
-                            <p className="text-[10px] text-slate-400 pl-6">Todas las iglesias</p>
+                            {/* AQUÍ ESTÁ EL TEXTO CAMBIADO */}
+                            <p className="text-[10px] text-slate-400 pl-6">Todos los campos</p>
                         </div>
                         <span className="text-[10px] bg-slate-100 text-slate-500 font-bold px-3 py-1 rounded-lg border border-slate-200">{textoFechas}</span>
                     </div>
@@ -58,7 +55,6 @@ function SecretariaDashboard({
                     </div>
                 </div>
 
-                {/* TARJETA POBLACION TOTAL */}
                 <div className="bg-pink-600 p-6 rounded-[32px] text-white shadow-xl shadow-pink-200 flex justify-between items-center relative overflow-hidden">
                     <div className="absolute top-0 right-0 w-32 h-32 bg-white opacity-10 rounded-bl-[100px] pointer-events-none"></div>
                     <div className="relative z-10">
@@ -70,7 +66,6 @@ function SecretariaDashboard({
                     </div>
                 </div>
 
-                {/* TARJETA NIÑOS VS NIÑAS */}
                 <div className="flex justify-around items-center bg-white p-5 rounded-[32px] border border-slate-100 shadow-sm">
                     <div className="text-center w-1/2 border-r border-slate-100">
                         <div className="w-10 h-10 bg-indigo-50 text-indigo-500 rounded-full flex items-center justify-center mx-auto mb-2 text-lg"><i className="fas fa-child"></i></div>
@@ -108,7 +103,6 @@ function SecretariaDashboard({
                             const registrosOrdenados = registrosCampoTodo.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
                             const isExpanded = campoExpandido === campo;
                             
-                            // Lógica para saber si pasaron lista HOY
                             const hoyStr = new Date().toLocaleDateString('en-CA');
                             const registroHoy = registrosOrdenados.find(r => r.fecha === hoyStr);
                             const pasaronListaHoy = !!registroHoy;
@@ -121,7 +115,6 @@ function SecretariaDashboard({
                                             <p className="text-[10px] text-slate-400 mt-1 font-bold tracking-wide uppercase"><i className="fas fa-users mr-1"></i> {total} Alumnos Inscritos</p>
                                         </div>
                                         <div className="flex items-center space-x-3">
-                                            {/* INDICADOR VISUAL EN TIEMPO REAL */}
                                             {pasaronListaHoy ? (
                                                 <span className="w-8 h-8 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center shadow-sm" title="Lista enviada hoy"><i className="fas fa-check"></i></span>
                                             ) : (
