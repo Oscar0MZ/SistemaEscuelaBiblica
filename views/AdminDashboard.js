@@ -9,6 +9,7 @@ function AdminDashboard({
     const [busqueda, setBusqueda] = useState('');
     const [vistaActual, setVistaActual] = useState('inicio'); 
     
+    // ESTADOS ADMIN
     const [expandirFiltroAdmin, setExpandirFiltroAdmin] = useState(false);
     const [campoExpandido, setCampoExpandido] = useState(null); 
     const [campoResetUI, setCampoResetUI] = useState(null); 
@@ -30,9 +31,10 @@ function AdminDashboard({
     };
     const textoFechas = datosGlobalesAsistencia?.rango ? `${formatoFecha(datosGlobalesAsistencia.rango.inicio).substring(0,5)} - ${formatoFecha(datosGlobalesAsistencia.rango.fin).substring(0,5)}` : 'Calculando...';
 
-    // --- MAGIA MATEMÁTICA EXACTA: Número directo sin restas ---
+    // --- MAGIA MATEMÁTICA EXACTA PARA EL ADMIN ---
     const calcProgreso = (lec) => {
-        const l = parseInt(lec) || 1;
+        const l = parseInt(lec);
+        if (isNaN(l) || l === 0) return { parte: 1, leccion: 0, porc: 0 };
         if (l <= 25) return { parte: 1, leccion: l, porc: Math.round((l/25)*100) };
         if (l <= 54) return { parte: 2, leccion: l - 25, porc: Math.round(((l-25)/29)*100) };
         return { parte: 'Extra', leccion: l, porc: 100 };
@@ -146,7 +148,7 @@ function AdminDashboard({
                                 const registrosOrdenados = registrosCampoTodo.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
                                 const ultimoReg = registrosOrdenados[0];
                                 
-                                let currLec = 1;
+                                let currLec = 0;
                                 if (ultimoReg) {
                                     currLec = parseInt(ultimoReg.leccion);
                                 }
@@ -168,7 +170,12 @@ function AdminDashboard({
                                         </div>
 
                                         <div className="mt-2">
-                                            <div className="flex justify-between text-[10px] font-bold text-slate-500 mb-1"><span>Material: Parte {prog.parte} • Lección {prog.leccion}</span><span className="text-indigo-500">{prog.porc}%</span></div>
+                                            <div className="flex justify-between text-[10px] font-bold text-slate-500 mb-1">
+                                                <span>
+                                                    {!ultimoReg ? 'Material: Sin Asignar' : `Material: Parte ${prog.parte} • Lección ${prog.leccion}`}
+                                                </span>
+                                                <span className="text-indigo-500">{prog.porc}%</span>
+                                            </div>
                                             <div className="w-full bg-slate-100 rounded-full h-2 overflow-hidden"><div className="bg-indigo-500 h-2 rounded-full transition-all duration-1000" style={{width: `${prog.porc}%`}}></div></div>
                                         </div>
 
