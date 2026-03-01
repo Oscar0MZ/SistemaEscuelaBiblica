@@ -9,7 +9,6 @@ function MaestroDashboard({
     const [subVistaReporte, setSubVistaReporte] = useState('ranking');
     const [fechaInicioRanking, setFechaInicioRanking] = useState('');
     const [fechaFinRanking, setFechaFinRanking] = useState('');
-    const [leccionActual, setLeccionActual] = useState('');
     const [leccionImpartida, setLeccionImpartida] = useState(true);
     const [edadMin, setEdadMin] = useState('');
     const [edadMax, setEdadMax] = useState('');
@@ -22,7 +21,7 @@ function MaestroDashboard({
         return `${p[2]}/${p[1]}/${p[0]}`; 
     };
 
-    // --- MAGIA CORREGIDA: Matemática exacta ---
+    // --- MAGIA MATEMÁTICA CORREGIDA: Sin restas, números directos ---
     const calcProgreso = (lec) => {
         const l = parseInt(lec) || 1;
         if (l <= 25) return { parte: 1, leccion: l, porc: Math.round((l/25)*100) };
@@ -30,45 +29,50 @@ function MaestroDashboard({
         return { parte: 'Extra', leccion: l, porc: 100 };
     };
 
+    // --- MAGIA EN TIEMPO REAL: Se calcula fuera del useEffect para reaccionar al instante ---
+    const historialCompleto = [...historialAsistencias].sort((a, b) => b.timestamp - a.timestamp);
+    const ultimoReg = historialCompleto.find(h => h.leccion !== undefined);
+
+    let leccionAsignada = 1; // El número que se bloquea en el formulario
+    let leccionProgreso = 1; // El número que se muestra en la barra de resumen
+
+    if (ultimoReg) {
+        if (ultimoReg.esReset) {
+            // El Director forzó una lección. Maestro y Barra ven ese número exacto.
+            leccionAsignada = parseInt(ultimoReg.leccion);
+            leccionProgreso = parseInt(ultimoReg.leccion);
+        } else {
+            // Si lo último fue una clase impartida por el maestro.
+            leccionProgreso = parseInt(ultimoReg.leccion); // La barra muestra la última que dio
+            leccionAsignada = ultimoReg.leccionImpartida ? parseInt(ultimoReg.leccion) + 1 : parseInt(ultimoReg.leccion); // Le toca la siguiente
+        }
+    }
+
+    // Si ya pasó asistencia HOY, se congela en ese número
+    if (asistenciaHoy && asistenciaHoy.leccion) {
+        leccionAsignada = parseInt(asistenciaHoy.leccion);
+        leccionProgreso = parseInt(asistenciaHoy.leccion);
+    }
+
     React.useEffect(() => {
         if (vistaActual === 'asistencia' && alumnos.length > 0) {
             const inicial = {};
-            let nextLec = 1;
-            let impartida = true;
-
-            const historialOrdenado = [...historialAsistencias].sort((a, b) => b.timestamp - a.timestamp);
-            const ultimoReg = historialOrdenado[0];
-            
-            const timestampHoy = asistenciaHoy ? (asistenciaHoy.timestamp || Date.now()) : 0;
-            const timestampUltimo = ultimoReg ? (ultimoReg.timestamp || 0) : 0;
-
-            if (asistenciaHoy && asistenciaHoy.registros && timestampHoy >= timestampUltimo) {
+            if (asistenciaHoy && asistenciaHoy.registros) {
                 asistenciaHoy.registros.forEach(r => inicial[r.idAlumno] = r.estado);
-                nextLec = parseInt(asistenciaHoy.leccion || 1);
-                impartida = asistenciaHoy.leccionImpartida !== false;
+                setLeccionImpartida(asistenciaHoy.leccionImpartida !== false);
             } else {
                 alumnos.forEach(a => inicial[a.id] = 'Presente');
-                if (ultimoReg) {
-                    if (ultimoReg.esReset) {
-                        nextLec = parseInt(ultimoReg.leccion);
-                    } else {
-                        nextLec = ultimoReg.leccionImpartida ? parseInt(ultimoReg.leccion) + 1 : parseInt(ultimoReg.leccion);
-                    }
-                }
-                impartida = true;
+                setLeccionImpartida(true);
             }
-
-            setLeccionActual(nextLec);
-            setLeccionImpartida(impartida);
             setListaAsistencia(inicial);
         }
-    }, [vistaActual, alumnos, asistenciaHoy, historialAsistencias]);
+    }, [vistaActual, alumnos, asistenciaHoy]);
 
     const guardarLista = async () => {
         if (alumnos.length === 0) { alert("Debes registrar alumnos primero."); return; }
-        if (!leccionActual) { alert("Por favor, espera a que el Director asigne el material."); return; }
         const registros = alumnos.map(a => ({ idAlumno: a.id, nombre: a.nombre, estado: listaAsistencia[a.id] || 'Ausente' }));
-        const exito = await onSaveAsistencia(registros, leccionActual, leccionImpartida);
+        // Usa el número directo calculado en tiempo real
+        const exito = await onSaveAsistencia(registros, leccionAsignada, leccionImpartida);
         if (exito) setVistaActual('inicio');
     };
 
@@ -84,7 +88,8 @@ function MaestroDashboard({
     const nombreDisplay = datosUsuarioActual ? datosUsuarioActual.nombre.split(' ')[0] : '';
     const rolDisplay = usuario.charAt(0) + usuario.slice(1).toLowerCase();
     
-    const progInicio = calcProgreso(leccionActual || 1);
+    // Se usa el número matemático directo
+    const progInicio = calcProgreso(leccionProgreso);
 
     const historialRankingFiltrado = historialVisible.filter(ha => {
         if (!fechaInicioRanking && !fechaFinRanking) return true;
@@ -148,12 +153,13 @@ function MaestroDashboard({
                         <div className="bg-indigo-50 p-4 rounded-2xl border border-indigo-100 mb-4 flex-shrink-0">
                             <h3 className="text-xs font-bold text-indigo-800 uppercase tracking-widest mb-3 flex items-center"><i className="fas fa-book mr-2"></i> Material de Clase</h3>
                             <div className="flex space-x-4 items-center">
+                                {/* EL INPUT ESTÁ TOTALMENTE BLOQUEADO PARA EL MAESTRO Y LEE LECCIONASIGNADA EN TIEMPO REAL */}
                                 <div className="w-1/3 relative">
                                     <label className="text-[10px] font-bold text-indigo-400 uppercase ml-1 block mb-1">Lección N°</label>
                                     <input 
                                         type="number" 
                                         className="w-full p-3 bg-slate-200 rounded-xl outline-none border border-slate-300 text-center font-black text-slate-500 text-xl shadow-inner cursor-not-allowed opacity-80" 
-                                        value={leccionActual} 
+                                        value={leccionAsignada} 
                                         readOnly 
                                         disabled
                                         title="Calculado automáticamente. Pide al Director si necesitas ajustarlo."
@@ -173,6 +179,7 @@ function MaestroDashboard({
                             </div>
                         </div>
                         <div className="overflow-y-auto space-y-4 pb-28 pr-2">
+                            {/* DISEÑO CON NOMBRES ARRIBA Y BOTONES ABAJO */}
                             {alumnos.map(a => (
                                 <div key={a.id} className="flex flex-col p-4 bg-slate-50 rounded-2xl border border-slate-100 shadow-sm">
                                     <div className="flex items-center space-x-3 mb-3">
