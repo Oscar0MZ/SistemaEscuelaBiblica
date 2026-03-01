@@ -39,18 +39,24 @@ function MaestroDashboard({
                 setLeccionImpartida(asistenciaHoy.leccionImpartida !== false);
             } else {
                 alumnos.forEach(a => inicial[a.id] = 'Presente');
+                
+                // --- MAGIA REPARADA: ORDENAMIENTO ESTRICTO POR FECHA/HORA ---
                 if (historialAsistencias && historialAsistencias.length > 0) {
-                    const ultimo = historialAsistencias.find(h => h.leccion !== undefined);
+                    const historialOrdenado = [...historialAsistencias].sort((a, b) => b.timestamp - a.timestamp);
+                    const ultimo = historialOrdenado.find(h => h.leccion !== undefined);
+                    
                     if (ultimo) { 
-                        // MAGIA: Si la última es un reseteo del admin, tomar ese número exacto
                         if (ultimo.esReset) {
+                            // Si lo último fue una instrucción del Director, se pone ese número exacto
                             setLeccionActual(parseInt(ultimo.leccion));
                         } else {
+                            // Si lo último fue una clase normal, se le suma 1 (si se impartió)
                             setLeccionActual(ultimo.leccionImpartida ? parseInt(ultimo.leccion) + 1 : parseInt(ultimo.leccion)); 
                         }
                     } 
                     else { setLeccionActual(1); }
                 } else { setLeccionActual(1); }
+                
                 setLeccionImpartida(true);
             }
             setListaAsistencia(inicial);
@@ -140,7 +146,7 @@ function MaestroDashboard({
                         <div className="bg-indigo-50 p-4 rounded-2xl border border-indigo-100 mb-4 flex-shrink-0">
                             <h3 className="text-xs font-bold text-indigo-800 uppercase tracking-widest mb-3 flex items-center"><i className="fas fa-book mr-2"></i> Material de Clase</h3>
                             <div className="flex space-x-4 items-center">
-                                {/* MAGIA: INPUT BLOQUEADO AUTOMÁTICAMENTE */}
+                                {/* EL INPUT AHORA ES DE SOLO LECTURA, COMPLETAMENTE BLOQUEADO */}
                                 <div className="w-1/3">
                                     <label className="text-[10px] font-bold text-indigo-400 uppercase ml-1 block mb-1">Lección N°</label>
                                     <input 
