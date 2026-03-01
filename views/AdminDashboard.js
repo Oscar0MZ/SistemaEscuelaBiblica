@@ -13,7 +13,7 @@ function AdminDashboard({
     const [expandirFiltroAdmin, setExpandirFiltroAdmin] = useState(false);
     const [campoExpandido, setCampoExpandido] = useState(null); 
     const [campoResetUI, setCampoResetUI] = useState(null); 
-    const [materialConfig, setMaterialConfig] = useState(null); // NUEVO: Controla si eligió Mat 1 o Mat 2
+    const [materialConfig, setMaterialConfig] = useState(null); // NUEVO: Controla qué material seleccionó
     
     const [subVistaAdminLogistica, setSubVistaAdminLogistica] = useState('bodega'); 
     const [edadMin, setEdadMin] = useState('');
@@ -32,12 +32,12 @@ function AdminDashboard({
     };
     const textoFechas = datosGlobalesAsistencia?.rango ? `${formatoFecha(datosGlobalesAsistencia.rango.inicio).substring(0,5)} - ${formatoFecha(datosGlobalesAsistencia.rango.fin).substring(0,5)}` : 'Calculando...';
 
-    // --- MAGIA: Nueva matemática de progreso para Material 1 (1-25) y Material 2 (26-54) ---
+    // MAGIA: Matemática de la barra de progreso (Material 1: 1-25 | Material 2: 26-54)
     const calcProgreso = (impartidas) => {
         const l = parseInt(impartidas) || 0;
         if (l === 0) return { parte: 1, impartidas: 0, faltan: 25, porc: 0 };
         if (l <= 25) return { parte: 1, impartidas: l, faltan: 25 - l, porc: Math.round((l/25)*100) };
-        if (l <= 54) return { parte: 2, impartidas: l - 25, faltan: 54 - l, porc: Math.round(((l-25)/29)*100) }; // Son 29 lecciones en el material 2
+        if (l <= 54) return { parte: 2, impartidas: l - 25, faltan: 54 - l, porc: Math.round(((l-25)/29)*100) };
         return { parte: 'Extra', impartidas: l, faltan: 0, porc: 100 };
     };
 
@@ -180,10 +180,10 @@ function AdminDashboard({
                                             <div className="w-full bg-slate-100 rounded-full h-2 overflow-hidden"><div className="bg-indigo-500 h-2 rounded-full transition-all duration-1000" style={{width: `${prog.porc}%`}}></div></div>
                                         </div>
 
-                                        {/* --- MAGIA: FLUJO GUIADO PARA ASIGNAR MATERIAL 1, MATERIAL 2 Y LECCIÓN EXACTA --- */}
+                                        {/* --- MAGIA: FLUJO GUIADO DE MATERIAL Y LECCIÓN --- */}
                                         {campoResetUI === campo && (
                                             <div className="mt-4 p-4 bg-slate-50 rounded-xl border border-slate-200 animate-in slide-in-from-top-2 duration-200 shadow-inner">
-                                                <p className="text-[10px] font-black text-slate-500 mb-3 uppercase tracking-widest text-center"><i className="fas fa-layer-group mr-1"></i> Asignar Lección Inicial</p>
+                                                <p className="text-[10px] font-black text-slate-500 mb-3 uppercase tracking-widest text-center"><i className="fas fa-layer-group mr-1"></i> Configurar Material de Clase</p>
                                                 
                                                 {!materialConfig ? (
                                                     <div className="flex space-x-2">
@@ -200,25 +200,28 @@ function AdminDashboard({
                                                         onResetLecciones(campo, parseInt(e.target.leccion.value)); 
                                                         setCampoResetUI(null); 
                                                         setMaterialConfig(null);
-                                                    }} className="flex flex-col space-y-2 animate-in fade-in">
-                                                        <p className="text-[10px] font-bold text-indigo-500 text-center mb-1">
-                                                            Ingresa la lección exacta de inicio (Material {materialConfig})
+                                                    }} className="flex flex-col space-y-3 animate-in fade-in">
+                                                        <p className="text-xs font-bold text-slate-600 text-center">
+                                                            Asignar Material {materialConfig}
                                                         </p>
                                                         <div className="flex space-x-2">
-                                                            <input 
-                                                                type="number" 
-                                                                name="leccion" 
-                                                                min={materialConfig === 1 ? 1 : 26} 
-                                                                max={materialConfig === 1 ? 25 : 54} 
-                                                                required 
-                                                                placeholder={`Ej: ${materialConfig === 1 ? 7 : 26}`} 
-                                                                className="w-1/2 p-3 bg-white rounded-xl text-sm font-black text-slate-700 text-center shadow-sm border border-slate-200 outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 transition-all" 
-                                                            />
-                                                            <button type="submit" className="w-1/2 py-3 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl text-xs font-black shadow-md active:scale-95 transition-all">
+                                                            <div className="w-1/2 relative">
+                                                                <input 
+                                                                    type="number" 
+                                                                    name="leccion" 
+                                                                    min={materialConfig === 1 ? 1 : 26} 
+                                                                    max={materialConfig === 1 ? 25 : 54} 
+                                                                    required 
+                                                                    placeholder={`Ej: ${materialConfig === 1 ? 8 : 30}`} 
+                                                                    className="w-full p-3 bg-white rounded-xl text-sm font-black text-slate-700 text-center shadow-sm border border-slate-200 outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 transition-all" 
+                                                                />
+                                                                <p className="text-[8px] text-slate-400 text-center mt-1 uppercase font-bold tracking-widest">Lección Inicial</p>
+                                                            </div>
+                                                            <button type="submit" className="w-1/2 h-[46px] bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl text-xs font-black shadow-md active:scale-95 transition-all flex items-center justify-center">
                                                                 <i className="fas fa-check mr-2"></i>Confirmar
                                                             </button>
                                                         </div>
-                                                        <button type="button" onClick={() => setMaterialConfig(null)} className="mt-1 text-[10px] font-bold text-slate-400 uppercase text-center w-full py-2 hover:bg-slate-200 rounded-lg transition-colors">Atrás</button>
+                                                        <button type="button" onClick={() => setMaterialConfig(null)} className="text-[10px] font-bold text-slate-400 uppercase text-center py-2 hover:bg-slate-200 rounded-lg transition-colors">Volver Atrás</button>
                                                     </form>
                                                 )}
                                             </div>
