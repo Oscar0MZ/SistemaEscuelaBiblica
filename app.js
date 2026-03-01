@@ -14,7 +14,6 @@ function App() {
     const [entregasLogistica, setEntregasLogistica] = useState([]);
     const [mantenimiento, setMantenimiento] = useState(false);
     
-    // NUEVO: Estado del inventario estructurado (Histórico vs Actual)
     const [inventarioDatos, setInventarioDatos] = useState({ historicoRecibido: 0, actualRecibido: 0 });
 
     const [modalAbierto, setModalAbierto] = useState(false);
@@ -130,7 +129,6 @@ function App() {
     const handleToggleMantenimiento = () => { MaestrosService.toggleMantenimiento(mantenimiento); };
     const handleAssignGroup = async (idUsuario, nuevoGrupo) => { try { await window.db.collection('maestros').doc(idUsuario).update({ grupo: nuevoGrupo }); } catch (error) { alert("Error al asignar el grupo al usuario."); } };
 
-    // --- MAGIA: SUMA INVENTARIO Y REINICIA JORNADA ---
     const handleActualizarInventario = async (cantidadAgregada) => {
         try {
             const docRef = window.db.collection('sistema').doc('inventario');
@@ -145,10 +143,8 @@ function App() {
 
     const handleCerrarJornada = async (rutasParaArchivar) => {
         try {
-            // 1. Resetea el stock actual a 0
             await window.db.collection('sistema').doc('inventario').set({ actualRecibido: 0 }, { merge: true });
             
-            // 2. Archiva las rutas completadas para que no cuenten en el actual ni le salgan a logística
             if (rutasParaArchivar && rutasParaArchivar.length > 0) {
                 const batch = window.db.batch();
                 rutasParaArchivar.forEach(ruta => {
@@ -167,7 +163,7 @@ function App() {
 
     if (mantenimiento && usuario !== 'ADMIN') {
         return (
-            <div className="flex flex-col items-center justify-center h-screen max-w-md mx-auto bg-slate-900 p-8 text-center shadow-2xl animate-in zoom-in-95">
+            <div className="flex flex-col items-center justify-center min-h-[100dvh] max-w-md mx-auto bg-slate-900 p-8 text-center shadow-2xl animate-in zoom-in-95">
                 <div className="w-32 h-32 bg-rose-500/20 text-rose-500 rounded-full flex items-center justify-center text-6xl mb-8 animate-pulse shadow-[0_0_40px_rgba(244,63,94,0.3)]"><i className="fas fa-tools"></i></div>
                 <h1 className="text-3xl font-black text-white mb-4">Sistema en<br/>Mantenimiento</h1>
                 <p className="text-slate-400 text-sm leading-relaxed mb-10">El Director está realizando ajustes en la base de datos.<br/><br/>El acceso está temporalmente bloqueado para evitar conflictos. Por favor, espera a que finalice.</p>
@@ -176,10 +172,19 @@ function App() {
         );
     }
 
+    // --- CAMBIO CLAVE: Estructura HTML para Scroll Nativo (min-h-[100dvh] en lugar de h-screen) ---
     return (
-        <div className="flex flex-col h-screen max-w-md mx-auto bg-white shadow-2xl overflow-hidden">
-            <header className="bg-white p-5 flex justify-between items-center border-b border-slate-100 z-10 relative"><div><p className="text-[10px] font-black uppercase tracking-widest text-indigo-500">Gestión Ministerial</p><h1 className="text-xl font-black text-slate-800">{usuario === 'ADMIN' ? 'Panel Director' : usuario}</h1>{!usuario === 'ADMIN' && datosUsuarioActual && <p className="text-[9px] text-slate-400 font-bold uppercase">{datosUsuarioActual.campo || (datosUsuarioActual.grupo || 'Logística')}</p>}</div><button onClick={handleLogout} className="w-10 h-10 bg-slate-50 text-slate-400 rounded-xl hover:text-rose-500 transition-all"><i className="fas fa-sign-out-alt"></i></button></header>
-            <main className="flex-1 overflow-y-auto p-5 pb-24 bg-slate-50/50 scroll-smooth">
+        <div className="flex flex-col min-h-[100dvh] max-w-md mx-auto bg-white shadow-2xl relative">
+            <header className="sticky top-0 bg-white/95 backdrop-blur-md p-5 flex justify-between items-center border-b border-slate-100 z-40">
+                <div>
+                    <p className="text-[10px] font-black uppercase tracking-widest text-indigo-500">Gestión Ministerial</p>
+                    <h1 className="text-xl font-black text-slate-800">{usuario === 'ADMIN' ? 'Panel Director' : usuario}</h1>
+                    {!usuario === 'ADMIN' && datosUsuarioActual && <p className="text-[9px] text-slate-400 font-bold uppercase">{datosUsuarioActual.campo || (datosUsuarioActual.grupo || 'Logística')}</p>}
+                </div>
+                <button onClick={handleLogout} className="w-10 h-10 bg-slate-50 text-slate-400 rounded-xl hover:text-rose-500 transition-all"><i className="fas fa-sign-out-alt"></i></button>
+            </header>
+            
+            <main className="flex-1 p-5 pb-28 bg-slate-50/50">
                 <DashboardView 
                     maestros={maestros} alumnos={alumnos} todosLosAlumnos={todosLosAlumnos} 
                     asistenciaHoy={asistenciaHoy} datosGlobalesAsistencia={datosGlobalesAsistencia} 
