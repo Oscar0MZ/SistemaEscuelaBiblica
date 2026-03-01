@@ -22,8 +22,8 @@ function MaestroDashboard({
         return `${p[2]}/${p[1]}/${p[0]}`; 
     };
 
-    const calcProgreso = (leccionNumero) => {
-        const l = parseInt(leccionNumero) || 0;
+    const calcProgreso = (impartidas) => {
+        const l = parseInt(impartidas) || 0;
         if (l === 0) return { parte: 1, impartidas: 0, faltan: 25, porc: 0 };
         if (l <= 25) return { parte: 1, impartidas: l, faltan: 25 - l, porc: Math.round((l/25)*100) };
         if (l <= 50) return { parte: 2, impartidas: l - 25, faltan: 50 - l, porc: Math.round(((l-25)/25)*100) };
@@ -40,23 +40,23 @@ function MaestroDashboard({
             } else {
                 alumnos.forEach(a => inicial[a.id] = 'Presente');
                 
-                // --- MAGIA REPARADA: ORDENAMIENTO ESTRICTO POR FECHA/HORA ---
+                // --- MAGIA: Lógica de auto-incremento exacto basado en tiempo real ---
+                let nextLec = 1;
                 if (historialAsistencias && historialAsistencias.length > 0) {
                     const historialOrdenado = [...historialAsistencias].sort((a, b) => b.timestamp - a.timestamp);
                     const ultimo = historialOrdenado.find(h => h.leccion !== undefined);
                     
                     if (ultimo) { 
                         if (ultimo.esReset) {
-                            // Si lo último fue una instrucción del Director, se pone ese número exacto
-                            setLeccionActual(parseInt(ultimo.leccion));
+                            // El Director forzó una lección. El maestro la da hoy.
+                            nextLec = parseInt(ultimo.leccion);
                         } else {
-                            // Si lo último fue una clase normal, se le suma 1 (si se impartió)
-                            setLeccionActual(ultimo.leccionImpartida ? parseInt(ultimo.leccion) + 1 : parseInt(ultimo.leccion)); 
+                            // Clase normal anterior. Sumamos 1 solo si sí la impartieron.
+                            nextLec = ultimo.leccionImpartida ? parseInt(ultimo.leccion) + 1 : parseInt(ultimo.leccion); 
                         }
-                    } 
-                    else { setLeccionActual(1); }
-                } else { setLeccionActual(1); }
-                
+                    }
+                } 
+                setLeccionActual(nextLec);
                 setLeccionImpartida(true);
             }
             setListaAsistencia(inicial);
@@ -65,7 +65,7 @@ function MaestroDashboard({
 
     const guardarLista = async () => {
         if (alumnos.length === 0) { alert("Debes registrar alumnos primero."); return; }
-        if (!leccionActual) { alert("Por favor, ingresa el número de la lección."); return; }
+        if (!leccionActual) { alert("Por favor, espera a que el Director asigne el material."); return; }
         const registros = alumnos.map(a => ({ idAlumno: a.id, nombre: a.nombre, estado: listaAsistencia[a.id] || 'Ausente' }));
         const exito = await onSaveAsistencia(registros, leccionActual, leccionImpartida);
         if (exito) setVistaActual('inicio');
@@ -82,7 +82,14 @@ function MaestroDashboard({
     const estaBloqueada = asistenciaTomada && !soyElAutor;
     const nombreDisplay = datosUsuarioActual ? datosUsuarioActual.nombre.split(' ')[0] : '';
     const rolDisplay = usuario.charAt(0) + usuario.slice(1).toLowerCase();
-    const progInicio = calcProgreso(leccionActual || (asistenciaHoy ? asistenciaHoy.leccion : 0));
+    
+    // Cálculo preciso de la barra de progreso para el Maestro
+    let impartidasParaProgreso = parseInt(leccionActual) - 1;
+    if (asistenciaTomada && asistenciaHoy) {
+        impartidasParaProgreso = asistenciaHoy.leccionImpartida ? parseInt(asistenciaHoy.leccion) : parseInt(asistenciaHoy.leccion) - 1;
+    }
+    if (impartidasParaProgreso < 0 || isNaN(impartidasParaProgreso)) impartidasParaProgreso = 0;
+    const progInicio = calcProgreso(impartidasParaProgreso);
 
     const historialRankingFiltrado = historialVisible.filter(ha => {
         if (!fechaInicioRanking && !fechaFinRanking) return true;
@@ -146,17 +153,21 @@ function MaestroDashboard({
                         <div className="bg-indigo-50 p-4 rounded-2xl border border-indigo-100 mb-4 flex-shrink-0">
                             <h3 className="text-xs font-bold text-indigo-800 uppercase tracking-widest mb-3 flex items-center"><i className="fas fa-book mr-2"></i> Material de Clase</h3>
                             <div className="flex space-x-4 items-center">
-                                {/* EL INPUT AHORA ES DE SOLO LECTURA, COMPLETAMENTE BLOQUEADO */}
-                                <div className="w-1/3">
+                                {/* EL INPUT ESTÁ BLOQUEADO PARA EL MAESTRO */}
+                                <div className="w-1/3 relative">
                                     <label className="text-[10px] font-bold text-indigo-400 uppercase ml-1 block mb-1">Lección N°</label>
                                     <input 
                                         type="number" 
-                                        className="w-full p-3 bg-slate-100 rounded-xl outline-none border border-slate-200 text-center font-black text-slate-500 text-lg shadow-inner cursor-not-allowed" 
+                                        className="w-full p-3 bg-slate-200 rounded-xl outline-none border border-slate-300 text-center font-black text-slate-500 text-xl shadow-inner cursor-not-allowed opacity-80" 
                                         value={leccionActual} 
                                         readOnly 
+                                        disabled
                                         title="Calculado automáticamente. Pide al Director si necesitas ajustarlo."
                                     />
-                                    <p className="text-[8px] text-slate-400 text-center mt-1"><i className="fas fa-lock mr-1"></i>Auto.</p>
+                                    <div className="absolute top-1 right-1 bg-slate-300 rounded-full w-5 h-5 flex items-center justify-center shadow-sm">
+                                        <i className="fas fa-lock text-slate-500 text-[9px]"></i>
+                                    </div>
+                                    <p className="text-[8px] text-slate-400 text-center mt-1 leading-tight font-bold uppercase tracking-widest">Automático</p>
                                 </div>
                                 <div className="w-2/3">
                                     <label className="text-[10px] font-bold text-indigo-400 uppercase ml-1 block mb-1">¿Se impartió hoy?</label>
