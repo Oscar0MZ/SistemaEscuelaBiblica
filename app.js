@@ -16,8 +16,11 @@ function App() {
     
     const [inventarioDatos, setInventarioDatos] = useState({ historicoRecibido: 0, actualRecibido: 0 });
 
+    // --- ESTADOS FINANCIEROS (TESORERÍA Y SECRETARÍA) ---
     const [fondoTotal, setFondoTotal] = useState(0);
     const [historialIngresos, setHistorialIngresos] = useState([]);
+    const [fondoSecretariaTotal, setFondoSecretariaTotal] = useState(0);
+    const [historialSecretaria, setHistorialSecretaria] = useState([]);
 
     const [modalAbierto, setModalAbierto] = useState(false);
     const [modalAlumno, setModalAlumno] = useState(false);
@@ -82,25 +85,32 @@ function App() {
             unsubs.push(AlumnosService.suscribirAsistenciaSemanal(setDatosGlobalesAsistencia));
             unsubs.push(AlumnosService.suscribirHistorialGlobal(setHistorialAsistencias));
             
+            // Descarga de Finanzas Oficiales (Tesorero)
             const unsubFondo = window.db.collection('sistema').doc('tesoreria').onSnapshot(doc => {
-                if (doc.exists) setFondoTotal(doc.data().total || 0);
-                else setFondoTotal(0);
+                if (doc.exists) setFondoTotal(doc.data().total || 0); else setFondoTotal(0);
             });
             unsubs.push(unsubFondo);
 
-            // Esta colección ahora guarda ingresos y retiros (identificados por 'tipo')
-            const unsubIngresos = window.db.collection('ingresos_tesoreria').orderBy('timestamp', 'desc').limit(100).onSnapshot(snapshot => {
-                const hist = [];
-                snapshot.forEach(doc => hist.push({ id: doc.id, ...doc.data() }));
-                setHistorialIngresos(hist);
+            const unsubIngresos = window.db.collection('ingresos_tesoreria').orderBy('timestamp', 'desc').limit(200).onSnapshot(snapshot => {
+                const hist = []; snapshot.forEach(doc => hist.push({ id: doc.id, ...doc.data() })); setHistorialIngresos(hist);
             });
             unsubs.push(unsubIngresos);
+
+            // Descarga de Finanzas de Control Cruzado (Secretaría)
+            const unsubFondoSec = window.db.collection('sistema').doc('finanzas_secretaria').onSnapshot(doc => {
+                if (doc.exists) setFondoSecretariaTotal(doc.data().total || 0); else setFondoSecretariaTotal(0);
+            });
+            unsubs.push(unsubFondoSec);
+
+            const unsubIngresosSec = window.db.collection('ingresos_secretaria').orderBy('timestamp', 'desc').limit(200).onSnapshot(snapshot => {
+                const hist = []; snapshot.forEach(doc => hist.push({ id: doc.id, ...doc.data() })); setHistorialSecretaria(hist);
+            });
+            unsubs.push(unsubIngresosSec);
 
             if (usuario === 'ADMIN') {
                 if(LogisticaService) unsubs.push(LogisticaService.suscribirTodas(setEntregasLogistica)); 
                 const unsubInv = window.db.collection('sistema').doc('inventario').onSnapshot(doc => {
-                    if (doc.exists) setInventarioDatos(doc.data());
-                    else setInventarioDatos({ historicoRecibido: 0, actualRecibido: 0 });
+                    if (doc.exists) setInventarioDatos(doc.data()); else setInventarioDatos({ historicoRecibido: 0, actualRecibido: 0 });
                 });
                 unsubs.push(unsubInv);
             }
@@ -116,11 +126,7 @@ function App() {
     }, [usuario, datosUsuarioActual?.campo]); 
 
     useEffect(() => {
-        if (diaNac && mesNac && anioNac) {
-            setEdadCalculada(calcularEdad(`${anioNac}-${mesNac}-${diaNac}`));
-        } else {
-            setEdadCalculada(null);
-        }
+        if (diaNac && mesNac && anioNac) { setEdadCalculada(calcularEdad(`${anioNac}-${mesNac}-${diaNac}`)); } else { setEdadCalculada(null); }
     }, [diaNac, mesNac, anioNac]);
 
     const handleLogin = async (rol, clave, nombre, campo) => {
@@ -138,19 +144,9 @@ function App() {
     const handleGuardar = async (e) => { e.preventDefault(); const d = Object.fromEntries(new FormData(e.target)); try { const n = await MaestrosService.guardar(d, maestroEdicion?.id, usuario); if (n && usuario !== 'ADMIN') MaestrosService.notificar(n); setModalAbierto(false); setMaestroEdicion(null); } catch (err) { alert("Error"); } };
 
     const handleGuardarAlumno = async (e) => {
-        e.preventDefault(); 
-        const fd = new FormData(e.target); 
-        const nombre = fd.get('nombre').trim(); 
-        const genero = fd.get('genero'); 
-        
-        if (!nombre || !diaNac || !mesNac || !anioNac || !genero) { 
-            alert("Por favor completa todos los campos (incluyendo Día, Mes y Año)."); 
-            return; 
-        }
-
-        const fechaFinal = `${anioNac}-${mesNac}-${diaNac}`;
-        const edad = calcularEdad(fechaFinal);
-
+        e.preventDefault(); const fd = new FormData(e.target); const nombre = fd.get('nombre').trim(); const genero = fd.get('genero'); 
+        if (!nombre || !diaNac || !mesNac || !anioNac || !genero) { alert("Por favor completa todos los campos (incluyendo Día, Mes y Año)."); return; }
+        const fechaFinal = `${anioNac}-${mesNac}-${diaNac}`; const edad = calcularEdad(fechaFinal);
         const datos = { nombre: nombre, fechaNacimiento: fechaFinal, edad: edad, genero: genero, maestroResponsable: datosUsuarioActual?.nombre, registradoPorId: datosUsuarioActual?.id, campo: datosUsuarioActual?.campo || 'Sin Campo', clase: 'General' };
         try {
             if (alumnoEdicion) { await AlumnosService.actualizar(alumnoEdicion.id, datos); alert("Alumno actualizado"); } 
@@ -159,19 +155,10 @@ function App() {
         } catch (error) { if (error.message === "DUPLICADO") { alert("⛔ ¡Error! Este alumno ya existe."); } else { alert("Error al guardar alumno"); } }
     };
 
-    const handleAbrirModalAlumno = () => {
-        setAlumnoEdicion(null); setEdadCalculada(null); setDiaNac(''); setMesNac(''); setAnioNac(''); setModalAlumno(true);
-    };
-
+    const handleAbrirModalAlumno = () => { setAlumnoEdicion(null); setEdadCalculada(null); setDiaNac(''); setMesNac(''); setAnioNac(''); setModalAlumno(true); };
     const handleEditarAlumno = (a) => {
-        setAlumnoEdicion(a); 
-        setEdadCalculada(a.edad); 
-        if (a.fechaNacimiento) {
-            const partes = a.fechaNacimiento.split('-');
-            if (partes.length === 3) {
-                setAnioNac(partes[0]); setMesNac(partes[1]); setDiaNac(partes[2]);
-            }
-        }
+        setAlumnoEdicion(a); setEdadCalculada(a.edad); 
+        if (a.fechaNacimiento) { const partes = a.fechaNacimiento.split('-'); if (partes.length === 3) { setAnioNac(partes[0]); setMesNac(partes[1]); setDiaNac(partes[2]); } }
         setModalAlumno(true);
     };
 
@@ -181,85 +168,51 @@ function App() {
     const handleResetLecciones = async (campo, proximaLeccion) => { try { await AlumnosService.reiniciarLecciones(campo, proximaLeccion); alert(`✅ Material de ${campo} ajustado. La próxima clase será la lección ${proximaLeccion}.`); } catch (e) { alert("Error al reiniciar material."); } };
     
     const handleGuardarAsistencia = async (registros, leccion, leccionImpartida, ofrenda) => { 
-        const p = registros.filter(r=>r.estado==='Presente').length; 
-        const a = registros.filter(r=>r.estado==='Ausente').length; 
-        const per = registros.filter(r=>r.estado==='Permiso').length; 
+        const p = registros.filter(r=>r.estado==='Presente').length; const a = registros.filter(r=>r.estado==='Ausente').length; const per = registros.filter(r=>r.estado==='Permiso').length; 
         try { 
-            await AlumnosService.guardarAsistencia({ 
-                fecha: new Date().toLocaleDateString('en-CA'), 
-                campo: datosUsuarioActual.campo, 
-                clase: 'General', 
-                maestro: datosUsuarioActual.nombre, 
-                registradoPorId: datosUsuarioActual.id, 
-                registros: registros, 
-                totales: { presentes: p, ausentes: a, permisos: per }, 
-                leccion: leccion, 
-                leccionImpartida: leccionImpartida, 
-                ofrenda: Number(ofrenda) || 0,
-                timestamp: Date.now() 
-            }); 
-            alert("Asistencia y Reporte guardados con éxito"); 
-            return true; 
+            await AlumnosService.guardarAsistencia({ fecha: new Date().toLocaleDateString('en-CA'), campo: datosUsuarioActual.campo, clase: 'General', maestro: datosUsuarioActual.nombre, registradoPorId: datosUsuarioActual.id, registros: registros, totales: { presentes: p, ausentes: a, permisos: per }, leccion: leccion, leccionImpartida: leccionImpartida, ofrenda: Number(ofrenda) || 0, timestamp: Date.now() }); 
+            alert("Asistencia y Reporte guardados con éxito"); return true; 
         } catch (e) { return false; } 
     };
 
+    // --- FUNCIONES DEL TESORERO ---
     const handleGuardarIngreso = async (monto, descripcion) => {
         try {
-            const montoNum = parseFloat(monto);
-            if (isNaN(montoNum) || montoNum <= 0) { alert("Por favor ingresa un monto válido mayor a 0."); return false; }
-            
-            await window.db.collection('ingresos_tesoreria').add({
-                tipo: 'ingreso',
-                monto: montoNum,
-                descripcion: descripcion.trim() || 'Ingreso general',
-                fecha: new Date().toLocaleDateString('en-CA'),
-                timestamp: Date.now(),
-                registradoPor: datosUsuarioActual.nombre
-            });
-
-            const docRef = window.db.collection('sistema').doc('tesoreria');
-            const docSnap = await docRef.get();
-            let actual = 0;
-            if(docSnap.exists) actual = docSnap.data().total || 0;
-            await docRef.set({ total: actual + montoNum }, { merge: true });
-
-            alert(`✅ Se han agregado $${montoNum.toFixed(2)} al Fondo General.`);
-            return true;
-        } catch (error) { alert("Error al guardar. Verifica tu conexión."); return false; }
+            const montoNum = parseFloat(monto); if (isNaN(montoNum) || montoNum <= 0) return false;
+            await window.db.collection('ingresos_tesoreria').add({ tipo: 'ingreso', monto: montoNum, descripcion: descripcion.trim(), fecha: new Date().toLocaleDateString('en-CA'), timestamp: Date.now(), registradoPor: datosUsuarioActual.nombre });
+            const docRef = window.db.collection('sistema').doc('tesoreria'); const docSnap = await docRef.get(); let actual = docSnap.exists ? (docSnap.data().total || 0) : 0;
+            await docRef.set({ total: actual + montoNum }, { merge: true }); alert(`✅ Se han agregado $${montoNum.toFixed(2)} al Fondo General.`); return true;
+        } catch (error) { return false; }
     };
-
-    // --- NUEVO: FUNCIÓN PARA GASTOS/RETIROS DE TESORERÍA ---
     const handleGuardarEgreso = async (monto, descripcion) => {
         try {
-            const montoNum = parseFloat(monto);
-            if (isNaN(montoNum) || montoNum <= 0) { alert("Por favor ingresa un monto válido mayor a 0."); return false; }
-            
-            const docRef = window.db.collection('sistema').doc('tesoreria');
-            const docSnap = await docRef.get();
-            let actual = 0;
-            if(docSnap.exists) actual = docSnap.data().total || 0;
-
-            if (montoNum > actual) {
-                alert(`❌ Fondos insuficientes. Solo tienes $${actual.toFixed(2)} en la cuenta general.`);
-                return false;
-            }
-            
-            await window.db.collection('ingresos_tesoreria').add({
-                tipo: 'egreso', // Lo marcamos como retiro
-                monto: montoNum,
-                descripcion: descripcion.trim() || 'Retiro de fondos',
-                fecha: new Date().toLocaleDateString('en-CA'),
-                timestamp: Date.now(),
-                registradoPor: datosUsuarioActual.nombre
-            });
-
-            // Restamos del total
-            await docRef.set({ total: actual - montoNum }, { merge: true });
-
-            alert(`🔻 Se han retirado $${montoNum.toFixed(2)} del Fondo General correctamente.`);
-            return true;
-        } catch (error) { alert("Error al procesar el retiro."); return false; }
+            const montoNum = parseFloat(monto); if (isNaN(montoNum) || montoNum <= 0) return false;
+            const docRef = window.db.collection('sistema').doc('tesoreria'); const docSnap = await docRef.get(); let actual = docSnap.exists ? (docSnap.data().total || 0) : 0;
+            if (montoNum > actual) { alert(`❌ Fondos insuficientes. Solo tienes $${actual.toFixed(2)} en la cuenta general.`); return false; }
+            await window.db.collection('ingresos_tesoreria').add({ tipo: 'egreso', monto: montoNum, descripcion: descripcion.trim(), fecha: new Date().toLocaleDateString('en-CA'), timestamp: Date.now(), registradoPor: datosUsuarioActual.nombre });
+            await docRef.set({ total: actual - montoNum }, { merge: true }); alert(`🔻 Se han retirado $${montoNum.toFixed(2)} del Fondo General correctamente.`); return true;
+        } catch (error) { return false; }
     };
+
+    // --- FUNCIONES DE LA SECRETARÍA (CONTROL CRUZADO) ---
+    const handleGuardarIngresoSecretaria = async (monto, descripcion) => {
+        try {
+            const montoNum = parseFloat(monto); if (isNaN(montoNum) || montoNum <= 0) return false;
+            await window.db.collection('ingresos_secretaria').add({ tipo: 'ingreso', monto: montoNum, descripcion: descripcion.trim(), fecha: new Date().toLocaleDateString('en-CA'), timestamp: Date.now(), registradoPor: datosUsuarioActual.nombre });
+            const docRef = window.db.collection('sistema').doc('finanzas_secretaria'); const docSnap = await docRef.get(); let actual = docSnap.exists ? (docSnap.data().total || 0) : 0;
+            await docRef.set({ total: actual + montoNum }, { merge: true }); alert(`✅ Ingreso registrado en tu Control Cruzado.`); return true;
+        } catch (error) { return false; }
+    };
+    const handleGuardarEgresoSecretaria = async (monto, descripcion) => {
+        try {
+            const montoNum = parseFloat(monto); if (isNaN(montoNum) || montoNum <= 0) return false;
+            const docRef = window.db.collection('sistema').doc('finanzas_secretaria'); const docSnap = await docRef.get(); let actual = docSnap.exists ? (docSnap.data().total || 0) : 0;
+            if (montoNum > actual) { alert(`❌ Fondos insuficientes en tu control interno.`); return false; }
+            await window.db.collection('ingresos_secretaria').add({ tipo: 'egreso', monto: montoNum, descripcion: descripcion.trim(), fecha: new Date().toLocaleDateString('en-CA'), timestamp: Date.now(), registradoPor: datosUsuarioActual.nombre });
+            await docRef.set({ total: actual - montoNum }, { merge: true }); alert(`🔻 Retiro registrado en tu Control Cruzado.`); return true;
+        } catch (error) { return false; }
+    };
+
 
     const handleCrearEntrega = async (datos) => { try { await LogisticaService.crear({ ...datos, asignadoPor: 'Director' }); alert("Ruta y víveres asignados correctamente al grupo."); } catch (error) { alert("Error al asignar la ruta."); } };
     const handleActualizarEntrega = async (id, estado, detalles = null, bloqueos = null) => { try { const payload = { estado: estado }; if (estado === 'Entregado') payload.fechaEntrega = Date.now(); if (detalles) payload.detalles = detalles; if (bloqueos) payload.bloqueos = bloqueos; await window.db.collection('entregas').doc(id).update(payload); } catch (error) { alert("Error actualizando estado."); } };
@@ -267,48 +220,11 @@ function App() {
     const handleBorrarEntrega = async (id) => { try { await LogisticaService.eliminar(id); } catch (error) { alert("Error al borrar entrega."); } };
     const handleToggleMantenimiento = () => { MaestrosService.toggleMantenimiento(mantenimiento); };
     const handleAssignGroup = async (idUsuario, nuevoGrupo) => { try { await window.db.collection('maestros').doc(idUsuario).update({ grupo: nuevoGrupo }); } catch (error) { alert("Error al asignar el grupo al usuario."); } };
-
-    const handleActualizarInventario = async (cantidadAgregada) => {
-        try {
-            const docRef = window.db.collection('sistema').doc('inventario');
-            const data = inventarioDatos;
-            await docRef.set({ 
-                historicoRecibido: (data.historicoRecibido || 0) + cantidadAgregada,
-                actualRecibido: (data.actualRecibido || 0) + cantidadAgregada
-            }, { merge: true });
-            alert(`✅ Se agregaron ${cantidadAgregada} paquetes al stock actual y al histórico.`);
-        } catch(e) { alert("Error al guardar el inventario."); }
-    };
-
-    const handleCerrarJornada = async (rutasParaArchivar) => {
-        try {
-            await window.db.collection('sistema').doc('inventario').set({ actualRecibido: 0 }, { merge: true });
-            if (rutasParaArchivar && rutasParaArchivar.length > 0) {
-                const batch = window.db.batch();
-                rutasParaArchivar.forEach(ruta => {
-                    const ref = window.db.collection('entregas').doc(ruta.id);
-                    batch.update(ref, { archivado: true });
-                });
-                await batch.commit();
-            }
-            alert("🏁 Jornada Finalizada. Los contadores actuales se han reiniciado a 0 para el próximo reparto.");
-        } catch (e) {
-            alert("Error al reiniciar la jornada.");
-        }
-    };
+    const handleActualizarInventario = async (cantidadAgregada) => { try { const docRef = window.db.collection('sistema').doc('inventario'); const data = inventarioDatos; await docRef.set({ historicoRecibido: (data.historicoRecibido || 0) + cantidadAgregada, actualRecibido: (data.actualRecibido || 0) + cantidadAgregada }, { merge: true }); alert(`✅ Se agregaron ${cantidadAgregada} paquetes al stock actual y al histórico.`); } catch(e) { alert("Error al guardar el inventario."); } };
+    const handleCerrarJornada = async (rutasParaArchivar) => { try { await window.db.collection('sistema').doc('inventario').set({ actualRecibido: 0 }, { merge: true }); if (rutasParaArchivar && rutasParaArchivar.length > 0) { const batch = window.db.batch(); rutasParaArchivar.forEach(ruta => { const ref = window.db.collection('entregas').doc(ruta.id); batch.update(ref, { archivado: true }); }); await batch.commit(); } alert("🏁 Jornada Finalizada."); } catch (e) { alert("Error."); } };
 
     if (!usuario) return <LoginView onLogin={handleLogin} />;
-
-    if (mantenimiento && usuario !== 'ADMIN') {
-        return (
-            <div className="flex flex-col items-center justify-center min-h-[100dvh] max-w-md mx-auto bg-slate-900 p-8 text-center shadow-2xl animate-in zoom-in-95">
-                <div className="w-32 h-32 bg-rose-500/20 text-rose-500 rounded-full flex items-center justify-center text-6xl mb-8 animate-pulse shadow-[0_0_40px_rgba(244,63,94,0.3)]"><i className="fas fa-tools"></i></div>
-                <h1 className="text-3xl font-black text-white mb-4">Sistema en<br/>Mantenimiento</h1>
-                <p className="text-slate-400 text-sm leading-relaxed mb-10">El Director está realizando ajustes en la base de datos.<br/><br/>El acceso está temporalmente bloqueado para evitar conflictos. Por favor, espera a que finalice.</p>
-                <button onClick={handleLogout} className="w-full py-4 bg-slate-800 hover:bg-slate-700 text-white font-black rounded-2xl transition-colors">Cerrar Sesión</button>
-            </div>
-        );
-    }
+    if (mantenimiento && usuario !== 'ADMIN') { return ( <div className="flex flex-col items-center justify-center min-h-[100dvh] max-w-md mx-auto bg-slate-900 p-8 text-center shadow-2xl animate-in zoom-in-95"><div className="w-32 h-32 bg-rose-500/20 text-rose-500 rounded-full flex items-center justify-center text-6xl mb-8 animate-pulse shadow-[0_0_40px_rgba(244,63,94,0.3)]"><i className="fas fa-tools"></i></div><h1 className="text-3xl font-black text-white mb-4">Sistema en<br/>Mantenimiento</h1><p className="text-slate-400 text-sm leading-relaxed mb-10">El Director está realizando ajustes.</p><button onClick={handleLogout} className="w-full py-4 bg-slate-800 hover:bg-slate-700 text-white font-black rounded-2xl transition-colors">Cerrar Sesión</button></div> ); }
 
     return (
         <div className="flex flex-col min-h-[100dvh] max-w-md mx-auto bg-white shadow-2xl relative">
@@ -331,30 +247,23 @@ function App() {
                 <DashboardView 
                     maestros={maestros} alumnos={alumnos} todosLosAlumnos={todosLosAlumnos} 
                     asistenciaHoy={asistenciaHoy} datosGlobalesAsistencia={datosGlobalesAsistencia} 
-                    historialAsistencias={historialAsistencias} 
-                    entregasLogistica={entregasLogistica} 
-                    usuario={usuario} datosUsuarioActual={datosUsuarioActual}
-                    mantenimiento={mantenimiento} onToggleMantenimiento={handleToggleMantenimiento}
-                    inventarioDatos={inventarioDatos} 
-                    onActualizarInventario={handleActualizarInventario} 
-                    onCerrarJornada={handleCerrarJornada}
+                    historialAsistencias={historialAsistencias} entregasLogistica={entregasLogistica} 
+                    usuario={usuario} datosUsuarioActual={datosUsuarioActual} mantenimiento={mantenimiento} onToggleMantenimiento={handleToggleMantenimiento}
+                    inventarioDatos={inventarioDatos} onActualizarInventario={handleActualizarInventario} onCerrarJornada={handleCerrarJornada}
                     onApprove={MaestrosService.aprobar} onDelete={setMaestroABorrar} onEdit={(m) => { setMaestroEdicion(m); setModalAbierto(true); }} onToggleModal={() => { setMaestroEdicion(null); setModalAbierto(true); }}
-                    onSaveAsistencia={handleGuardarAsistencia}
-                    onOpenAlumnoModal={handleAbrirModalAlumno}
-                    onEditAlumno={handleEditarAlumno}
-                    onDeleteAlumno={setAlumnoBorrar} 
-                    onDeleteCampo={setCampoABorrar}
-                    onResetLecciones={handleResetLecciones} 
-                    onCrearEntrega={handleCrearEntrega} 
-                    onActualizarEntrega={handleActualizarEntrega}
-                    onGuardarAvanceEntrega={handleGuardarAvanceEntrega}
-                    onBorrarEntrega={handleBorrarEntrega}
-                    onAssignGroup={handleAssignGroup}
+                    onSaveAsistencia={handleGuardarAsistencia} onOpenAlumnoModal={handleAbrirModalAlumno} onEditAlumno={handleEditarAlumno} onDeleteAlumno={setAlumnoBorrar} onDeleteCampo={setCampoABorrar}
+                    onResetLecciones={handleResetLecciones} onCrearEntrega={handleCrearEntrega} onActualizarEntrega={handleActualizarEntrega} onGuardarAvanceEntrega={handleGuardarAvanceEntrega} onBorrarEntrega={handleBorrarEntrega} onAssignGroup={handleAssignGroup}
                     
+                    // PASAMOS TODO A LOS DASHBOARDS
                     fondoTotal={fondoTotal}
                     historialIngresos={historialIngresos}
                     onGuardarIngreso={handleGuardarIngreso}
-                    onGuardarEgreso={handleGuardarEgreso} /* PASAMOS LA NUEVA FUNCIÓN */
+                    onGuardarEgreso={handleGuardarEgreso}
+                    
+                    fondoSecretariaTotal={fondoSecretariaTotal}
+                    historialSecretaria={historialSecretaria}
+                    onGuardarIngresoSecretaria={handleGuardarIngresoSecretaria}
+                    onGuardarEgresoSecretaria={handleGuardarEgresoSecretaria}
                 />
             </main>
 
@@ -362,40 +271,10 @@ function App() {
             {modalAbierto && (<div className="fixed inset-0 bg-slate-900/40 backdrop-blur-md flex items-center justify-center z-50 p-4 animate-in fade-in"><div className="bg-white w-full max-w-md rounded-[32px] p-8 shadow-2xl animate-in slide-in-from-bottom max-h-[90vh] overflow-y-auto"><h2 className="text-2xl font-black text-slate-800 mb-6">{maestroEdicion ? 'Editar' : 'Inscribir'}</h2><form onSubmit={handleGuardar} className="space-y-4"><input type="text" name="nombre" required defaultValue={maestroEdicion?.nombre || ''} className="w-full p-4 bg-slate-50 rounded-2xl outline-none" placeholder="Nombre" />
             <select name="clase" defaultValue={maestroEdicion?.clase || 'MAESTRO'} className="w-full p-4 bg-slate-50 rounded-2xl outline-none bg-white border border-slate-100">{['MAESTRO', 'AUXILIAR', 'LOGISTICA', 'SECRETARIA', 'TESORERO', 'Dirección'].map(c => <option key={c} value={c}>{c}</option>)}</select>
             <select name="campo" defaultValue={maestroEdicion?.campo || ''} className="w-full p-4 bg-slate-50 rounded-2xl outline-none bg-white border border-slate-100"><option value="">-- Ninguno --</option>{camposDisponibles.map(c => <option key={c} value={c}>{c}</option>)}</select><input type="tel" name="telefono" defaultValue={maestroEdicion?.telefono || ''} className="w-full p-4 bg-slate-50 rounded-2xl outline-none" placeholder="WhatsApp" /><div className="pt-4 flex flex-col space-y-3"><button type="submit" className="w-full py-4 bg-indigo-600 text-white font-black rounded-2xl shadow-xl">Guardar</button><button type="button" onClick={() => setModalAbierto(false)} className="text-slate-400 font-bold text-xs uppercase">Cancelar</button></div></form></div></div>)}
-            {modalAlumno && (
-                <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-md flex items-center justify-center z-50 p-4 animate-in fade-in">
-                    <div className="bg-white w-full max-w-md rounded-[32px] p-8 shadow-2xl animate-in slide-in-from-bottom">
-                        <div className="w-16 h-16 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mx-auto mb-4 text-3xl"><i className="fas fa-child"></i></div>
-                        <h2 className="text-2xl font-black text-slate-800 mb-2 text-center">{alumnoEdicion ? 'Editar' : 'Registrar'}</h2>
-                        <form onSubmit={handleGuardarAlumno} className="space-y-4 mt-4">
-                            <input type="text" name="nombre" required defaultValue={alumnoEdicion?.nombre || ''} placeholder="Nombre Completo" className="w-full p-4 bg-slate-50 rounded-2xl outline-none" />
-                            <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1 block mb-[-10px]">Fecha de Nacimiento</label>
-                            <div className="flex space-x-2">
-                                <select className="w-1/3 p-3 bg-slate-50 rounded-2xl outline-none font-bold text-slate-600" value={diaNac} onChange={e=>setDiaNac(e.target.value)} required>
-                                    <option value="" disabled>Día</option>
-                                    {Array.from({length: 31}, (_, i) => i + 1).map(d => <option key={d} value={d.toString().padStart(2, '0')}>{d}</option>)}
-                                </select>
-                                <select className="w-1/3 p-3 bg-slate-50 rounded-2xl outline-none font-bold text-slate-600" value={mesNac} onChange={e=>setMesNac(e.target.value)} required>
-                                    <option value="" disabled>Mes</option>
-                                    {['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'].map((m, i) => <option key={m} value={(i+1).toString().padStart(2, '0')}>{m}</option>)}
-                                </select>
-                                <select className="w-1/3 p-3 bg-slate-50 rounded-2xl outline-none font-bold text-slate-600" value={anioNac} onChange={e=>setAnioNac(e.target.value)} required>
-                                    <option value="" disabled>Año</option>
-                                    {Array.from({length: 25}, (_, i) => new Date().getFullYear() - i).map(a => <option key={a} value={a}>{a}</option>)}
-                                </select>
-                            </div>
-                            <select name="genero" required defaultValue={alumnoEdicion?.genero || ''} className="w-full p-4 bg-slate-50 rounded-2xl outline-none bg-white border border-slate-100 text-slate-600 font-bold"><option value="">Seleccionar Género</option><option value="M">Masculino</option><option value="F">Femenino</option></select>
-                            {edadCalculada !== null && (
-                                <div className="bg-emerald-50 p-4 rounded-2xl border border-emerald-100 flex items-center justify-between"><span className="text-emerald-800 text-xs font-bold uppercase tracking-widest">Edad detectada:</span><span className="text-2xl font-black text-emerald-600">{edadCalculada} Años</span></div>
-                            )}
-                            <div className="pt-2 flex flex-col space-y-3"><button type="submit" className="w-full py-4 bg-emerald-500 hover:bg-emerald-600 active:scale-95 transition-all text-white font-black rounded-2xl shadow-xl">Guardar</button><button type="button" onClick={() => { setModalAlumno(false); setAlumnoEdicion(null); setDiaNac(''); setMesNac(''); setAnioNac(''); }} className="text-slate-400 font-bold text-xs uppercase tracking-widest">Cancelar</button></div>
-                        </form>
-                    </div>
-                </div>
-            )}
-            {maestroABorrar && (<div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-[60] p-6 animate-in fade-in"><div className="bg-white rounded-[32px] p-8 w-full max-w-xs text-center shadow-2xl animate-in zoom-in-95 border-2 border-indigo-100"><div className="w-16 h-16 bg-indigo-50 text-indigo-500 rounded-full flex items-center justify-center mx-auto mb-4 text-3xl"><i className="fas fa-user-minus"></i></div><h3 className="text-xl font-black text-slate-800 mb-2">Eliminar Usuario</h3><div className="text-slate-500 text-xs mb-4 leading-relaxed bg-slate-50 p-4 rounded-xl text-left border border-slate-100">Estás a punto de eliminar a: <br/> <b className="text-slate-700 text-sm">{maestroABorrar.nombre}</b> <span className="text-[10px] uppercase">({maestroABorrar.clase})</span>.<br/><br/>{maestroABorrar.clase === 'LOGISTICA' ? (<span className="text-rose-600 font-bold"><i className="fas fa-exclamation-circle mr-1"></i> Sus datos se borrarán y será expulsado del sistema inmediatamente.</span>) : (<span className="text-emerald-600 font-bold"><i className="fas fa-shield-alt mr-1"></i> SEGURO: Los alumnos y la asistencia de su campo se conservarán seguros.</span>)}</div><div className="space-y-3"><button onClick={handleBorrarMaestro} className="w-full py-3 bg-indigo-600 text-white font-bold rounded-2xl shadow-lg active:scale-95 transition-all">Sí, eliminar usuario</button><button onClick={() => setMaestroABorrar(null)} className="w-full py-2 text-slate-400 font-bold text-xs uppercase tracking-widest">Cancelar</button></div></div></div>)}
-            {alumnoBorrar && (<div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-[60] p-6 animate-in fade-in"><div className="bg-white rounded-[32px] p-8 w-full max-w-xs text-center shadow-2xl animate-in zoom-in-95"><div className="w-16 h-16 bg-rose-50 text-rose-500 rounded-full flex items-center justify-center mx-auto mb-4 text-2xl"><i className="fas fa-trash-alt"></i></div><h3 className="text-xl font-black text-slate-800 mb-2">¿Eliminar Alumno?</h3><p className="text-xs text-slate-500 mb-4">Se borrará y se actualizarán las listas de asistencia recientes automáticamente.</p><div className="space-y-3"><button onClick={handleBorrarAlumno} className="w-full py-3 bg-rose-500 text-white font-bold rounded-2xl shadow-lg">Sí, borrar</button><button onClick={() => setAlumnoBorrar(null)} className="w-full py-2 text-slate-400 font-bold text-xs uppercase">Cancelar</button></div></div></div>)}
-            {campoABorrar && (<div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-[60] p-6 animate-in fade-in"><div className="bg-white rounded-[32px] p-8 w-full max-w-xs text-center shadow-2xl animate-in zoom-in-95 border-2 border-rose-100"><div className="w-16 h-16 bg-rose-50 text-rose-600 rounded-full flex items-center justify-center mx-auto mb-4 text-3xl"><i className="fas fa-bomb"></i></div><h3 className="text-xl font-black text-slate-800 mb-2">¡Limpieza de Campo!</h3><div className="text-slate-600 text-xs mb-4 leading-relaxed bg-rose-50 p-3 rounded-xl border border-rose-100">Vas a limpiar la base de datos de:<br/> <b className="text-rose-600 text-sm">{campoABorrar}</b>.<br/><br/>Se borrarán <span className="font-bold">TODOS</span> sus alumnos y su asistencia de forma permanente.</div><div className="space-y-3"><button onClick={handleBorrarCampo} className="w-full py-3 bg-rose-600 text-white font-bold rounded-2xl shadow-lg shadow-rose-200 active:scale-95 transition-all">Destruir datos</button><button onClick={() => setCampoABorrar(null)} className="w-full py-2 text-slate-400 font-bold text-xs uppercase tracking-widest">Cancelar</button></div></div></div>)}
+            {modalAlumno && ( <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-md flex items-center justify-center z-50 p-4 animate-in fade-in"><div className="bg-white w-full max-w-md rounded-[32px] p-8 shadow-2xl animate-in slide-in-from-bottom"><div className="w-16 h-16 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mx-auto mb-4 text-3xl"><i className="fas fa-child"></i></div><h2 className="text-2xl font-black text-slate-800 mb-2 text-center">{alumnoEdicion ? 'Editar' : 'Registrar'}</h2><form onSubmit={handleGuardarAlumno} className="space-y-4 mt-4"><input type="text" name="nombre" required defaultValue={alumnoEdicion?.nombre || ''} placeholder="Nombre Completo" className="w-full p-4 bg-slate-50 rounded-2xl outline-none" /><label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1 block mb-[-10px]">Fecha de Nacimiento</label><div className="flex space-x-2"><select className="w-1/3 p-3 bg-slate-50 rounded-2xl outline-none font-bold text-slate-600" value={diaNac} onChange={e=>setDiaNac(e.target.value)} required><option value="" disabled>Día</option>{Array.from({length: 31}, (_, i) => i + 1).map(d => <option key={d} value={d.toString().padStart(2, '0')}>{d}</option>)}</select><select className="w-1/3 p-3 bg-slate-50 rounded-2xl outline-none font-bold text-slate-600" value={mesNac} onChange={e=>setMesNac(e.target.value)} required><option value="" disabled>Mes</option>{['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'].map((m, i) => <option key={m} value={(i+1).toString().padStart(2, '0')}>{m}</option>)}</select><select className="w-1/3 p-3 bg-slate-50 rounded-2xl outline-none font-bold text-slate-600" value={anioNac} onChange={e=>setAnioNac(e.target.value)} required><option value="" disabled>Año</option>{Array.from({length: 25}, (_, i) => new Date().getFullYear() - i).map(a => <option key={a} value={a}>{a}</option>)}</select></div><select name="genero" required defaultValue={alumnoEdicion?.genero || ''} className="w-full p-4 bg-slate-50 rounded-2xl outline-none bg-white border border-slate-100 text-slate-600 font-bold"><option value="">Seleccionar Género</option><option value="M">Masculino</option><option value="F">Femenino</option></select>{edadCalculada !== null && (<div className="bg-emerald-50 p-4 rounded-2xl border border-emerald-100 flex items-center justify-between"><span className="text-emerald-800 text-xs font-bold uppercase tracking-widest">Edad detectada:</span><span className="text-2xl font-black text-emerald-600">{edadCalculada} Años</span></div>)}<div className="pt-2 flex flex-col space-y-3"><button type="submit" className="w-full py-4 bg-emerald-500 hover:bg-emerald-600 active:scale-95 transition-all text-white font-black rounded-2xl shadow-xl">Guardar</button><button type="button" onClick={() => { setModalAlumno(false); setAlumnoEdicion(null); setDiaNac(''); setMesNac(''); setAnioNac(''); }} className="text-slate-400 font-bold text-xs uppercase tracking-widest">Cancelar</button></div></form></div></div>)}
+            {maestroABorrar && (<div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-[60] p-6 animate-in fade-in"><div className="bg-white rounded-[32px] p-8 w-full max-w-xs text-center shadow-2xl animate-in zoom-in-95 border-2 border-indigo-100"><div className="w-16 h-16 bg-indigo-50 text-indigo-500 rounded-full flex items-center justify-center mx-auto mb-4 text-3xl"><i className="fas fa-user-minus"></i></div><h3 className="text-xl font-black text-slate-800 mb-2">Eliminar Usuario</h3><div className="text-slate-500 text-xs mb-4 leading-relaxed bg-slate-50 p-4 rounded-xl text-left border border-slate-100">Estás a punto de eliminar a: <br/> <b className="text-slate-700 text-sm">{maestroABorrar.nombre}</b> <span className="text-[10px] uppercase">({maestroABorrar.clase})</span>.<br/><br/>{maestroABorrar.clase === 'LOGISTICA' ? (<span className="text-rose-600 font-bold"><i className="fas fa-exclamation-circle mr-1"></i> Sus datos se borrarán.</span>) : (<span className="text-emerald-600 font-bold"><i className="fas fa-shield-alt mr-1"></i> SEGURO: Alumnos protegidos.</span>)}</div><div className="space-y-3"><button onClick={handleBorrarMaestro} className="w-full py-3 bg-indigo-600 text-white font-bold rounded-2xl shadow-lg active:scale-95 transition-all">Sí, eliminar</button><button onClick={() => setMaestroABorrar(null)} className="w-full py-2 text-slate-400 font-bold text-xs uppercase tracking-widest">Cancelar</button></div></div></div>)}
+            {alumnoBorrar && (<div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-[60] p-6 animate-in fade-in"><div className="bg-white rounded-[32px] p-8 w-full max-w-xs text-center shadow-2xl animate-in zoom-in-95"><div className="w-16 h-16 bg-rose-50 text-rose-500 rounded-full flex items-center justify-center mx-auto mb-4 text-2xl"><i className="fas fa-trash-alt"></i></div><h3 className="text-xl font-black text-slate-800 mb-2">¿Eliminar Alumno?</h3><p className="text-xs text-slate-500 mb-4">Se borrará permanentemente.</p><div className="space-y-3"><button onClick={handleBorrarAlumno} className="w-full py-3 bg-rose-500 text-white font-bold rounded-2xl shadow-lg">Sí, borrar</button><button onClick={() => setAlumnoBorrar(null)} className="w-full py-2 text-slate-400 font-bold text-xs uppercase">Cancelar</button></div></div></div>)}
+            {campoABorrar && (<div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-[60] p-6 animate-in fade-in"><div className="bg-white rounded-[32px] p-8 w-full max-w-xs text-center shadow-2xl animate-in zoom-in-95 border-2 border-rose-100"><div className="w-16 h-16 bg-rose-50 text-rose-600 rounded-full flex items-center justify-center mx-auto mb-4 text-3xl"><i className="fas fa-bomb"></i></div><h3 className="text-xl font-black text-slate-800 mb-2">¡Limpieza de Campo!</h3><div className="text-slate-600 text-xs mb-4 leading-relaxed bg-rose-50 p-3 rounded-xl border border-rose-100">Vas a limpiar la base de datos de:<br/> <b className="text-rose-600 text-sm">{campoABorrar}</b>.<br/><br/>Se borrarán <span className="font-bold">TODOS</span> sus alumnos y su asistencia permanentemente.</div><div className="space-y-3"><button onClick={handleBorrarCampo} className="w-full py-3 bg-rose-600 text-white font-bold rounded-2xl shadow-lg shadow-rose-200 active:scale-95 transition-all">Destruir datos</button><button onClick={() => setCampoABorrar(null)} className="w-full py-2 text-slate-400 font-bold text-xs uppercase tracking-widest">Cancelar</button></div></div></div>)}
         </div>
     );
 }
