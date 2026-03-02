@@ -6,7 +6,7 @@ function LoginView({ onLogin }) {
     const [campo, setCampo] = useState('');
     const [clave, setClave] = useState('');
     const [error, setError] = useState('');
-    const [estadoPendiente, setEstadoPendiente] = useState(false); // NUEVO ESTADO: Controla si está bloqueado
+    const [estadoPendiente, setEstadoPendiente] = useState(false); 
     const [loading, setLoading] = useState(false);
 
     const camposDisponibles = ["La Isla", "Las Delicias", "El Amatal", "El Manguito", "Buenos Aires", "Corozal #1", "El Porvenir", "El Caulote", "Corozal #2", "Valle Encantado", "La Playa"];
@@ -16,7 +16,8 @@ function LoginView({ onLogin }) {
         setError('');
         setLoading(true);
         
-        if (rol !== 'ADMIN' && rol !== 'LOGISTICA' && rol !== 'SECRETARIA' && !campo) {
+        // Tesorero añadido aquí para que no pida campo
+        if (rol !== 'ADMIN' && rol !== 'LOGISTICA' && rol !== 'SECRETARIA' && rol !== 'TESORERO' && !campo) {
             setError('Debes seleccionar un campo.');
             setLoading(false);
             return;
@@ -31,11 +32,10 @@ function LoginView({ onLogin }) {
         const res = await onLogin(rol, clave, nombre, campo);
         if (!res.exito) {
             setError(res.mensaje || 'Error al iniciar sesión');
-            setEstadoPendiente(false); // Si pone mal la contraseña, se lo mostramos
+            setEstadoPendiente(false); 
         } else if (res.mensaje) {
-            // Si la respuesta es "Solicitud enviada" o "Pendiente"
             setEstadoPendiente(true);
-            setClave(''); // Solo borramos la contraseña por seguridad
+            setClave(''); 
         }
         setLoading(false);
     };
@@ -49,7 +49,6 @@ function LoginView({ onLogin }) {
                 <h1 className="text-2xl font-black text-slate-800 text-center mb-2">Bienvenido</h1>
                 <p className="text-sm text-slate-500 text-center mb-8">Ingresa tus datos para continuar</p>
 
-                {/* MENSAJE DE ESPERA CUANDO ESTÁ PENDIENTE */}
                 {estadoPendiente && (
                     <div className="mb-6 p-4 bg-amber-50 border border-amber-200 rounded-2xl animate-in fade-in">
                         <p className="text-xs font-bold text-amber-800 text-center leading-relaxed">
@@ -75,6 +74,7 @@ function LoginView({ onLogin }) {
                             <option value="AUXILIAR">Auxiliar</option>
                             <option value="LOGISTICA">Logística</option>
                             <option value="SECRETARIA">Secretaría</option>
+                            <option value="TESORERO">Tesorero/a</option> {/* NUEVO ROL */}
                             <option value="ADMIN">Director (Admin)</option>
                         </select>
                     </div>
@@ -94,7 +94,7 @@ function LoginView({ onLogin }) {
                         </div>
                     )}
 
-                    {rol && rol !== 'ADMIN' && rol !== 'LOGISTICA' && rol !== 'SECRETARIA' && (
+                    {rol && rol !== 'ADMIN' && rol !== 'LOGISTICA' && rol !== 'SECRETARIA' && rol !== 'TESORERO' && (
                         <div className="animate-in fade-in slide-in-from-top-2">
                             <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-2 mb-1 block">Tu Campo Asignado</label>
                             <select 
@@ -112,7 +112,6 @@ function LoginView({ onLogin }) {
                         </div>
                     )}
 
-                    {/* LA CONTRASEÑA SIEMPRE QUEDA ACTIVA PARA QUE PUEDAN REVISAR */}
                     {rol && (
                         <div className="animate-in fade-in slide-in-from-top-2">
                             <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-2 mb-1 block">Contraseña de Acceso</label>
@@ -137,7 +136,6 @@ function LoginView({ onLogin }) {
                         {loading ? 'Verificando...' : estadoPendiente ? 'Revisar Aprobación' : rol === 'ADMIN' ? 'Ingresar al Panel' : 'Solicitar Acceso'}
                     </button>
 
-                    {/* BOTÓN PARA CORREGIR SI SE EQUIVOCARON DE NOMBRE O CAMPO */}
                     {estadoPendiente && (
                         <button 
                             type="button" 
