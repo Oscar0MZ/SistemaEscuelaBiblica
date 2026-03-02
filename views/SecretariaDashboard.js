@@ -8,12 +8,17 @@ function SecretariaDashboard({
     const [vistaActual, setVistaActual] = useState('inicio'); 
     const [campoExpandido, setCampoExpandido] = useState(null); 
     
-    // Estados para Control Cruzado
+    // Estados para Control Cruzado (Auditoría)
     const [tipoTransaccion, setTipoTransaccion] = useState('ingreso'); 
     const [monto, setMonto] = useState('');
     const [descripcion, setDescripcion] = useState('');
     const [cargando, setLoading] = useState(false);
     const [mesExpandidoSec, setMesExpandidoSec] = useState(null);
+
+    // Estados para Reportes (Filtración de Campos)
+    const [fechaDesde, setFechaDesde] = useState('');
+    const [fechaHasta, setFechaHasta] = useState('');
+    const [filtroCampo, setFiltroCampo] = useState('TODOS');
 
     const historialVisible = historialAsistencias.filter(h => !h.esReset);
     const todasAsistencias = datosGlobalesAsistencia?.registros || [];
@@ -28,12 +33,14 @@ function SecretariaDashboard({
     const textoFechas = datosGlobalesAsistencia?.rango ? `${formatoFecha(datosGlobalesAsistencia.rango.inicio).substring(0,5)} - ${formatoFecha(datosGlobalesAsistencia.rango.fin).substring(0,5)}` : 'Calculando...';
     const camposActivos = [...new Set([...maestros.filter(m => m.clase !== 'LOGISTICA' && m.campo).map(m => m.campo), ...todosLosAlumnos.map(a => a.campo), ...historialVisible.map(h => h.campo)].filter(Boolean))].sort();
 
+    // 1. Cálculos de la Pestaña INICIO
     let tp = 0, ta = 0, tperm = 0, totalOfrendaSemana = 0; 
     todasAsistencias.forEach(r => { 
         if(r.totales){ tp+=r.totales.presentes; ta+=r.totales.ausentes; tperm+=r.totales.permisos; } 
         if(r.ofrenda) totalOfrendaSemana += Number(r.ofrenda);
     });
 
+    // 2. Lógica de la Pestaña AUDITORÍA
     const handleSubmitAuditoria = async (e) => {
         e.preventDefault();
         setLoading(true);
@@ -49,7 +56,6 @@ function SecretariaDashboard({
         setLoading(false);
     };
 
-    // Acordeón para historial de Secretaría
     const historialPorMesSec = {};
     historialSecretaria.forEach(mov => {
         const mesKey = mov.fecha ? mov.fecha.substring(0, 7) : 'Desconocido';
@@ -67,12 +73,43 @@ function SecretariaDashboard({
         return `${meses[parseInt(m, 10) - 1]} ${y}`;
     };
 
-    // Lógica Matemática de Cuadre
     const diferencia = fondoTotal - fondoSecretariaTotal;
 
+    // 3. Lógica de la Pestaña REPORTES (Filtrado de Campos)
+    const registrosFiltrados = historialVisible.filter(h => {
+        if (fechaDesde && h.fecha < fechaDesde) return false;
+        if (fechaHasta && h.fecha > fechaHasta) return false;
+        if (filtroCampo !== 'TODOS' && h.campo !== filtroCampo) return false;
+        return true;
+    });
+
+    let ofrendaPeriodo = 0, presentesPeriodo = 0, ausentesPeriodo = 0, permisosPeriodo = 0;
+    const resumenPorCampo = {};
+
+    registrosFiltrados.forEach(h => {
+        const ofr = Number(h.ofrenda || 0);
+        const p = h.totales?.presentes || 0;
+        const a = h.totales?.ausentes || 0;
+        const per = h.totales?.permisos || 0;
+
+        ofrendaPeriodo += ofr; presentesPeriodo += p; ausentesPeriodo += a; permisosPeriodo += per;
+
+        if (!resumenPorCampo[h.campo]) {
+            resumenPorCampo[h.campo] = { ofrenda: 0, presentes: 0, ausentes: 0, permisos: 0, clases: 0 };
+        }
+        resumenPorCampo[h.campo].ofrenda += ofr;
+        resumenPorCampo[h.campo].presentes += p;
+        resumenPorCampo[h.campo].ausentes += a;
+        resumenPorCampo[h.campo].permisos += per;
+        resumenPorCampo[h.campo].clases += 1;
+    });
+
+    const camposOrdenadosReporte = Object.keys(resumenPorCampo).sort((a,b) => resumenPorCampo[b].ofrenda - resumenPorCampo[a].ofrenda);
+
+    // Navegación (Ahora son 4 botones)
     const NavButton = ({ id, icon, label }) => (
-        <button onClick={() => setVistaActual(id)} className={`flex flex-col items-center justify-center w-[90px] h-14 rounded-2xl transition-all ${vistaActual === id ? 'text-pink-600 bg-pink-50 font-black' : 'text-slate-400 hover:text-slate-600 font-bold'}`}>
-            <i className={`fas ${icon} text-xl mb-1 ${vistaActual === id ? 'animate-bounce' : ''}`}></i><span className="text-[10px] tracking-wide">{label}</span>
+        <button onClick={() => setVistaActual(id)} className={`flex flex-col items-center justify-center w-[75px] h-14 rounded-2xl transition-all ${vistaActual === id ? 'text-pink-600 bg-pink-50 font-black' : 'text-slate-400 hover:text-slate-600 font-bold'}`}>
+            <i className={`fas ${icon} text-xl mb-1 ${vistaActual === id ? 'animate-bounce' : ''}`}></i><span className="text-[9px] tracking-wide">{label}</span>
         </button>
     );
 
@@ -118,7 +155,6 @@ function SecretariaDashboard({
                     <p className="text-slate-400 text-xs mt-1">Compara tu registro interno vs Tesorería</p>
                 </div>
 
-                {/* TARJETA DE COMPARACIÓN (DOBLE CONTROL) */}
                 <div className="bg-slate-800 p-6 rounded-[32px] text-white shadow-xl mx-1 relative overflow-hidden">
                     <div className="absolute top-0 right-0 w-24 h-24 bg-white opacity-5 rounded-bl-[100px] pointer-events-none"></div>
                     <div className="grid grid-cols-2 gap-4 relative z-10">
@@ -152,7 +188,6 @@ function SecretariaDashboard({
                     )}
                 </div>
 
-                {/* FORMULARIO DE INGRESO/RETIRO SECRETARÍA */}
                 <div className="bg-white p-5 rounded-[24px] border border-slate-100 shadow-sm mx-1 mt-4">
                     <h3 className="font-bold text-slate-700 text-sm mb-4">Añadir a mi Control Interno</h3>
                     <div className="flex bg-slate-100 p-1 rounded-2xl mb-4">
@@ -180,7 +215,6 @@ function SecretariaDashboard({
                     </form>
                 </div>
 
-                {/* HISTORIAL MODO ACORDEÓN (SECRETARÍA) */}
                 <h3 className="font-bold text-slate-700 text-sm mt-6 px-2 border-b border-slate-100 pb-2">Mi Libro Mayor</h3>
                 <div className="space-y-3 px-1">
                     {mesesOrdenadosSec.length === 0 ? (
@@ -323,6 +357,98 @@ function SecretariaDashboard({
         );
     }
 
+    if (vistaActual === 'reportes') {
+        contenido = (
+            <div className="space-y-4 animate-in slide-in-from-right duration-300 pt-2 pb-24">
+                <div className="px-2 mb-2">
+                    <h2 className="text-2xl font-black text-slate-800">Reportes de Campos</h2>
+                    <p className="text-slate-400 text-xs mt-1">Filtra asistencia y ofrendas históricas</p>
+                </div>
+                
+                {/* CAJA DE FILTROS */}
+                <div className="bg-white p-4 rounded-[24px] mx-1 border border-slate-100 shadow-sm space-y-3">
+                    <div className="flex space-x-3">
+                        <div className="w-1/2">
+                            <label className="text-[9px] font-bold text-slate-400 uppercase tracking-widest ml-1">Desde la fecha</label>
+                            <input type="date" className="w-full p-3 mt-1 bg-slate-50 rounded-xl outline-none text-xs font-bold text-slate-700 border border-slate-100 focus:border-pink-400 focus:ring-1 focus:ring-pink-100 transition-all" value={fechaDesde} onChange={e=>setFechaDesde(e.target.value)} />
+                        </div>
+                        <div className="w-1/2">
+                            <label className="text-[9px] font-bold text-slate-400 uppercase tracking-widest ml-1">Hasta la fecha</label>
+                            <input type="date" className="w-full p-3 mt-1 bg-slate-50 rounded-xl outline-none text-xs font-bold text-slate-700 border border-slate-100 focus:border-pink-400 focus:ring-1 focus:ring-pink-100 transition-all" value={fechaHasta} onChange={e=>setFechaHasta(e.target.value)} />
+                        </div>
+                    </div>
+                    <div>
+                        <label className="text-[9px] font-bold text-slate-400 uppercase tracking-widest ml-1">Filtrar por Campo</label>
+                        <select className="w-full p-3 mt-1 bg-slate-50 rounded-xl outline-none text-xs font-bold text-slate-700 border border-slate-100 focus:border-pink-400 focus:ring-1 focus:ring-pink-100 transition-all" value={filtroCampo} onChange={e=>setFiltroCampo(e.target.value)}>
+                            <option value="TODOS">Todos los campos (Global)</option>
+                            {camposActivos.map(c => <option key={c} value={c}>{c}</option>)}
+                        </select>
+                    </div>
+                </div>
+
+                {/* RESULTADO DEL FILTRO */}
+                <div className="bg-slate-800 p-5 rounded-[24px] text-white shadow-xl mx-1 flex justify-between items-center relative overflow-hidden">
+                    <div className="absolute top-0 right-0 w-24 h-24 bg-white opacity-5 rounded-bl-[100px] pointer-events-none"></div>
+                    <div className="relative z-10">
+                        <p className="text-[10px] font-bold uppercase opacity-70 tracking-widest mb-1">Recaudación del Período</p>
+                        <p className="text-4xl font-black tracking-tighter text-emerald-400">${ofrendaPeriodo.toFixed(2)}</p>
+                    </div>
+                    <div className="text-right relative z-10">
+                        <p className="text-[10px] font-bold uppercase opacity-70 tracking-widest mb-1">Asistencia</p>
+                        <p className="text-sm font-black"><span className="text-emerald-400">P: {presentesPeriodo}</span> | <span className="text-rose-400">A: {ausentesPeriodo}</span></p>
+                    </div>
+                </div>
+
+                {/* DESGLOSE */}
+                <h3 className="font-bold text-slate-700 text-sm mt-6 px-2 border-b border-slate-100 pb-2">
+                    {filtroCampo === 'TODOS' ? 'Ranking de Aportes por Campo' : `Historial de Clases: ${filtroCampo}`}
+                </h3>
+                <div className="space-y-3 px-1">
+                    {registrosFiltrados.length === 0 ? (
+                        <div className="text-center p-8 bg-slate-50 rounded-3xl mt-2 border border-slate-100">
+                            <i className="fas fa-search text-3xl text-slate-300 mb-3"></i>
+                            <p className="text-sm font-bold text-slate-500">No hay registros en estas fechas</p>
+                        </div>
+                    ) : filtroCampo === 'TODOS' ? (
+                        camposOrdenadosReporte.map((campo, index) => {
+                            const data = resumenPorCampo[campo];
+                            return (
+                                <div key={campo} className="bg-white p-4 rounded-2xl border border-slate-100 shadow-sm flex justify-between items-center relative overflow-hidden">
+                                    <div className="flex items-center space-x-4 flex-1">
+                                        <div className={`w-8 h-8 shrink-0 rounded-full flex items-center justify-center text-xs font-black ${index === 0 ? 'bg-amber-100 text-amber-600' : index === 1 ? 'bg-slate-200 text-slate-600' : index === 2 ? 'bg-orange-100 text-orange-800' : 'bg-slate-50 text-slate-400 border border-slate-100'}`}>#{index + 1}</div>
+                                        <div>
+                                            <p className="font-bold text-slate-700 text-sm">{campo}</p>
+                                            <p className="text-[9px] text-slate-400 font-bold uppercase mt-0.5">{data.clases} domingos reportados</p>
+                                        </div>
+                                    </div>
+                                    <div className="text-right">
+                                        <p className="font-black text-emerald-600 text-base">${data.ofrenda.toFixed(2)}</p>
+                                    </div>
+                                </div>
+                            )
+                        })
+                    ) : (
+                        registrosFiltrados.sort((a,b) => new Date(b.fecha) - new Date(a.fecha)).map((h, i) => (
+                            <div key={i} className="bg-white p-4 rounded-2xl border border-slate-100 shadow-sm flex justify-between items-center">
+                                <div>
+                                    <p className="font-black text-slate-700 text-xs">{formatoFecha(h.fecha)}</p>
+                                    <p className="text-[9px] text-slate-400 font-bold uppercase mt-0.5">Lec. {h.leccion || '-'} • Por: {h.maestro.split(' ')[0]}</p>
+                                </div>
+                                <div className="text-right">
+                                    <p className="font-black text-emerald-600 text-base">${Number(h.ofrenda||0).toFixed(2)}</p>
+                                    <div className="flex space-x-1.5 mt-1 text-[9px] font-bold justify-end">
+                                        <span className="bg-emerald-50 text-emerald-600 px-1.5 py-0.5 rounded">P: {h.totales?.presentes||0}</span>
+                                        <span className="bg-rose-50 text-rose-600 px-1.5 py-0.5 rounded">A: {h.totales?.ausentes||0}</span>
+                                    </div>
+                                </div>
+                            </div>
+                        ))
+                    )}
+                </div>
+            </div>
+        );
+    }
+
     return (
         <>
             {contenido}
@@ -330,6 +456,7 @@ function SecretariaDashboard({
                 <NavButton id="inicio" icon="fa-chart-pie" label="Resumen" />
                 <NavButton id="campos" icon="fa-map-marked-alt" label="Monitoreo" />
                 <NavButton id="auditoria" icon="fa-balance-scale" label="Auditoría" />
+                <NavButton id="reportes" icon="fa-filter" label="Reportes" />
             </div>
         </>
     );
