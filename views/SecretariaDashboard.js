@@ -1,14 +1,19 @@
 const { useState } = React;
 
 function SecretariaDashboard({
-    todosLosAlumnos, datosGlobalesAsistencia, historialAsistencias, datosUsuarioActual, maestros
+    todosLosAlumnos, datosGlobalesAsistencia, historialAsistencias, maestros,
+    fondoTotal, fondoSecretariaTotal, historialSecretaria, 
+    onGuardarIngresoSecretaria, onGuardarEgresoSecretaria
 }) {
     const [vistaActual, setVistaActual] = useState('inicio'); 
     const [campoExpandido, setCampoExpandido] = useState(null); 
     
-    const [fechaDesde, setFechaDesde] = useState('');
-    const [fechaHasta, setFechaHasta] = useState('');
-    const [filtroCampo, setFiltroCampo] = useState('TODOS');
+    // Estados para Control Cruzado
+    const [tipoTransaccion, setTipoTransaccion] = useState('ingreso'); 
+    const [monto, setMonto] = useState('');
+    const [descripcion, setDescripcion] = useState('');
+    const [cargando, setLoading] = useState(false);
+    const [mesExpandidoSec, setMesExpandidoSec] = useState(null);
 
     const historialVisible = historialAsistencias.filter(h => !h.esReset);
     const todasAsistencias = datosGlobalesAsistencia?.registros || [];
@@ -16,6 +21,7 @@ function SecretariaDashboard({
     const formatoFecha = (f) => {
         if (!f) return '';
         const p = f.split('-');
+        if (p.length !== 3) return f;
         return `${p[2]}/${p[1]}/${p[0]}`; 
     };
 
@@ -28,41 +34,41 @@ function SecretariaDashboard({
         if(r.ofrenda) totalOfrendaSemana += Number(r.ofrenda);
     });
 
-    const registrosFiltrados = historialVisible.filter(h => {
-        if (fechaDesde && h.fecha < fechaDesde) return false;
-        if (fechaHasta && h.fecha > fechaHasta) return false;
-        if (filtroCampo !== 'TODOS' && h.campo !== filtroCampo) return false;
-        return true;
-    });
+    const handleSubmitAuditoria = async (e) => {
+        e.preventDefault();
+        setLoading(true);
+        let exito = false;
+        if (tipoTransaccion === 'ingreso') exito = await onGuardarIngresoSecretaria(monto, descripcion);
+        else exito = await onGuardarEgresoSecretaria(monto, descripcion);
 
-    let ofrendaPeriodo = 0;
-    let presentesPeriodo = 0;
-    let ausentesPeriodo = 0;
-    let permisosPeriodo = 0; // NUEVO: CONTADOR DE PERMISOS
-    const resumenPorCampo = {};
-
-    registrosFiltrados.forEach(h => {
-        const ofr = Number(h.ofrenda || 0);
-        const p = h.totales?.presentes || 0;
-        const a = h.totales?.ausentes || 0;
-        const per = h.totales?.permisos || 0;
-
-        ofrendaPeriodo += ofr;
-        presentesPeriodo += p;
-        ausentesPeriodo += a;
-        permisosPeriodo += per;
-
-        if (!resumenPorCampo[h.campo]) {
-            resumenPorCampo[h.campo] = { ofrenda: 0, presentes: 0, ausentes: 0, permisos: 0, clases: 0 };
+        if (exito) {
+            setMonto(''); setDescripcion('');
+            const hoy = new Date().toLocaleDateString('en-CA').substring(0, 7);
+            setMesExpandidoSec(hoy);
         }
-        resumenPorCampo[h.campo].ofrenda += ofr;
-        resumenPorCampo[h.campo].presentes += p;
-        resumenPorCampo[h.campo].ausentes += a;
-        resumenPorCampo[h.campo].permisos += per;
-        resumenPorCampo[h.campo].clases += 1;
-    });
+        setLoading(false);
+    };
 
-    const camposOrdenadosReporte = Object.keys(resumenPorCampo).sort((a,b) => resumenPorCampo[b].ofrenda - resumenPorCampo[a].ofrenda);
+    // Acordeón para historial de Secretaría
+    const historialPorMesSec = {};
+    historialSecretaria.forEach(mov => {
+        const mesKey = mov.fecha ? mov.fecha.substring(0, 7) : 'Desconocido';
+        if (!historialPorMesSec[mesKey]) historialPorMesSec[mesKey] = { ingresos: 0, egresos: 0, movimientos: [] };
+        if (mov.tipo === 'egreso') historialPorMesSec[mesKey].egresos += Number(mov.monto);
+        else historialPorMesSec[mesKey].ingresos += Number(mov.monto);
+        historialPorMesSec[mesKey].movimientos.push(mov);
+    });
+    const mesesOrdenadosSec = Object.keys(historialPorMesSec).sort((a,b) => b.localeCompare(a));
+
+    const nombreMes = (mesKey) => {
+        if (mesKey === 'Desconocido') return 'Fecha Desconocida';
+        const [y, m] = mesKey.split('-');
+        const meses = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
+        return `${meses[parseInt(m, 10) - 1]} ${y}`;
+    };
+
+    // Lógica Matemática de Cuadre
+    const diferencia = fondoTotal - fondoSecretariaTotal;
 
     const NavButton = ({ id, icon, label }) => (
         <button onClick={() => setVistaActual(id)} className={`flex flex-col items-center justify-center w-[90px] h-14 rounded-2xl transition-all ${vistaActual === id ? 'text-pink-600 bg-pink-50 font-black' : 'text-slate-400 hover:text-slate-600 font-bold'}`}>
@@ -104,91 +110,134 @@ function SecretariaDashboard({
         );
     }
 
-    if (vistaActual === 'reportes') {
+    if (vistaActual === 'auditoria') {
         contenido = (
             <div className="space-y-4 animate-in slide-in-from-right duration-300 pt-2 pb-24">
                 <div className="px-2 mb-2">
-                    <h2 className="text-2xl font-black text-slate-800">Reportes Financieros</h2>
-                    <p className="text-slate-400 text-xs mt-1">Filtra ofrendas y asistencia histórica</p>
-                </div>
-                
-                <div className="bg-white p-4 rounded-[24px] mx-1 border border-slate-100 shadow-sm space-y-3">
-                    <div className="flex space-x-3">
-                        <div className="w-1/2">
-                            <label className="text-[9px] font-bold text-slate-400 uppercase tracking-widest ml-1">Desde la fecha</label>
-                            <input type="date" className="w-full p-3 mt-1 bg-slate-50 rounded-xl outline-none text-xs font-bold text-slate-700 border border-slate-100 focus:border-pink-400 focus:ring-1 focus:ring-pink-100 transition-all" value={fechaDesde} onChange={e=>setFechaDesde(e.target.value)} />
-                        </div>
-                        <div className="w-1/2">
-                            <label className="text-[9px] font-bold text-slate-400 uppercase tracking-widest ml-1">Hasta la fecha</label>
-                            <input type="date" className="w-full p-3 mt-1 bg-slate-50 rounded-xl outline-none text-xs font-bold text-slate-700 border border-slate-100 focus:border-pink-400 focus:ring-1 focus:ring-pink-100 transition-all" value={fechaHasta} onChange={e=>setFechaHasta(e.target.value)} />
-                        </div>
-                    </div>
-                    <div>
-                        <label className="text-[9px] font-bold text-slate-400 uppercase tracking-widest ml-1">Filtrar por Campo</label>
-                        <select className="w-full p-3 mt-1 bg-slate-50 rounded-xl outline-none text-xs font-bold text-slate-700 border border-slate-100 focus:border-pink-400 focus:ring-1 focus:ring-pink-100 transition-all" value={filtroCampo} onChange={e=>setFiltroCampo(e.target.value)}>
-                            <option value="TODOS">Todos los campos (Global)</option>
-                            {camposActivos.map(c => <option key={c} value={c}>{c}</option>)}
-                        </select>
-                    </div>
+                    <h2 className="text-2xl font-black text-slate-800">Control Cruzado</h2>
+                    <p className="text-slate-400 text-xs mt-1">Compara tu registro interno vs Tesorería</p>
                 </div>
 
-                <div className="bg-slate-800 p-5 rounded-[24px] text-white shadow-xl mx-1 flex justify-between items-center relative overflow-hidden">
+                {/* TARJETA DE COMPARACIÓN (DOBLE CONTROL) */}
+                <div className="bg-slate-800 p-6 rounded-[32px] text-white shadow-xl mx-1 relative overflow-hidden">
                     <div className="absolute top-0 right-0 w-24 h-24 bg-white opacity-5 rounded-bl-[100px] pointer-events-none"></div>
-                    <div className="relative z-10">
-                        <p className="text-[10px] font-bold uppercase opacity-70 tracking-widest mb-1">Recaudación del Período</p>
-                        <p className="text-4xl font-black tracking-tighter text-emerald-400">${ofrendaPeriodo.toFixed(2)}</p>
+                    <div className="grid grid-cols-2 gap-4 relative z-10">
+                        <div className="border-r border-slate-700">
+                            <p className="text-[9px] text-slate-400 uppercase font-bold tracking-widest mb-1">Mi Control (Secretaría)</p>
+                            <p className="text-2xl font-black text-pink-400">${fondoSecretariaTotal.toFixed(2)}</p>
+                        </div>
+                        <div className="pl-2">
+                            <p className="text-[9px] text-slate-400 uppercase font-bold tracking-widest mb-1">Reporte Tesorería</p>
+                            <p className="text-2xl font-black text-sky-400">${fondoTotal.toFixed(2)}</p>
+                        </div>
                     </div>
-                    <div className="text-right relative z-10">
-                        <p className="text-[10px] font-bold uppercase opacity-70 tracking-widest mb-1">Asistencia</p>
-                        <p className="text-sm font-black"><span className="text-emerald-400">P: {presentesPeriodo}</span> | <span className="text-rose-400">A: {ausentesPeriodo}</span> | <span className="text-amber-400">Pe: {permisosPeriodo}</span></p>
+                    
+                    <div className={`mt-5 p-4 rounded-2xl flex items-center justify-between border ${diferencia === 0 ? 'bg-emerald-500/20 border-emerald-500/30 text-emerald-400' : 'bg-rose-500/20 border-rose-500/30 text-rose-400'}`}>
+                        <div>
+                            <p className="text-[10px] font-bold uppercase tracking-widest">Estado de Cuentas</p>
+                            <p className="text-sm font-black">{diferencia === 0 ? 'Cuadre Perfecto' : 'Descuadre Detectado'}</p>
+                        </div>
+                        {diferencia !== 0 && (
+                            <div className="text-right">
+                                <p className="text-xl font-black">
+                                    {diferencia > 0 ? '+' : '-'}${Math.abs(diferencia).toFixed(2)}
+                                </p>
+                            </div>
+                        )}
                     </div>
+                    {diferencia !== 0 && (
+                        <p className="text-[9px] text-slate-400 mt-2 text-center italic">
+                            {diferencia > 0 ? "Tesorería reporta MÁS fondos de los que tú has registrado." : "Tesorería reporta MENOS fondos de los que tú has registrado."}
+                        </p>
+                    )}
                 </div>
 
-                <h3 className="font-bold text-slate-700 text-sm mt-6 px-2 border-b border-slate-100 pb-2">
-                    {filtroCampo === 'TODOS' ? 'Ranking de Aportes por Campo' : `Historial de Clases: ${filtroCampo}`}
-                </h3>
-                <div className="space-y-3 px-1">
-                    {registrosFiltrados.length === 0 ? (
-                        <div className="text-center p-8 bg-slate-50 rounded-3xl mt-2 border border-slate-100">
-                            <i className="fas fa-search text-3xl text-slate-300 mb-3"></i>
-                            <p className="text-sm font-bold text-slate-500">No hay registros en estas fechas</p>
-                        </div>
-                    ) : filtroCampo === 'TODOS' ? (
-                        camposOrdenadosReporte.map((campo, index) => {
-                            const data = resumenPorCampo[campo];
-                            return (
-                                <div key={campo} className="bg-white p-4 rounded-2xl border border-slate-100 shadow-sm flex justify-between items-center relative overflow-hidden">
-                                    <div className="flex items-center space-x-4 flex-1">
-                                        <div className={`w-8 h-8 shrink-0 rounded-full flex items-center justify-center text-xs font-black ${index === 0 ? 'bg-amber-100 text-amber-600' : index === 1 ? 'bg-slate-200 text-slate-600' : index === 2 ? 'bg-orange-100 text-orange-800' : 'bg-slate-50 text-slate-400 border border-slate-100'}`}>#{index + 1}</div>
-                                        <div>
-                                            <p className="font-bold text-slate-700 text-sm">{campo}</p>
-                                            <p className="text-[9px] text-slate-400 font-bold uppercase mt-0.5">{data.clases} domingos reportados</p>
-                                        </div>
-                                    </div>
-                                    <div className="text-right">
-                                        <p className="font-black text-emerald-600 text-base">${data.ofrenda.toFixed(2)}</p>
-                                    </div>
-                                </div>
-                            )
-                        })
-                    ) : (
-                        registrosFiltrados.sort((a,b) => new Date(b.fecha) - new Date(a.fecha)).map((h, i) => (
-                            <div key={i} className="bg-white p-4 rounded-2xl border border-slate-100 shadow-sm flex justify-between items-center">
-                                <div>
-                                    <p className="font-black text-slate-700 text-xs">{formatoFecha(h.fecha)}</p>
-                                    <p className="text-[9px] text-slate-400 font-bold uppercase mt-0.5">Lec. {h.leccion || '-'} • Por: {h.maestro.split(' ')[0]}</p>
-                                </div>
-                                <div className="text-right">
-                                    <p className="font-black text-emerald-600 text-base">${Number(h.ofrenda||0).toFixed(2)}</p>
-                                    <div className="flex space-x-1.5 mt-1 text-[9px] font-bold justify-end">
-                                        <span className="bg-emerald-50 text-emerald-600 px-1.5 py-0.5 rounded">P: {h.totales?.presentes||0}</span>
-                                        <span className="bg-rose-50 text-rose-600 px-1.5 py-0.5 rounded">A: {h.totales?.ausentes||0}</span>
-                                        {/* AHORA SÍ APARECEN LOS PERMISOS EN EL HISTORIAL */}
-                                        <span className="bg-amber-50 text-amber-600 px-1.5 py-0.5 rounded">Pe: {h.totales?.permisos||0}</span>
-                                    </div>
-                                </div>
+                {/* FORMULARIO DE INGRESO/RETIRO SECRETARÍA */}
+                <div className="bg-white p-5 rounded-[24px] border border-slate-100 shadow-sm mx-1 mt-4">
+                    <h3 className="font-bold text-slate-700 text-sm mb-4">Añadir a mi Control Interno</h3>
+                    <div className="flex bg-slate-100 p-1 rounded-2xl mb-4">
+                        <button onClick={() => setTipoTransaccion('ingreso')} className={`flex-1 py-2 rounded-xl font-bold text-xs transition-all shadow-sm ${tipoTransaccion === 'ingreso' ? 'bg-white text-emerald-600 border border-slate-200' : 'text-slate-400 hover:text-slate-600'}`}>
+                            + Ingreso
+                        </button>
+                        <button onClick={() => setTipoTransaccion('egreso')} className={`flex-1 py-2 rounded-xl font-bold text-xs transition-all shadow-sm ${tipoTransaccion === 'egreso' ? 'bg-white text-rose-600 border border-slate-200' : 'text-slate-400 hover:text-slate-600'}`}>
+                            - Retiro
+                        </button>
+                    </div>
+
+                    <form onSubmit={handleSubmitAuditoria} className="space-y-3">
+                        <div className="flex space-x-2">
+                            <div className="w-1/3 relative">
+                                <span className={`absolute left-3 top-3 font-black text-sm ${tipoTransaccion === 'ingreso' ? 'text-emerald-400' : 'text-rose-400'}`}>$</span>
+                                <input type="number" step="0.01" min="0.01" required value={monto} onChange={(e) => setMonto(e.target.value)} placeholder="0.00" className="w-full py-3 pl-7 pr-2 bg-slate-50 rounded-xl outline-none border border-slate-100 text-sm font-black text-slate-700" />
                             </div>
-                        ))
+                            <div className="w-2/3">
+                                <input type="text" required value={descripcion} onChange={(e) => setDescripcion(e.target.value)} placeholder="Concepto..." className="w-full py-3 px-3 bg-slate-50 rounded-xl outline-none border border-slate-100 text-xs font-bold text-slate-700" />
+                            </div>
+                        </div>
+                        <button type="submit" disabled={cargando} className={`w-full py-3 rounded-xl font-black text-white shadow-md transition-all active:scale-95 ${cargando ? 'bg-slate-400' : 'bg-slate-800 hover:bg-slate-700'}`}>
+                            {cargando ? 'Guardando...' : 'Guardar en mi registro'}
+                        </button>
+                    </form>
+                </div>
+
+                {/* HISTORIAL MODO ACORDEÓN (SECRETARÍA) */}
+                <h3 className="font-bold text-slate-700 text-sm mt-6 px-2 border-b border-slate-100 pb-2">Mi Libro Mayor</h3>
+                <div className="space-y-3 px-1">
+                    {mesesOrdenadosSec.length === 0 ? (
+                        <div className="text-center p-6 bg-slate-50 rounded-2xl mt-2 border border-slate-100">
+                            <p className="text-xs font-bold text-slate-400">Aún no has registrado movimientos.</p>
+                        </div>
+                    ) : (
+                        mesesOrdenadosSec.map(mesKey => {
+                            const data = historialPorMesSec[mesKey];
+                            const isExpanded = mesExpandidoSec === mesKey;
+
+                            return (
+                                <div key={mesKey} className="bg-white rounded-[24px] border border-slate-100 shadow-sm overflow-hidden transition-all duration-300">
+                                    <button onClick={() => setMesExpandidoSec(isExpanded ? null : mesKey)} className="w-full p-4 flex justify-between items-center bg-white hover:bg-slate-50 transition-colors">
+                                        <div className="text-left">
+                                            <span className="font-bold text-slate-700 text-sm uppercase">{nombreMes(mesKey)}</span>
+                                            <p className="text-[9px] text-slate-400 mt-1 font-bold">{data.movimientos.length} movimientos</p>
+                                        </div>
+                                        <div className="flex items-center space-x-3">
+                                            <div className="text-right hidden sm:block">
+                                                <p className="text-[10px] font-bold text-emerald-500">+${data.ingresos.toFixed(2)}</p>
+                                                <p className="text-[10px] font-bold text-rose-500">-${data.egresos.toFixed(2)}</p>
+                                            </div>
+                                            <div className={`w-8 h-8 flex items-center justify-center rounded-xl transition-colors shadow-sm ${isExpanded ? 'bg-pink-500 text-white' : 'bg-slate-50 text-slate-400'}`}>
+                                                <i className={`fas fa-chevron-down transition-transform duration-300 ${isExpanded ? 'rotate-180' : ''}`}></i>
+                                            </div>
+                                        </div>
+                                    </button>
+
+                                    {isExpanded && (
+                                        <div className="p-4 pt-0 border-t border-slate-100 bg-slate-50 animate-in slide-in-from-top-2 duration-200">
+                                            <div className="space-y-2 max-h-[300px] overflow-y-auto pr-1 mt-4">
+                                                {data.movimientos.map(mov => {
+                                                    const esIngreso = mov.tipo !== 'egreso';
+                                                    const fechaObj = new Date(mov.timestamp);
+                                                    const hora = fechaObj.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+                                                    return (
+                                                        <div key={mov.id} className="bg-white p-3 rounded-xl border border-slate-100 flex justify-between items-center shadow-sm relative overflow-hidden">
+                                                            <div className={`absolute left-0 top-0 bottom-0 w-1 ${esIngreso ? 'bg-emerald-400' : 'bg-rose-400'}`}></div>
+                                                            <div className="pl-2 w-2/3 pr-2">
+                                                                <p className="font-bold text-slate-700 text-xs truncate">{mov.descripcion}</p>
+                                                                <p className="text-[9px] text-slate-400 font-bold uppercase mt-0.5">{formatoFecha(mov.fecha)} a las {hora}</p>
+                                                            </div>
+                                                            <div className="text-right w-1/3">
+                                                                <span className={`text-xs font-black px-2 py-1 rounded-lg ${esIngreso ? 'bg-emerald-50 text-emerald-600' : 'bg-rose-50 text-rose-600'}`}>
+                                                                    {esIngreso ? '+' : '-'}${Number(mov.monto).toFixed(2)}
+                                                                </span>
+                                                            </div>
+                                                        </div>
+                                                    )
+                                                })}
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+                            );
+                        })
                     )}
                 </div>
             </div>
@@ -257,7 +306,6 @@ function SecretariaDashboard({
                                                             <div className="flex space-x-1">
                                                                 <span className="bg-emerald-100 text-emerald-700 px-1.5 py-1 rounded-md">P: {h.totales?.presentes || 0}</span>
                                                                 <span className="bg-rose-100 text-rose-700 px-1.5 py-1 rounded-md">A: {h.totales?.ausentes || 0}</span>
-                                                                {/* Y AQUÍ TAMBIÉN SE VEN LOS PERMISOS EN EL MONITOREO */}
                                                                 <span className="bg-amber-100 text-amber-700 px-1.5 py-1 rounded-md">Pe: {h.totales?.permisos || 0}</span>
                                                             </div>
                                                         </div>
@@ -281,7 +329,7 @@ function SecretariaDashboard({
             <div className="fixed bottom-0 left-0 right-0 max-w-md mx-auto bg-white/90 backdrop-blur-md border-t border-slate-100 flex justify-around items-center p-2 z-50 pb-safe shadow-[0_-10px_40px_rgba(0,0,0,0.05)]">
                 <NavButton id="inicio" icon="fa-chart-pie" label="Resumen" />
                 <NavButton id="campos" icon="fa-map-marked-alt" label="Monitoreo" />
-                <NavButton id="reportes" icon="fa-file-invoice-dollar" label="Reportes" />
+                <NavButton id="auditoria" icon="fa-balance-scale" label="Auditoría" />
             </div>
         </>
     );
