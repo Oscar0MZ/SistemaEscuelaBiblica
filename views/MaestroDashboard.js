@@ -89,8 +89,6 @@ function MaestroDashboard({
     const asistenciaTomada = asistenciaHoy !== null;
     const soyElAutor = asistenciaHoy && asistenciaHoy.registradoPorId === datosUsuarioActual.id;
     const estaBloqueada = asistenciaTomada && !soyElAutor;
-    const nombreDisplay = datosUsuarioActual ? datosUsuarioActual.nombre.split(' ')[0] : '';
-    const rolDisplay = usuario.charAt(0) + usuario.slice(1).toLowerCase();
     
     const progInicio = calcProgreso(leccionProgreso);
 
@@ -122,8 +120,7 @@ function MaestroDashboard({
 
     if (vistaActual === 'inicio') {
         contenidoMaestro = (
-            <div className="flex flex-col h-full space-y-6 pt-4 animate-in fade-in duration-300">
-                <div className="px-2"><h2 className="text-3xl font-black text-slate-800">Hola, {rolDisplay} {nombreDisplay}</h2><p className="text-slate-400 text-sm mt-1">Resumen de tu campo: <b className="text-indigo-500">{datosUsuarioActual.campo}</b></p></div>
+            <div className="flex flex-col h-full space-y-6 pt-2 animate-in fade-in duration-300">
                 <div className={`w-full p-6 rounded-[32px] text-left relative overflow-hidden group shadow-lg ${estaBloqueada ? 'bg-slate-50 border border-slate-200' : asistenciaTomada ? 'bg-white border border-slate-100' : 'bg-rose-500 text-white shadow-rose-200'}`}>
                     {asistenciaTomada ? (
                         <>
@@ -169,7 +166,6 @@ function MaestroDashboard({
                     
                     <div className="flex-1 bg-white rounded-t-[40px] shadow-lg border-t border-slate-100 p-6 overflow-hidden flex flex-col relative">
                         
-                        {/* --- OFRENDA MOVIDA A LA PARTE SUPERIOR --- */}
                         <div className="bg-emerald-50 p-4 rounded-2xl border border-emerald-100 mb-4 flex-shrink-0 flex items-center justify-between shadow-sm">
                             <div>
                                 <h3 className="text-xs font-bold text-emerald-800 uppercase tracking-widest"><i className="fas fa-hand-holding-usd mr-2"></i>Ofrenda</h3>
@@ -181,7 +177,6 @@ function MaestroDashboard({
                             </div>
                         </div>
 
-                        {/* --- MATERIAL DE CLASE --- */}
                         <div className="bg-indigo-50 p-4 rounded-2xl border border-indigo-100 mb-4 flex-shrink-0">
                             <h3 className="text-xs font-bold text-indigo-800 uppercase tracking-widest mb-3 flex items-center"><i className="fas fa-book mr-2"></i> Material de Clase</h3>
                             <div className="flex space-x-4 items-center">
@@ -217,7 +212,6 @@ function MaestroDashboard({
                             ))}
                         </div>
 
-                        {/* BOTÓN INFERIOR FIJO */}
                         <div className="absolute bottom-6 left-6 right-6">
                             <button onClick={guardarLista} className="w-full bg-indigo-600 p-4 rounded-2xl text-white font-black shadow-xl active:scale-95 transition-all text-lg">Guardar Asistencia</button>
                         </div>
@@ -298,7 +292,10 @@ function MaestroDashboard({
                                         <div><p className="font-bold text-slate-700 text-sm">{formatoFecha(h.fecha)}</p><p className="text-[9px] text-slate-400 uppercase mt-1">Por: {h.maestro}</p>{h.leccion && (<p className={`text-[9px] font-bold mt-1 ${h.leccionImpartida ? 'text-indigo-500' : 'text-rose-500'}`}><i className="fas fa-book-open mr-1"></i>Lección {h.leccion} {h.leccionImpartida ? '✅' : '❌'}</p>)}</div>
                                         <div className="flex flex-col space-y-1 items-end">
                                             <span className="text-[10px] font-black text-emerald-600 mb-1">${Number(h.ofrenda||0).toFixed(2)}</span>
-                                            <div className="flex space-x-1 text-[10px] font-bold"><span className="bg-emerald-100 text-emerald-700 px-2 py-1 rounded">P: {h.totales?.presentes||0}</span><span className="bg-rose-100 text-rose-700 px-2 py-1 rounded">A: {h.totales?.ausentes||0}</span></div>
+                                            <div className="flex space-x-1 text-[10px] font-bold">
+                                                <span className="bg-emerald-100 text-emerald-700 px-1.5 py-1 rounded">P: {h.totales?.presentes||0}</span>
+                                                <span className="bg-rose-100 text-rose-700 px-1.5 py-1 rounded">A: {h.totales?.ausentes||0}</span>
+                                            </div>
                                         </div>
                                     </div>
                                 ))}
