@@ -10,7 +10,7 @@ function MaestroDashboard({
     const [fechaInicioRanking, setFechaInicioRanking] = useState('');
     const [fechaFinRanking, setFechaFinRanking] = useState('');
     const [leccionImpartida, setLeccionImpartida] = useState(true);
-    const [ofrenda, setOfrenda] = useState(''); // NUEVO ESTADO PARA LA OFRENDA
+    const [ofrenda, setOfrenda] = useState(''); 
     const [edadMin, setEdadMin] = useState('');
     const [edadMax, setEdadMax] = useState('');
 
@@ -62,7 +62,7 @@ function MaestroDashboard({
             if (asistenciaHoy && asistenciaHoy.registros && asistenciaHoy.timestamp >= (ultimoReg ? ultimoReg.timestamp : 0)) {
                 asistenciaHoy.registros.forEach(r => inicial[r.idAlumno] = r.estado);
                 setLeccionImpartida(asistenciaHoy.leccionImpartida !== false);
-                setOfrenda(asistenciaHoy.ofrenda || ''); // Lee ofrenda si ya se guardó
+                setOfrenda(asistenciaHoy.ofrenda || ''); 
             } else {
                 alumnos.forEach(a => inicial[a.id] = 'Presente');
                 setLeccionImpartida(true);
@@ -76,7 +76,6 @@ function MaestroDashboard({
         if (alumnos.length === 0) { alert("Debes registrar alumnos primero."); return; }
         if (!ultimoReg) { alert("Por favor, espera a que el Director asigne la lección inicial."); return; }
         const registros = alumnos.map(a => ({ idAlumno: a.id, nombre: a.nombre, estado: listaAsistencia[a.id] || 'Ausente' }));
-        // SE ENVIA LA OFRENDA AL GUARDAR
         const exito = await onSaveAsistencia(registros, leccionAsignada, leccionImpartida, ofrenda);
         if (exito) setVistaActual('inicio');
     };
@@ -167,7 +166,22 @@ function MaestroDashboard({
             contenidoMaestro = (
                 <div className="flex flex-col h-full pt-4 animate-in slide-in-from-right duration-300">
                     <div className="flex items-center space-x-4 mb-4 px-2"><div><h2 className="text-2xl font-black text-slate-800">Pasar Lista</h2><p className="text-slate-400 text-xs">{new Date().toLocaleDateString()}</p></div></div>
+                    
                     <div className="flex-1 bg-white rounded-t-[40px] shadow-lg border-t border-slate-100 p-6 overflow-hidden flex flex-col relative">
+                        
+                        {/* --- OFRENDA MOVIDA A LA PARTE SUPERIOR --- */}
+                        <div className="bg-emerald-50 p-4 rounded-2xl border border-emerald-100 mb-4 flex-shrink-0 flex items-center justify-between shadow-sm">
+                            <div>
+                                <h3 className="text-xs font-bold text-emerald-800 uppercase tracking-widest"><i className="fas fa-hand-holding-usd mr-2"></i>Ofrenda</h3>
+                                <p className="text-[9px] text-emerald-600 mt-1 font-bold">Total recolectado ($)</p>
+                            </div>
+                            <div className="relative w-1/3">
+                                <span className="absolute left-3 top-3 text-emerald-600 font-black">$</span>
+                                <input type="number" step="0.01" min="0" value={ofrenda} onChange={(e)=>setOfrenda(e.target.value)} placeholder="0.00" className="w-full py-3 pl-7 pr-3 bg-white rounded-xl text-emerald-700 font-black outline-none border border-emerald-200 focus:ring-2 focus:ring-emerald-300 text-right shadow-sm" />
+                            </div>
+                        </div>
+
+                        {/* --- MATERIAL DE CLASE --- */}
                         <div className="bg-indigo-50 p-4 rounded-2xl border border-indigo-100 mb-4 flex-shrink-0">
                             <h3 className="text-xs font-bold text-indigo-800 uppercase tracking-widest mb-3 flex items-center"><i className="fas fa-book mr-2"></i> Material de Clase</h3>
                             <div className="flex space-x-4 items-center">
@@ -187,7 +201,7 @@ function MaestroDashboard({
                             </div>
                         </div>
 
-                        <div className="overflow-y-auto space-y-4 pb-48 pr-2">
+                        <div className="overflow-y-auto space-y-4 pb-28 pr-2">
                             {alumnos.map(a => (
                                 <div key={a.id} className="flex flex-col p-4 bg-slate-50 rounded-2xl border border-slate-100 shadow-sm">
                                     <div className="flex items-center space-x-3 mb-3">
@@ -203,18 +217,8 @@ function MaestroDashboard({
                             ))}
                         </div>
 
-                        {/* CAJA FIJA DE GUARDADO CON OFRENDA */}
-                        <div className="absolute bottom-6 left-6 right-6 bg-white pt-2">
-                            <div className="bg-emerald-50 p-4 rounded-2xl border border-emerald-100 mb-4 flex items-center justify-between">
-                                <div>
-                                    <h3 className="text-xs font-bold text-emerald-800 uppercase tracking-widest"><i className="fas fa-hand-holding-usd mr-2"></i>Ofrenda de hoy</h3>
-                                    <p className="text-[9px] text-emerald-600 mt-1">Total recolectado ($)</p>
-                                </div>
-                                <div className="relative w-1/3">
-                                    <span className="absolute left-3 top-3 text-emerald-600 font-black">$</span>
-                                    <input type="number" step="0.01" min="0" value={ofrenda} onChange={(e)=>setOfrenda(e.target.value)} placeholder="0.00" className="w-full py-3 pl-7 pr-3 bg-white rounded-xl text-emerald-700 font-black outline-none border border-emerald-200 focus:ring-2 focus:ring-emerald-300 text-right shadow-sm" />
-                                </div>
-                            </div>
+                        {/* BOTÓN INFERIOR FIJO */}
+                        <div className="absolute bottom-6 left-6 right-6">
                             <button onClick={guardarLista} className="w-full bg-indigo-600 p-4 rounded-2xl text-white font-black shadow-xl active:scale-95 transition-all text-lg">Guardar Asistencia</button>
                         </div>
                     </div>
