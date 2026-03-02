@@ -68,13 +68,11 @@ function App() {
         if (!usuario) return;
         const unsubs = [];
 
-        // --- SOLUCIÓN: LA SECRETARIA TAMBIÉN DESCARGA TODO EN TIEMPO REAL ---
         if (usuario === 'ADMIN' || usuario === 'SECRETARIA') {
             unsubs.push(AlumnosService.suscribirTodos(setTodosLosAlumnos));
             unsubs.push(AlumnosService.suscribirAsistenciaSemanal(setDatosGlobalesAsistencia));
             unsubs.push(AlumnosService.suscribirHistorialGlobal(setHistorialAsistencias));
             
-            // Solo el Admin necesita logística e inventario
             if (usuario === 'ADMIN') {
                 if(LogisticaService) unsubs.push(LogisticaService.suscribirTodas(setEntregasLogistica)); 
                 const unsubInv = window.db.collection('sistema').doc('inventario').onSnapshot(doc => {
@@ -124,7 +122,30 @@ function App() {
     const handleBorrarMaestro = async () => { if (!maestroABorrar) return; try { const nombreUser = maestroABorrar.nombre; await MaestrosService.eliminarConAlumnos(maestroABorrar.id, null); setMaestroABorrar(null); alert(`El usuario ${nombreUser} ha sido eliminado del sistema.`); } catch (e) { alert("Error al eliminar usuario."); } };
     const handleBorrarCampo = async () => { if (!campoABorrar) return; try { await AlumnosService.eliminarCampoCompleto(campoABorrar); setCampoABorrar(null); alert("🧹 Limpieza completada."); } catch (e) { alert("Error."); } };
     const handleResetLecciones = async (campo, proximaLeccion) => { try { await AlumnosService.reiniciarLecciones(campo, proximaLeccion); alert(`✅ Material de ${campo} ajustado. La próxima clase será la lección ${proximaLeccion}.`); } catch (e) { alert("Error al reiniciar material."); } };
-    const handleGuardarAsistencia = async (registros, leccion, leccionImpartida) => { const p = registros.filter(r=>r.estado==='Presente').length; const a = registros.filter(r=>r.estado==='Ausente').length; const per = registros.filter(r=>r.estado==='Permiso').length; try { await AlumnosService.guardarAsistencia({ fecha: new Date().toLocaleDateString('en-CA'), campo: datosUsuarioActual.campo, clase: 'General', maestro: datosUsuarioActual.nombre, registradoPorId: datosUsuarioActual.id, registros: registros, totales: { presentes: p, ausentes: a, permisos: per }, leccion: leccion, leccionImpartida: leccionImpartida, timestamp: Date.now() }); alert("Asistencia guardada con éxito"); return true; } catch (e) { return false; } };
+    
+    // --- MAGIA: AHORA RECIBE LA OFRENDA Y LA GUARDA ---
+    const handleGuardarAsistencia = async (registros, leccion, leccionImpartida, ofrenda) => { 
+        const p = registros.filter(r=>r.estado==='Presente').length; 
+        const a = registros.filter(r=>r.estado==='Ausente').length; 
+        const per = registros.filter(r=>r.estado==='Permiso').length; 
+        try { 
+            await AlumnosService.guardarAsistencia({ 
+                fecha: new Date().toLocaleDateString('en-CA'), 
+                campo: datosUsuarioActual.campo, 
+                clase: 'General', 
+                maestro: datosUsuarioActual.nombre, 
+                registradoPorId: datosUsuarioActual.id, 
+                registros: registros, 
+                totales: { presentes: p, ausentes: a, permisos: per }, 
+                leccion: leccion, 
+                leccionImpartida: leccionImpartida, 
+                ofrenda: Number(ofrenda) || 0, // Se guarda el reporte de dinero
+                timestamp: Date.now() 
+            }); 
+            alert("Asistencia y Reporte guardados con éxito"); 
+            return true; 
+        } catch (e) { return false; } 
+    };
 
     const handleCrearEntrega = async (datos) => { try { await LogisticaService.crear({ ...datos, asignadoPor: 'Director' }); alert("Ruta y víveres asignados correctamente al grupo."); } catch (error) { alert("Error al asignar la ruta."); } };
     const handleActualizarEntrega = async (id, estado, detalles = null, bloqueos = null) => { try { const payload = { estado: estado }; if (estado === 'Entregado') payload.fechaEntrega = Date.now(); if (detalles) payload.detalles = detalles; if (bloqueos) payload.bloqueos = bloqueos; await window.db.collection('entregas').doc(id).update(payload); } catch (error) { alert("Error actualizando estado."); } };
