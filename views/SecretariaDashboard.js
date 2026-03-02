@@ -6,7 +6,6 @@ function SecretariaDashboard({
     const [vistaActual, setVistaActual] = useState('inicio'); 
     const [campoExpandido, setCampoExpandido] = useState(null); 
     
-    // ESTADOS PARA LOS FILTROS DEL REPORTE
     const [fechaDesde, setFechaDesde] = useState('');
     const [fechaHasta, setFechaHasta] = useState('');
     const [filtroCampo, setFiltroCampo] = useState('TODOS');
@@ -21,17 +20,14 @@ function SecretariaDashboard({
     };
 
     const textoFechas = datosGlobalesAsistencia?.rango ? `${formatoFecha(datosGlobalesAsistencia.rango.inicio).substring(0,5)} - ${formatoFecha(datosGlobalesAsistencia.rango.fin).substring(0,5)}` : 'Calculando...';
-    const nombreDisplay = datosUsuarioActual ? datosUsuarioActual.nombre.split(' ')[0] : '';
     const camposActivos = [...new Set([...maestros.filter(m => m.clase !== 'LOGISTICA' && m.campo).map(m => m.campo), ...todosLosAlumnos.map(a => a.campo), ...historialVisible.map(h => h.campo)].filter(Boolean))].sort();
 
-    // Cálculos globales de la semana actual (Pantalla Inicio)
     let tp = 0, ta = 0, tperm = 0, totalOfrendaSemana = 0; 
     todasAsistencias.forEach(r => { 
         if(r.totales){ tp+=r.totales.presentes; ta+=r.totales.ausentes; tperm+=r.totales.permisos; } 
         if(r.ofrenda) totalOfrendaSemana += Number(r.ofrenda);
     });
 
-    // --- LÓGICA DE FILTRADO PARA REPORTES FINANCIEROS ---
     const registrosFiltrados = historialVisible.filter(h => {
         if (fechaDesde && h.fecha < fechaDesde) return false;
         if (fechaHasta && h.fecha > fechaHasta) return false;
@@ -42,27 +38,30 @@ function SecretariaDashboard({
     let ofrendaPeriodo = 0;
     let presentesPeriodo = 0;
     let ausentesPeriodo = 0;
+    let permisosPeriodo = 0; // NUEVO: CONTADOR DE PERMISOS
     const resumenPorCampo = {};
 
     registrosFiltrados.forEach(h => {
         const ofr = Number(h.ofrenda || 0);
         const p = h.totales?.presentes || 0;
         const a = h.totales?.ausentes || 0;
+        const per = h.totales?.permisos || 0;
 
         ofrendaPeriodo += ofr;
         presentesPeriodo += p;
         ausentesPeriodo += a;
+        permisosPeriodo += per;
 
         if (!resumenPorCampo[h.campo]) {
-            resumenPorCampo[h.campo] = { ofrenda: 0, presentes: 0, ausentes: 0, clases: 0 };
+            resumenPorCampo[h.campo] = { ofrenda: 0, presentes: 0, ausentes: 0, permisos: 0, clases: 0 };
         }
         resumenPorCampo[h.campo].ofrenda += ofr;
         resumenPorCampo[h.campo].presentes += p;
         resumenPorCampo[h.campo].ausentes += a;
+        resumenPorCampo[h.campo].permisos += per;
         resumenPorCampo[h.campo].clases += 1;
     });
 
-    // Ordenar los campos del que dio más ofrenda al que dio menos
     const camposOrdenadosReporte = Object.keys(resumenPorCampo).sort((a,b) => resumenPorCampo[b].ofrenda - resumenPorCampo[a].ofrenda);
 
     const NavButton = ({ id, icon, label }) => (
@@ -76,12 +75,7 @@ function SecretariaDashboard({
     if (vistaActual === 'inicio') {
         contenido = (
             <div className="space-y-4 animate-in fade-in duration-300 pt-2 pb-24">
-                <div className="px-2 mb-2">
-                    <h2 className="text-3xl font-black text-slate-800">Hola, {nombreDisplay}</h2>
-                    <p className="text-slate-400 text-sm mt-1">Resumen Global Semanal</p>
-                </div>
-
-                <div className="bg-emerald-500 p-6 rounded-[32px] text-white shadow-xl shadow-emerald-200 flex justify-between items-center relative overflow-hidden mx-1">
+                <div className="bg-emerald-500 p-6 rounded-[32px] text-white shadow-xl shadow-emerald-200 flex justify-between items-center relative overflow-hidden mx-1 mt-2">
                     <div className="absolute top-0 right-0 w-32 h-32 bg-white opacity-10 rounded-bl-[100px] pointer-events-none"></div>
                     <div className="relative z-10">
                         <p className="text-xs font-bold uppercase opacity-90 tracking-widest mb-1">Ofrenda Total (Semana)</p>
@@ -118,7 +112,6 @@ function SecretariaDashboard({
                     <p className="text-slate-400 text-xs mt-1">Filtra ofrendas y asistencia histórica</p>
                 </div>
                 
-                {/* CAJA DE FILTROS */}
                 <div className="bg-white p-4 rounded-[24px] mx-1 border border-slate-100 shadow-sm space-y-3">
                     <div className="flex space-x-3">
                         <div className="w-1/2">
@@ -139,7 +132,6 @@ function SecretariaDashboard({
                     </div>
                 </div>
 
-                {/* RESULTADO DEL FILTRO */}
                 <div className="bg-slate-800 p-5 rounded-[24px] text-white shadow-xl mx-1 flex justify-between items-center relative overflow-hidden">
                     <div className="absolute top-0 right-0 w-24 h-24 bg-white opacity-5 rounded-bl-[100px] pointer-events-none"></div>
                     <div className="relative z-10">
@@ -148,11 +140,10 @@ function SecretariaDashboard({
                     </div>
                     <div className="text-right relative z-10">
                         <p className="text-[10px] font-bold uppercase opacity-70 tracking-widest mb-1">Asistencia</p>
-                        <p className="text-sm font-black"><span className="text-emerald-400">P: {presentesPeriodo}</span> | <span className="text-rose-400">A: {ausentesPeriodo}</span></p>
+                        <p className="text-sm font-black"><span className="text-emerald-400">P: {presentesPeriodo}</span> | <span className="text-rose-400">A: {ausentesPeriodo}</span> | <span className="text-amber-400">Pe: {permisosPeriodo}</span></p>
                     </div>
                 </div>
 
-                {/* DESGLOSE */}
                 <h3 className="font-bold text-slate-700 text-sm mt-6 px-2 border-b border-slate-100 pb-2">
                     {filtroCampo === 'TODOS' ? 'Ranking de Aportes por Campo' : `Historial de Clases: ${filtroCampo}`}
                 </h3>
@@ -163,7 +154,6 @@ function SecretariaDashboard({
                             <p className="text-sm font-bold text-slate-500">No hay registros en estas fechas</p>
                         </div>
                     ) : filtroCampo === 'TODOS' ? (
-                        // VISTA GLOBAL: Muestra cuánto dio cada campo en ese periodo
                         camposOrdenadosReporte.map((campo, index) => {
                             const data = resumenPorCampo[campo];
                             return (
@@ -182,7 +172,6 @@ function SecretariaDashboard({
                             )
                         })
                     ) : (
-                        // VISTA ESPECÍFICA: Muestra domingo a domingo para un solo campo
                         registrosFiltrados.sort((a,b) => new Date(b.fecha) - new Date(a.fecha)).map((h, i) => (
                             <div key={i} className="bg-white p-4 rounded-2xl border border-slate-100 shadow-sm flex justify-between items-center">
                                 <div>
@@ -194,6 +183,8 @@ function SecretariaDashboard({
                                     <div className="flex space-x-1.5 mt-1 text-[9px] font-bold justify-end">
                                         <span className="bg-emerald-50 text-emerald-600 px-1.5 py-0.5 rounded">P: {h.totales?.presentes||0}</span>
                                         <span className="bg-rose-50 text-rose-600 px-1.5 py-0.5 rounded">A: {h.totales?.ausentes||0}</span>
+                                        {/* AHORA SÍ APARECEN LOS PERMISOS EN EL HISTORIAL */}
+                                        <span className="bg-amber-50 text-amber-600 px-1.5 py-0.5 rounded">Pe: {h.totales?.permisos||0}</span>
                                     </div>
                                 </div>
                             </div>
@@ -266,6 +257,8 @@ function SecretariaDashboard({
                                                             <div className="flex space-x-1">
                                                                 <span className="bg-emerald-100 text-emerald-700 px-1.5 py-1 rounded-md">P: {h.totales?.presentes || 0}</span>
                                                                 <span className="bg-rose-100 text-rose-700 px-1.5 py-1 rounded-md">A: {h.totales?.ausentes || 0}</span>
+                                                                {/* Y AQUÍ TAMBIÉN SE VEN LOS PERMISOS EN EL MONITOREO */}
+                                                                <span className="bg-amber-100 text-amber-700 px-1.5 py-1 rounded-md">Pe: {h.totales?.permisos || 0}</span>
                                                             </div>
                                                         </div>
                                                     </div>
