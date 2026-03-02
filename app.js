@@ -25,7 +25,14 @@ function App() {
     const [campoABorrar, setCampoABorrar] = useState(null);
     const [edadCalculada, setEdadCalculada] = useState(null);
 
+    // NUEVOS ESTADOS PARA LA FECHA SEPARADA
+    const [diaNac, setDiaNac] = useState('');
+    const [mesNac, setMesNac] = useState('');
+    const [anioNac, setAnioNac] = useState('');
+
     const camposDisponibles = ["La Isla", "Las Delicias", "El Amatal", "El Manguito", "Buenos Aires", "Corozal #1", "El Porvenir", "El Caulote", "Corozal #2", "Valle Encantado", "La Playa"];
+
+    const calcularEdad = (f) => { if (!f) return null; const h = new Date(); const c = new Date(f); let e = h.getFullYear() - c.getFullYear(); if (h.getMonth() < c.getMonth() || (h.getMonth()===c.getMonth() && h.getDate()<c.getDate())) e--; return e; };
 
     useEffect(() => {
         const sesion = AuthService.obtenerSesion();
@@ -92,6 +99,15 @@ function App() {
         return () => { unsubs.forEach(unsub => unsub && unsub()); };
     }, [usuario, datosUsuarioActual?.campo]); 
 
+    // Calcula la edad en tiempo real al seleccionar Día, Mes y Año
+    useEffect(() => {
+        if (diaNac && mesNac && anioNac) {
+            setEdadCalculada(calcularEdad(`${anioNac}-${mesNac}-${diaNac}`));
+        } else {
+            setEdadCalculada(null);
+        }
+    }, [diaNac, mesNac, anioNac]);
+
     const handleLogin = async (rol, clave, nombre, campo) => {
         if (mantenimiento && rol !== 'ADMIN') return { exito: false, mensaje: "El sistema está en Mantenimiento." };
         if (!AuthService.verificar(rol, clave)) return { exito: false, mensaje: "Clave incorrecta." };
@@ -105,17 +121,43 @@ function App() {
 
     const handleLogout = () => { setUsuario(null); setDatosUsuarioActual(null); setAlumnos([]); setTodosLosAlumnos([]); setHistorialAsistencias([]); setEntregasLogistica([]); AuthService.cerrarSesion(); };
     const handleGuardar = async (e) => { e.preventDefault(); const d = Object.fromEntries(new FormData(e.target)); try { const n = await MaestrosService.guardar(d, maestroEdicion?.id, usuario); if (n && usuario !== 'ADMIN') MaestrosService.notificar(n); setModalAbierto(false); setMaestroEdicion(null); } catch (err) { alert("Error"); } };
-    const calcularEdad = (f) => { if (!f) return null; const h = new Date(); const c = new Date(f); let e = h.getFullYear() - c.getFullYear(); if (h.getMonth() < c.getMonth() || (h.getMonth()===c.getMonth() && h.getDate()<c.getDate())) e--; return e; };
 
     const handleGuardarAlumno = async (e) => {
-        e.preventDefault(); const fd = new FormData(e.target); const nombre = fd.get('nombre').trim(); const fecha = fd.get('fechaNacimiento'); const genero = fd.get('genero'); const edad = calcularEdad(fecha);
-        if (!nombre || !fecha || !genero) { alert("Por favor completa todos los campos."); return; }
-        const datos = { nombre: nombre, fechaNacimiento: fecha, edad: edad, genero: genero, maestroResponsable: datosUsuarioActual?.nombre, registradoPorId: datosUsuarioActual?.id, campo: datosUsuarioActual?.campo || 'Sin Campo', clase: 'General' };
+        e.preventDefault(); 
+        const fd = new FormData(e.target); 
+        const nombre = fd.get('nombre').trim(); 
+        const genero = fd.get('genero'); 
+        
+        if (!nombre || !diaNac || !mesNac || !anioNac || !genero) { 
+            alert("Por favor completa todos los campos (incluyendo Día, Mes y Año)."); 
+            return; 
+        }
+
+        const fechaFinal = `${anioNac}-${mesNac}-${diaNac}`;
+        const edad = calcularEdad(fechaFinal);
+
+        const datos = { nombre: nombre, fechaNacimiento: fechaFinal, edad: edad, genero: genero, maestroResponsable: datosUsuarioActual?.nombre, registradoPorId: datosUsuarioActual?.id, campo: datosUsuarioActual?.campo || 'Sin Campo', clase: 'General' };
         try {
             if (alumnoEdicion) { await AlumnosService.actualizar(alumnoEdicion.id, datos); alert("Alumno actualizado"); } 
             else { await AlumnosService.registrar(datos); alert("Registrado exitosamente"); }
-            setModalAlumno(false); setAlumnoEdicion(null); setEdadCalculada(null);
+            setModalAlumno(false); setAlumnoEdicion(null); setEdadCalculada(null); setDiaNac(''); setMesNac(''); setAnioNac('');
         } catch (error) { if (error.message === "DUPLICADO") { alert("⛔ ¡Error! Este alumno ya existe."); } else { alert("Error al guardar alumno"); } }
+    };
+
+    const handleAbrirModalAlumno = () => {
+        setAlumnoEdicion(null); setEdadCalculada(null); setDiaNac(''); setMesNac(''); setAnioNac(''); setModalAlumno(true);
+    };
+
+    const handleEditarAlumno = (a) => {
+        setAlumnoEdicion(a); 
+        setEdadCalculada(a.edad); 
+        if (a.fechaNacimiento) {
+            const partes = a.fechaNacimiento.split('-');
+            if (partes.length === 3) {
+                setAnioNac(partes[0]); setMesNac(partes[1]); setDiaNac(partes[2]);
+            }
+        }
+        setModalAlumno(true);
     };
 
     const handleBorrarAlumno = async () => { if (!alumnoBorrar) return; try { await AlumnosService.eliminar(alumnoBorrar.id, alumnoBorrar.campo); setAlumnoBorrar(null); alert("Alumno eliminado y asistencia actualizada correctamente."); } catch (e) { alert("Error al eliminar alumno"); } };
@@ -123,7 +165,6 @@ function App() {
     const handleBorrarCampo = async () => { if (!campoABorrar) return; try { await AlumnosService.eliminarCampoCompleto(campoABorrar); setCampoABorrar(null); alert("🧹 Limpieza completada."); } catch (e) { alert("Error."); } };
     const handleResetLecciones = async (campo, proximaLeccion) => { try { await AlumnosService.reiniciarLecciones(campo, proximaLeccion); alert(`✅ Material de ${campo} ajustado. La próxima clase será la lección ${proximaLeccion}.`); } catch (e) { alert("Error al reiniciar material."); } };
     
-    // --- MAGIA: AHORA RECIBE LA OFRENDA Y LA GUARDA ---
     const handleGuardarAsistencia = async (registros, leccion, leccionImpartida, ofrenda) => { 
         const p = registros.filter(r=>r.estado==='Presente').length; 
         const a = registros.filter(r=>r.estado==='Ausente').length; 
@@ -139,7 +180,7 @@ function App() {
                 totales: { presentes: p, ausentes: a, permisos: per }, 
                 leccion: leccion, 
                 leccionImpartida: leccionImpartida, 
-                ofrenda: Number(ofrenda) || 0, // Se guarda el reporte de dinero
+                ofrenda: Number(ofrenda) || 0,
                 timestamp: Date.now() 
             }); 
             alert("Asistencia y Reporte guardados con éxito"); 
@@ -221,8 +262,8 @@ function App() {
                     onCerrarJornada={handleCerrarJornada}
                     onApprove={MaestrosService.aprobar} onDelete={setMaestroABorrar} onEdit={(m) => { setMaestroEdicion(m); setModalAbierto(true); }} onToggleModal={() => { setMaestroEdicion(null); setModalAbierto(true); }}
                     onSaveAsistencia={handleGuardarAsistencia}
-                    onOpenAlumnoModal={() => { setAlumnoEdicion(null); setEdadCalculada(null); setModalAlumno(true); }}
-                    onEditAlumno={(a) => { setAlumnoEdicion(a); setEdadCalculada(a.edad); setModalAlumno(true); }}
+                    onOpenAlumnoModal={handleAbrirModalAlumno}
+                    onEditAlumno={handleEditarAlumno}
                     onDeleteAlumno={setAlumnoBorrar} 
                     onDeleteCampo={setCampoABorrar}
                     onResetLecciones={handleResetLecciones} 
@@ -234,10 +275,48 @@ function App() {
                 />
             </main>
 
+            {/* MODAL INSCRIBIR MAESTRO/PERSONAL */}
             {modalAbierto && (<div className="fixed inset-0 bg-slate-900/40 backdrop-blur-md flex items-center justify-center z-50 p-4 animate-in fade-in"><div className="bg-white w-full max-w-md rounded-[32px] p-8 shadow-2xl animate-in slide-in-from-bottom max-h-[90vh] overflow-y-auto"><h2 className="text-2xl font-black text-slate-800 mb-6">{maestroEdicion ? 'Editar' : 'Inscribir'}</h2><form onSubmit={handleGuardar} className="space-y-4"><input type="text" name="nombre" required defaultValue={maestroEdicion?.nombre || ''} className="w-full p-4 bg-slate-50 rounded-2xl outline-none" placeholder="Nombre" />
             <select name="clase" defaultValue={maestroEdicion?.clase || 'MAESTRO'} className="w-full p-4 bg-slate-50 rounded-2xl outline-none bg-white border border-slate-100">{['MAESTRO', 'AUXILIAR', 'LOGISTICA', 'SECRETARIA', 'Dirección'].map(c => <option key={c} value={c}>{c}</option>)}</select>
             <select name="campo" defaultValue={maestroEdicion?.campo || ''} className="w-full p-4 bg-slate-50 rounded-2xl outline-none bg-white border border-slate-100"><option value="">-- Ninguno --</option>{camposDisponibles.map(c => <option key={c} value={c}>{c}</option>)}</select><input type="tel" name="telefono" defaultValue={maestroEdicion?.telefono || ''} className="w-full p-4 bg-slate-50 rounded-2xl outline-none" placeholder="WhatsApp" /><div className="pt-4 flex flex-col space-y-3"><button type="submit" className="w-full py-4 bg-indigo-600 text-white font-black rounded-2xl shadow-xl">Guardar</button><button type="button" onClick={() => setModalAbierto(false)} className="text-slate-400 font-bold text-xs uppercase">Cancelar</button></div></form></div></div>)}
-            {modalAlumno && (<div className="fixed inset-0 bg-slate-900/40 backdrop-blur-md flex items-center justify-center z-50 p-4 animate-in fade-in"><div className="bg-white w-full max-w-md rounded-[32px] p-8 shadow-2xl animate-in slide-in-from-bottom"><div className="w-16 h-16 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mx-auto mb-4 text-3xl"><i className="fas fa-child"></i></div><h2 className="text-2xl font-black text-slate-800 mb-2 text-center">{alumnoEdicion ? 'Editar' : 'Registrar'}</h2><form onSubmit={handleGuardarAlumno} className="space-y-4"><input type="text" name="nombre" required defaultValue={alumnoEdicion?.nombre || ''} placeholder="Nombre Completo" className="w-full p-4 bg-slate-50 rounded-2xl outline-none" /><input type="date" name="fechaNacimiento" required defaultValue={alumnoEdicion?.fechaNacimiento || ''} onChange={(e) => setEdadCalculada(calcularEdad(e.target.value))} className="w-full p-4 bg-slate-50 rounded-2xl outline-none" /><select name="genero" required defaultValue={alumnoEdicion?.genero || ''} className="w-full p-4 bg-slate-50 rounded-2xl outline-none bg-white border border-slate-100"><option value="">Seleccionar Género</option><option value="M">Masculino</option><option value="F">Femenino</option></select>{edadCalculada!==null && (<div className="bg-emerald-50 p-4 rounded-2xl border border-emerald-100 flex items-center justify-between"><span className="text-emerald-800 text-xs font-bold uppercase">Edad:</span><span className="text-2xl font-black text-emerald-600">{edadCalculada} Años</span></div>)}<div className="pt-2 flex flex-col space-y-3"><button type="submit" className="w-full py-4 bg-emerald-500 text-white font-black rounded-2xl shadow-xl">Guardar</button><button type="button" onClick={() => { setModalAlumno(false); setAlumnoEdicion(null); }} className="text-slate-400 font-bold text-xs uppercase">Cancelar</button></div></form></div></div>)}
+            
+            {/* MODAL REGISTRAR ALUMNO (CON SELECTORES DE DÍA, MES, AÑO) */}
+            {modalAlumno && (
+                <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-md flex items-center justify-center z-50 p-4 animate-in fade-in">
+                    <div className="bg-white w-full max-w-md rounded-[32px] p-8 shadow-2xl animate-in slide-in-from-bottom">
+                        <div className="w-16 h-16 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mx-auto mb-4 text-3xl"><i className="fas fa-child"></i></div>
+                        <h2 className="text-2xl font-black text-slate-800 mb-2 text-center">{alumnoEdicion ? 'Editar' : 'Registrar'}</h2>
+                        <form onSubmit={handleGuardarAlumno} className="space-y-4 mt-4">
+                            <input type="text" name="nombre" required defaultValue={alumnoEdicion?.nombre || ''} placeholder="Nombre Completo" className="w-full p-4 bg-slate-50 rounded-2xl outline-none" />
+                            
+                            {/* NUEVOS SELECTORES DE FECHA */}
+                            <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1 block mb-[-10px]">Fecha de Nacimiento</label>
+                            <div className="flex space-x-2">
+                                <select className="w-1/3 p-3 bg-slate-50 rounded-2xl outline-none font-bold text-slate-600" value={diaNac} onChange={e=>setDiaNac(e.target.value)} required>
+                                    <option value="" disabled>Día</option>
+                                    {Array.from({length: 31}, (_, i) => i + 1).map(d => <option key={d} value={d.toString().padStart(2, '0')}>{d}</option>)}
+                                </select>
+                                <select className="w-1/3 p-3 bg-slate-50 rounded-2xl outline-none font-bold text-slate-600" value={mesNac} onChange={e=>setMesNac(e.target.value)} required>
+                                    <option value="" disabled>Mes</option>
+                                    {['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'].map((m, i) => <option key={m} value={(i+1).toString().padStart(2, '0')}>{m}</option>)}
+                                </select>
+                                <select className="w-1/3 p-3 bg-slate-50 rounded-2xl outline-none font-bold text-slate-600" value={anioNac} onChange={e=>setAnioNac(e.target.value)} required>
+                                    <option value="" disabled>Año</option>
+                                    {Array.from({length: 25}, (_, i) => new Date().getFullYear() - i).map(a => <option key={a} value={a}>{a}</option>)}
+                                </select>
+                            </div>
+
+                            <select name="genero" required defaultValue={alumnoEdicion?.genero || ''} className="w-full p-4 bg-slate-50 rounded-2xl outline-none bg-white border border-slate-100 text-slate-600 font-bold"><option value="">Seleccionar Género</option><option value="M">Masculino</option><option value="F">Femenino</option></select>
+                            
+                            {edadCalculada !== null && (
+                                <div className="bg-emerald-50 p-4 rounded-2xl border border-emerald-100 flex items-center justify-between"><span className="text-emerald-800 text-xs font-bold uppercase tracking-widest">Edad detectada:</span><span className="text-2xl font-black text-emerald-600">{edadCalculada} Años</span></div>
+                            )}
+                            
+                            <div className="pt-2 flex flex-col space-y-3"><button type="submit" className="w-full py-4 bg-emerald-500 hover:bg-emerald-600 active:scale-95 transition-all text-white font-black rounded-2xl shadow-xl">Guardar</button><button type="button" onClick={() => { setModalAlumno(false); setAlumnoEdicion(null); setDiaNac(''); setMesNac(''); setAnioNac(''); }} className="text-slate-400 font-bold text-xs uppercase tracking-widest">Cancelar</button></div>
+                        </form>
+                    </div>
+                </div>
+            )}
             {maestroABorrar && (<div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-[60] p-6 animate-in fade-in"><div className="bg-white rounded-[32px] p-8 w-full max-w-xs text-center shadow-2xl animate-in zoom-in-95 border-2 border-indigo-100"><div className="w-16 h-16 bg-indigo-50 text-indigo-500 rounded-full flex items-center justify-center mx-auto mb-4 text-3xl"><i className="fas fa-user-minus"></i></div><h3 className="text-xl font-black text-slate-800 mb-2">Eliminar Usuario</h3><div className="text-slate-500 text-xs mb-4 leading-relaxed bg-slate-50 p-4 rounded-xl text-left border border-slate-100">Estás a punto de eliminar a: <br/> <b className="text-slate-700 text-sm">{maestroABorrar.nombre}</b> <span className="text-[10px] uppercase">({maestroABorrar.clase})</span>.<br/><br/>{maestroABorrar.clase === 'LOGISTICA' ? (<span className="text-rose-600 font-bold"><i className="fas fa-exclamation-circle mr-1"></i> Sus datos se borrarán y será expulsado del sistema inmediatamente.</span>) : (<span className="text-emerald-600 font-bold"><i className="fas fa-shield-alt mr-1"></i> SEGURO: Los alumnos y la asistencia de su campo se conservarán seguros.</span>)}</div><div className="space-y-3"><button onClick={handleBorrarMaestro} className="w-full py-3 bg-indigo-600 text-white font-bold rounded-2xl shadow-lg active:scale-95 transition-all">Sí, eliminar usuario</button><button onClick={() => setMaestroABorrar(null)} className="w-full py-2 text-slate-400 font-bold text-xs uppercase tracking-widest">Cancelar</button></div></div></div>)}
             {alumnoBorrar && (<div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-[60] p-6 animate-in fade-in"><div className="bg-white rounded-[32px] p-8 w-full max-w-xs text-center shadow-2xl animate-in zoom-in-95"><div className="w-16 h-16 bg-rose-50 text-rose-500 rounded-full flex items-center justify-center mx-auto mb-4 text-2xl"><i className="fas fa-trash-alt"></i></div><h3 className="text-xl font-black text-slate-800 mb-2">¿Eliminar Alumno?</h3><p className="text-xs text-slate-500 mb-4">Se borrará y se actualizarán las listas de asistencia recientes automáticamente.</p><div className="space-y-3"><button onClick={handleBorrarAlumno} className="w-full py-3 bg-rose-500 text-white font-bold rounded-2xl shadow-lg">Sí, borrar</button><button onClick={() => setAlumnoBorrar(null)} className="w-full py-2 text-slate-400 font-bold text-xs uppercase">Cancelar</button></div></div></div>)}
             {campoABorrar && (<div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-[60] p-6 animate-in fade-in"><div className="bg-white rounded-[32px] p-8 w-full max-w-xs text-center shadow-2xl animate-in zoom-in-95 border-2 border-rose-100"><div className="w-16 h-16 bg-rose-50 text-rose-600 rounded-full flex items-center justify-center mx-auto mb-4 text-3xl"><i className="fas fa-bomb"></i></div><h3 className="text-xl font-black text-slate-800 mb-2">¡Limpieza de Campo!</h3><div className="text-slate-600 text-xs mb-4 leading-relaxed bg-rose-50 p-3 rounded-xl border border-rose-100">Vas a limpiar la base de datos de:<br/> <b className="text-rose-600 text-sm">{campoABorrar}</b>.<br/><br/>Se borrarán <span className="font-bold">TODOS</span> sus alumnos y su asistencia de forma permanente.</div><div className="space-y-3"><button onClick={handleBorrarCampo} className="w-full py-3 bg-rose-600 text-white font-bold rounded-2xl shadow-lg shadow-rose-200 active:scale-95 transition-all">Destruir datos</button><button onClick={() => setCampoABorrar(null)} className="w-full py-2 text-slate-400 font-bold text-xs uppercase tracking-widest">Cancelar</button></div></div></div>)}
