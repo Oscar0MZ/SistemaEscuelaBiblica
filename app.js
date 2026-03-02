@@ -16,7 +16,6 @@ function App() {
     
     const [inventarioDatos, setInventarioDatos] = useState({ historicoRecibido: 0, actualRecibido: 0 });
 
-    // --- ESTADOS FINANCIEROS (TESORERÍA Y SECRETARÍA) ---
     const [fondoTotal, setFondoTotal] = useState(0);
     const [historialIngresos, setHistorialIngresos] = useState([]);
     const [fondoSecretariaTotal, setFondoSecretariaTotal] = useState(0);
@@ -85,7 +84,6 @@ function App() {
             unsubs.push(AlumnosService.suscribirAsistenciaSemanal(setDatosGlobalesAsistencia));
             unsubs.push(AlumnosService.suscribirHistorialGlobal(setHistorialAsistencias));
             
-            // Descarga de Finanzas Oficiales (Tesorero)
             const unsubFondo = window.db.collection('sistema').doc('tesoreria').onSnapshot(doc => {
                 if (doc.exists) setFondoTotal(doc.data().total || 0); else setFondoTotal(0);
             });
@@ -96,7 +94,6 @@ function App() {
             });
             unsubs.push(unsubIngresos);
 
-            // Descarga de Finanzas de Control Cruzado (Secretaría)
             const unsubFondoSec = window.db.collection('sistema').doc('finanzas_secretaria').onSnapshot(doc => {
                 if (doc.exists) setFondoSecretariaTotal(doc.data().total || 0); else setFondoSecretariaTotal(0);
             });
@@ -145,7 +142,7 @@ function App() {
 
     const handleGuardarAlumno = async (e) => {
         e.preventDefault(); const fd = new FormData(e.target); const nombre = fd.get('nombre').trim(); const genero = fd.get('genero'); 
-        if (!nombre || !diaNac || !mesNac || !anioNac || !genero) { alert("Por favor completa todos los campos (incluyendo Día, Mes y Año)."); return; }
+        if (!nombre || !diaNac || !mesNac || !anioNac || !genero) { alert("Por favor completa todos los campos."); return; }
         const fechaFinal = `${anioNac}-${mesNac}-${diaNac}`; const edad = calcularEdad(fechaFinal);
         const datos = { nombre: nombre, fechaNacimiento: fechaFinal, edad: edad, genero: genero, maestroResponsable: datosUsuarioActual?.nombre, registradoPorId: datosUsuarioActual?.id, campo: datosUsuarioActual?.campo || 'Sin Campo', clase: 'General' };
         try {
@@ -162,8 +159,29 @@ function App() {
         setModalAlumno(true);
     };
 
+    // --- PROTECCIÓN FINANCIERA: ELIMINACIÓN SEGURA DE USUARIOS ---
+    const handleBorrarMaestro = async () => { 
+        if (!maestroABorrar) return; 
+        try { 
+            const nombreUser = maestroABorrar.nombre; 
+            
+            // Si es Secretaria o Tesorero, SOLO borramos su acceso, sin tocar nada más.
+            if (maestroABorrar.clase === 'SECRETARIA' || maestroABorrar.clase === 'TESORERO') {
+                await window.db.collection('maestros').doc(maestroABorrar.id).delete();
+                alert(`El acceso de ${nombreUser} ha sido revocado. Todo el dinero y reportes siguen a salvo.`);
+            } else {
+                // Si es maestro, hace su borrado normal (conservando a los niños)
+                await MaestrosService.eliminarConAlumnos(maestroABorrar.id, null); 
+                alert(`El usuario ${nombreUser} ha sido eliminado del sistema.`);
+            }
+            
+            setMaestroABorrar(null); 
+        } catch (e) { 
+            alert("Error al eliminar usuario."); 
+        } 
+    };
+
     const handleBorrarAlumno = async () => { if (!alumnoBorrar) return; try { await AlumnosService.eliminar(alumnoBorrar.id, alumnoBorrar.campo); setAlumnoBorrar(null); alert("Alumno eliminado y asistencia actualizada correctamente."); } catch (e) { alert("Error al eliminar alumno"); } };
-    const handleBorrarMaestro = async () => { if (!maestroABorrar) return; try { const nombreUser = maestroABorrar.nombre; await MaestrosService.eliminarConAlumnos(maestroABorrar.id, null); setMaestroABorrar(null); alert(`El usuario ${nombreUser} ha sido eliminado del sistema.`); } catch (e) { alert("Error al eliminar usuario."); } };
     const handleBorrarCampo = async () => { if (!campoABorrar) return; try { await AlumnosService.eliminarCampoCompleto(campoABorrar); setCampoABorrar(null); alert("🧹 Limpieza completada."); } catch (e) { alert("Error."); } };
     const handleResetLecciones = async (campo, proximaLeccion) => { try { await AlumnosService.reiniciarLecciones(campo, proximaLeccion); alert(`✅ Material de ${campo} ajustado. La próxima clase será la lección ${proximaLeccion}.`); } catch (e) { alert("Error al reiniciar material."); } };
     
@@ -175,7 +193,6 @@ function App() {
         } catch (e) { return false; } 
     };
 
-    // --- FUNCIONES DEL TESORERO ---
     const handleGuardarIngreso = async (monto, descripcion) => {
         try {
             const montoNum = parseFloat(monto); if (isNaN(montoNum) || montoNum <= 0) return false;
@@ -194,7 +211,6 @@ function App() {
         } catch (error) { return false; }
     };
 
-    // --- FUNCIONES DE LA SECRETARÍA (CONTROL CRUZADO) ---
     const handleGuardarIngresoSecretaria = async (monto, descripcion) => {
         try {
             const montoNum = parseFloat(monto); if (isNaN(montoNum) || montoNum <= 0) return false;
@@ -212,7 +228,6 @@ function App() {
             await docRef.set({ total: actual - montoNum }, { merge: true }); alert(`🔻 Retiro registrado en tu Control Cruzado.`); return true;
         } catch (error) { return false; }
     };
-
 
     const handleCrearEntrega = async (datos) => { try { await LogisticaService.crear({ ...datos, asignadoPor: 'Director' }); alert("Ruta y víveres asignados correctamente al grupo."); } catch (error) { alert("Error al asignar la ruta."); } };
     const handleActualizarEntrega = async (id, estado, detalles = null, bloqueos = null) => { try { const payload = { estado: estado }; if (estado === 'Entregado') payload.fechaEntrega = Date.now(); if (detalles) payload.detalles = detalles; if (bloqueos) payload.bloqueos = bloqueos; await window.db.collection('entregas').doc(id).update(payload); } catch (error) { alert("Error actualizando estado."); } };
@@ -254,25 +269,41 @@ function App() {
                     onSaveAsistencia={handleGuardarAsistencia} onOpenAlumnoModal={handleAbrirModalAlumno} onEditAlumno={handleEditarAlumno} onDeleteAlumno={setAlumnoBorrar} onDeleteCampo={setCampoABorrar}
                     onResetLecciones={handleResetLecciones} onCrearEntrega={handleCrearEntrega} onActualizarEntrega={handleActualizarEntrega} onGuardarAvanceEntrega={handleGuardarAvanceEntrega} onBorrarEntrega={handleBorrarEntrega} onAssignGroup={handleAssignGroup}
                     
-                    // PASAMOS TODO A LOS DASHBOARDS
-                    fondoTotal={fondoTotal}
-                    historialIngresos={historialIngresos}
-                    onGuardarIngreso={handleGuardarIngreso}
-                    onGuardarEgreso={handleGuardarEgreso}
+                    fondoTotal={fondoTotal} historialIngresos={historialIngresos}
+                    onGuardarIngreso={handleGuardarIngreso} onGuardarEgreso={handleGuardarEgreso}
                     
-                    fondoSecretariaTotal={fondoSecretariaTotal}
-                    historialSecretaria={historialSecretaria}
-                    onGuardarIngresoSecretaria={handleGuardarIngresoSecretaria}
-                    onGuardarEgresoSecretaria={handleGuardarEgresoSecretaria}
+                    fondoSecretariaTotal={fondoSecretariaTotal} historialSecretaria={historialSecretaria}
+                    onGuardarIngresoSecretaria={handleGuardarIngresoSecretaria} onGuardarEgresoSecretaria={handleGuardarEgresoSecretaria}
                 />
             </main>
 
-            {/* MODALES */}
+            {/* MODAL CON MENSAJE DE PROTECCIÓN ACTUALIZADO */}
             {modalAbierto && (<div className="fixed inset-0 bg-slate-900/40 backdrop-blur-md flex items-center justify-center z-50 p-4 animate-in fade-in"><div className="bg-white w-full max-w-md rounded-[32px] p-8 shadow-2xl animate-in slide-in-from-bottom max-h-[90vh] overflow-y-auto"><h2 className="text-2xl font-black text-slate-800 mb-6">{maestroEdicion ? 'Editar' : 'Inscribir'}</h2><form onSubmit={handleGuardar} className="space-y-4"><input type="text" name="nombre" required defaultValue={maestroEdicion?.nombre || ''} className="w-full p-4 bg-slate-50 rounded-2xl outline-none" placeholder="Nombre" />
             <select name="clase" defaultValue={maestroEdicion?.clase || 'MAESTRO'} className="w-full p-4 bg-slate-50 rounded-2xl outline-none bg-white border border-slate-100">{['MAESTRO', 'AUXILIAR', 'LOGISTICA', 'SECRETARIA', 'TESORERO', 'Dirección'].map(c => <option key={c} value={c}>{c}</option>)}</select>
             <select name="campo" defaultValue={maestroEdicion?.campo || ''} className="w-full p-4 bg-slate-50 rounded-2xl outline-none bg-white border border-slate-100"><option value="">-- Ninguno --</option>{camposDisponibles.map(c => <option key={c} value={c}>{c}</option>)}</select><input type="tel" name="telefono" defaultValue={maestroEdicion?.telefono || ''} className="w-full p-4 bg-slate-50 rounded-2xl outline-none" placeholder="WhatsApp" /><div className="pt-4 flex flex-col space-y-3"><button type="submit" className="w-full py-4 bg-indigo-600 text-white font-black rounded-2xl shadow-xl">Guardar</button><button type="button" onClick={() => setModalAbierto(false)} className="text-slate-400 font-bold text-xs uppercase">Cancelar</button></div></form></div></div>)}
             {modalAlumno && ( <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-md flex items-center justify-center z-50 p-4 animate-in fade-in"><div className="bg-white w-full max-w-md rounded-[32px] p-8 shadow-2xl animate-in slide-in-from-bottom"><div className="w-16 h-16 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mx-auto mb-4 text-3xl"><i className="fas fa-child"></i></div><h2 className="text-2xl font-black text-slate-800 mb-2 text-center">{alumnoEdicion ? 'Editar' : 'Registrar'}</h2><form onSubmit={handleGuardarAlumno} className="space-y-4 mt-4"><input type="text" name="nombre" required defaultValue={alumnoEdicion?.nombre || ''} placeholder="Nombre Completo" className="w-full p-4 bg-slate-50 rounded-2xl outline-none" /><label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1 block mb-[-10px]">Fecha de Nacimiento</label><div className="flex space-x-2"><select className="w-1/3 p-3 bg-slate-50 rounded-2xl outline-none font-bold text-slate-600" value={diaNac} onChange={e=>setDiaNac(e.target.value)} required><option value="" disabled>Día</option>{Array.from({length: 31}, (_, i) => i + 1).map(d => <option key={d} value={d.toString().padStart(2, '0')}>{d}</option>)}</select><select className="w-1/3 p-3 bg-slate-50 rounded-2xl outline-none font-bold text-slate-600" value={mesNac} onChange={e=>setMesNac(e.target.value)} required><option value="" disabled>Mes</option>{['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'].map((m, i) => <option key={m} value={(i+1).toString().padStart(2, '0')}>{m}</option>)}</select><select className="w-1/3 p-3 bg-slate-50 rounded-2xl outline-none font-bold text-slate-600" value={anioNac} onChange={e=>setAnioNac(e.target.value)} required><option value="" disabled>Año</option>{Array.from({length: 25}, (_, i) => new Date().getFullYear() - i).map(a => <option key={a} value={a}>{a}</option>)}</select></div><select name="genero" required defaultValue={alumnoEdicion?.genero || ''} className="w-full p-4 bg-slate-50 rounded-2xl outline-none bg-white border border-slate-100 text-slate-600 font-bold"><option value="">Seleccionar Género</option><option value="M">Masculino</option><option value="F">Femenino</option></select>{edadCalculada !== null && (<div className="bg-emerald-50 p-4 rounded-2xl border border-emerald-100 flex items-center justify-between"><span className="text-emerald-800 text-xs font-bold uppercase tracking-widest">Edad detectada:</span><span className="text-2xl font-black text-emerald-600">{edadCalculada} Años</span></div>)}<div className="pt-2 flex flex-col space-y-3"><button type="submit" className="w-full py-4 bg-emerald-500 hover:bg-emerald-600 active:scale-95 transition-all text-white font-black rounded-2xl shadow-xl">Guardar</button><button type="button" onClick={() => { setModalAlumno(false); setAlumnoEdicion(null); setDiaNac(''); setMesNac(''); setAnioNac(''); }} className="text-slate-400 font-bold text-xs uppercase tracking-widest">Cancelar</button></div></form></div></div>)}
-            {maestroABorrar && (<div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-[60] p-6 animate-in fade-in"><div className="bg-white rounded-[32px] p-8 w-full max-w-xs text-center shadow-2xl animate-in zoom-in-95 border-2 border-indigo-100"><div className="w-16 h-16 bg-indigo-50 text-indigo-500 rounded-full flex items-center justify-center mx-auto mb-4 text-3xl"><i className="fas fa-user-minus"></i></div><h3 className="text-xl font-black text-slate-800 mb-2">Eliminar Usuario</h3><div className="text-slate-500 text-xs mb-4 leading-relaxed bg-slate-50 p-4 rounded-xl text-left border border-slate-100">Estás a punto de eliminar a: <br/> <b className="text-slate-700 text-sm">{maestroABorrar.nombre}</b> <span className="text-[10px] uppercase">({maestroABorrar.clase})</span>.<br/><br/>{maestroABorrar.clase === 'LOGISTICA' ? (<span className="text-rose-600 font-bold"><i className="fas fa-exclamation-circle mr-1"></i> Sus datos se borrarán.</span>) : (<span className="text-emerald-600 font-bold"><i className="fas fa-shield-alt mr-1"></i> SEGURO: Alumnos protegidos.</span>)}</div><div className="space-y-3"><button onClick={handleBorrarMaestro} className="w-full py-3 bg-indigo-600 text-white font-bold rounded-2xl shadow-lg active:scale-95 transition-all">Sí, eliminar</button><button onClick={() => setMaestroABorrar(null)} className="w-full py-2 text-slate-400 font-bold text-xs uppercase tracking-widest">Cancelar</button></div></div></div>)}
+            {maestroABorrar && (
+                <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-[60] p-6 animate-in fade-in">
+                    <div className="bg-white rounded-[32px] p-8 w-full max-w-xs text-center shadow-2xl animate-in zoom-in-95 border-2 border-indigo-100">
+                        <div className="w-16 h-16 bg-indigo-50 text-indigo-500 rounded-full flex items-center justify-center mx-auto mb-4 text-3xl"><i className="fas fa-user-minus"></i></div>
+                        <h3 className="text-xl font-black text-slate-800 mb-2">Revocar Acceso</h3>
+                        <div className="text-slate-500 text-xs mb-4 leading-relaxed bg-slate-50 p-4 rounded-xl text-left border border-slate-100">
+                            Estás a punto de eliminar el acceso a: <br/> <b className="text-slate-700 text-sm">{maestroABorrar.nombre}</b> <span className="text-[10px] uppercase">({maestroABorrar.clase})</span>.<br/><br/>
+                            {maestroABorrar.clase === 'LOGISTICA' ? (
+                                <span className="text-rose-600 font-bold"><i className="fas fa-exclamation-circle mr-1"></i> Sus datos se borrarán.</span>
+                            ) : maestroABorrar.clase === 'SECRETARIA' || maestroABorrar.clase === 'TESORERO' ? (
+                                <span className="text-emerald-600 font-bold"><i className="fas fa-shield-alt mr-1"></i> SEGURO: Todos sus registros financieros y fondos quedarán intactos en la base de datos global.</span>
+                            ) : (
+                                <span className="text-emerald-600 font-bold"><i className="fas fa-shield-alt mr-1"></i> SEGURO: Los alumnos y la asistencia de su campo se conservarán seguros.</span>
+                            )}
+                        </div>
+                        <div className="space-y-3">
+                            <button onClick={handleBorrarMaestro} className="w-full py-3 bg-indigo-600 text-white font-bold rounded-2xl shadow-lg active:scale-95 transition-all">Sí, quitar acceso</button>
+                            <button onClick={() => setMaestroABorrar(null)} className="w-full py-2 text-slate-400 font-bold text-xs uppercase tracking-widest">Cancelar</button>
+                        </div>
+                    </div>
+                </div>
+            )}
             {alumnoBorrar && (<div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-[60] p-6 animate-in fade-in"><div className="bg-white rounded-[32px] p-8 w-full max-w-xs text-center shadow-2xl animate-in zoom-in-95"><div className="w-16 h-16 bg-rose-50 text-rose-500 rounded-full flex items-center justify-center mx-auto mb-4 text-2xl"><i className="fas fa-trash-alt"></i></div><h3 className="text-xl font-black text-slate-800 mb-2">¿Eliminar Alumno?</h3><p className="text-xs text-slate-500 mb-4">Se borrará permanentemente.</p><div className="space-y-3"><button onClick={handleBorrarAlumno} className="w-full py-3 bg-rose-500 text-white font-bold rounded-2xl shadow-lg">Sí, borrar</button><button onClick={() => setAlumnoBorrar(null)} className="w-full py-2 text-slate-400 font-bold text-xs uppercase">Cancelar</button></div></div></div>)}
             {campoABorrar && (<div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-[60] p-6 animate-in fade-in"><div className="bg-white rounded-[32px] p-8 w-full max-w-xs text-center shadow-2xl animate-in zoom-in-95 border-2 border-rose-100"><div className="w-16 h-16 bg-rose-50 text-rose-600 rounded-full flex items-center justify-center mx-auto mb-4 text-3xl"><i className="fas fa-bomb"></i></div><h3 className="text-xl font-black text-slate-800 mb-2">¡Limpieza de Campo!</h3><div className="text-slate-600 text-xs mb-4 leading-relaxed bg-rose-50 p-3 rounded-xl border border-rose-100">Vas a limpiar la base de datos de:<br/> <b className="text-rose-600 text-sm">{campoABorrar}</b>.<br/><br/>Se borrarán <span className="font-bold">TODOS</span> sus alumnos y su asistencia permanentemente.</div><div className="space-y-3"><button onClick={handleBorrarCampo} className="w-full py-3 bg-rose-600 text-white font-bold rounded-2xl shadow-lg shadow-rose-200 active:scale-95 transition-all">Destruir datos</button><button onClick={() => setCampoABorrar(null)} className="w-full py-2 text-slate-400 font-bold text-xs uppercase tracking-widest">Cancelar</button></div></div></div>)}
         </div>
