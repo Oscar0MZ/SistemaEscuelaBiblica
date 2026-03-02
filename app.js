@@ -16,7 +16,6 @@ function App() {
     
     const [inventarioDatos, setInventarioDatos] = useState({ historicoRecibido: 0, actualRecibido: 0 });
 
-    // --- NUEVOS ESTADOS PARA LA TESORERÍA ---
     const [fondoTotal, setFondoTotal] = useState(0);
     const [historialIngresos, setHistorialIngresos] = useState([]);
 
@@ -83,13 +82,13 @@ function App() {
             unsubs.push(AlumnosService.suscribirAsistenciaSemanal(setDatosGlobalesAsistencia));
             unsubs.push(AlumnosService.suscribirHistorialGlobal(setHistorialAsistencias));
             
-            // --- DESCARGA DE DATOS DE TESORERÍA ---
             const unsubFondo = window.db.collection('sistema').doc('tesoreria').onSnapshot(doc => {
                 if (doc.exists) setFondoTotal(doc.data().total || 0);
                 else setFondoTotal(0);
             });
             unsubs.push(unsubFondo);
 
+            // Esta colección ahora guarda ingresos y retiros (identificados por 'tipo')
             const unsubIngresos = window.db.collection('ingresos_tesoreria').orderBy('timestamp', 'desc').limit(100).onSnapshot(snapshot => {
                 const hist = [];
                 snapshot.forEach(doc => hist.push({ id: doc.id, ...doc.data() }));
@@ -204,25 +203,20 @@ function App() {
         } catch (e) { return false; } 
     };
 
-    // --- NUEVA FUNCIÓN PARA GUARDAR INGRESOS DEL TESORERO ---
     const handleGuardarIngreso = async (monto, descripcion) => {
         try {
             const montoNum = parseFloat(monto);
-            if (isNaN(montoNum) || montoNum <= 0) {
-                alert("Por favor ingresa un monto válido mayor a 0.");
-                return false;
-            }
+            if (isNaN(montoNum) || montoNum <= 0) { alert("Por favor ingresa un monto válido mayor a 0."); return false; }
             
-            // 1. Guardar el registro en el historial
             await window.db.collection('ingresos_tesoreria').add({
+                tipo: 'ingreso',
                 monto: montoNum,
-                descripcion: descripcion.trim() || 'Ingreso mensual',
+                descripcion: descripcion.trim() || 'Ingreso general',
                 fecha: new Date().toLocaleDateString('en-CA'),
                 timestamp: Date.now(),
                 registradoPor: datosUsuarioActual.nombre
             });
 
-            // 2. Sumar al Fondo General
             const docRef = window.db.collection('sistema').doc('tesoreria');
             const docSnap = await docRef.get();
             let actual = 0;
@@ -231,10 +225,40 @@ function App() {
 
             alert(`✅ Se han agregado $${montoNum.toFixed(2)} al Fondo General.`);
             return true;
-        } catch (error) {
-            alert("Error al guardar el ingreso. Verifica tu conexión.");
-            return false;
-        }
+        } catch (error) { alert("Error al guardar. Verifica tu conexión."); return false; }
+    };
+
+    // --- NUEVO: FUNCIÓN PARA GASTOS/RETIROS DE TESORERÍA ---
+    const handleGuardarEgreso = async (monto, descripcion) => {
+        try {
+            const montoNum = parseFloat(monto);
+            if (isNaN(montoNum) || montoNum <= 0) { alert("Por favor ingresa un monto válido mayor a 0."); return false; }
+            
+            const docRef = window.db.collection('sistema').doc('tesoreria');
+            const docSnap = await docRef.get();
+            let actual = 0;
+            if(docSnap.exists) actual = docSnap.data().total || 0;
+
+            if (montoNum > actual) {
+                alert(`❌ Fondos insuficientes. Solo tienes $${actual.toFixed(2)} en la cuenta general.`);
+                return false;
+            }
+            
+            await window.db.collection('ingresos_tesoreria').add({
+                tipo: 'egreso', // Lo marcamos como retiro
+                monto: montoNum,
+                descripcion: descripcion.trim() || 'Retiro de fondos',
+                fecha: new Date().toLocaleDateString('en-CA'),
+                timestamp: Date.now(),
+                registradoPor: datosUsuarioActual.nombre
+            });
+
+            // Restamos del total
+            await docRef.set({ total: actual - montoNum }, { merge: true });
+
+            alert(`🔻 Se han retirado $${montoNum.toFixed(2)} del Fondo General correctamente.`);
+            return true;
+        } catch (error) { alert("Error al procesar el retiro."); return false; }
     };
 
     const handleCrearEntrega = async (datos) => { try { await LogisticaService.crear({ ...datos, asignadoPor: 'Director' }); alert("Ruta y víveres asignados correctamente al grupo."); } catch (error) { alert("Error al asignar la ruta."); } };
@@ -326,10 +350,11 @@ function App() {
                     onGuardarAvanceEntrega={handleGuardarAvanceEntrega}
                     onBorrarEntrega={handleBorrarEntrega}
                     onAssignGroup={handleAssignGroup}
-                    /* PASAMOS LOS NUEVOS DATOS AL TESORERO */
+                    
                     fondoTotal={fondoTotal}
                     historialIngresos={historialIngresos}
                     onGuardarIngreso={handleGuardarIngreso}
+                    onGuardarEgreso={handleGuardarEgreso} /* PASAMOS LA NUEVA FUNCIÓN */
                 />
             </main>
 
