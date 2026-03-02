@@ -4,7 +4,8 @@ function AdminDashboard({
     maestros, todosLosAlumnos, datosGlobalesAsistencia, historialAsistencias, entregasLogistica,
     mantenimiento, onToggleMantenimiento, onApprove, onDelete, onToggleModal, 
     onDeleteCampo, onResetLecciones, onCrearEntrega, onBorrarEntrega, onAssignGroup,
-    inventarioDatos, onActualizarInventario, onCerrarJornada
+    inventarioDatos, onActualizarInventario, onCerrarJornada,
+    fondoTotal, fondoSecretariaTotal // RECIBIMOS LOS FONDOS PARA LA AUDITORÍA DEL DIRECTOR
 }) {
     const [busqueda, setBusqueda] = useState('');
     const [vistaActual, setVistaActual] = useState('inicio'); 
@@ -69,6 +70,10 @@ function AdminDashboard({
 
     if (vistaActual === 'inicio') {
         let tp = 0, ta = 0, tperm = 0; todasAsistencias.forEach(r => { if(r.totales){ tp+=r.totales.presentes; ta+=r.totales.ausentes; tperm+=r.totales.permisos; } });
+        
+        // MATEMÁTICA DE AUDITORÍA
+        const diferenciaFinanzas = (fondoTotal || 0) - (fondoSecretariaTotal || 0);
+
         contenidoAdmin = (
             <div className="space-y-6 animate-in fade-in duration-300 pt-2">
                 <div className={`p-5 rounded-3xl border shadow-sm transition-colors duration-500 flex justify-between items-center ${mantenimiento ? 'bg-rose-50 border-rose-200' : 'bg-white border-slate-100'}`}>
@@ -78,9 +83,39 @@ function AdminDashboard({
 
                 {pendientes.length > 0 && (<div className="bg-amber-50 border border-amber-100 p-5 rounded-[32px]"><h3 className="text-amber-800 font-bold text-sm mb-3"><i className="fas fa-user-clock mr-2"></i> Solicitudes ({pendientes.length})</h3><div className="space-y-3">{pendientes.map(p => (<div key={p.id} className="bg-white p-4 rounded-2xl shadow-sm flex justify-between items-center border border-amber-100"><div><p className="font-bold text-slate-700 text-sm">{p.nombre}</p><span className="text-[10px] text-slate-400 font-bold uppercase">{p.clase} - {p.campo}</span></div><div className="flex space-x-2"><button onClick={() => onApprove(p.id)} className="w-9 h-9 bg-emerald-500 text-white rounded-xl"><i className="fas fa-check"></i></button><button onClick={() => onDelete(p)} className="w-9 h-9 bg-rose-100 text-rose-500 rounded-xl"><i className="fas fa-times"></i></button></div></div>))}</div></div>)}
                 
-                <div className="bg-white rounded-[32px] border border-slate-100 p-6 shadow-sm"><div className="flex justify-between items-center mb-4"><div><h3 className="font-bold text-slate-700 text-sm flex items-center"><i className="fas fa-clipboard-check text-emerald-500 mr-2"></i> Asistencia Global</h3><p className="text-[10px] text-slate-400 pl-6">Acumulado Semanal</p></div><span className="text-[10px] bg-slate-100 text-slate-500 font-bold px-3 py-1 rounded-lg border border-slate-200">{textoFechas}</span></div><div className="flex justify-around text-center divide-x divide-slate-50"><div className="px-2"><p className="text-3xl font-black text-emerald-500">{tp}</p><p className="text-[9px] font-bold text-slate-400 uppercase tracking-wide">Presentes</p></div><div className="px-2"><p className="text-3xl font-black text-rose-500">{ta}</p><p className="text-[9px] font-bold text-slate-400 uppercase tracking-wide">Ausentes</p></div><div className="px-2"><p className="text-3xl font-black text-amber-500">{tperm}</p><p className="text-[9px] font-bold text-slate-400 uppercase tracking-wide">Permisos</p></div></div></div>
+                {/* NUEVA TARJETA DE AUDITORÍA PARA EL DIRECTOR */}
+                <div className="bg-slate-800 rounded-[32px] border border-slate-700 p-6 shadow-xl relative overflow-hidden mx-1">
+                    <div className="absolute top-0 right-0 w-32 h-32 bg-white opacity-5 rounded-bl-[100px] pointer-events-none"></div>
+                    <div className="flex justify-between items-center mb-4 relative z-10">
+                        <div>
+                            <h3 className="font-bold text-white text-sm flex items-center"><i className="fas fa-balance-scale text-sky-400 mr-2"></i> Auditoría Financiera</h3>
+                            <p className="text-[10px] text-slate-400 pl-6">Supervisión en vivo</p>
+                        </div>
+                        <span className={`text-[9px] font-bold px-3 py-1 rounded-lg border ${diferenciaFinanzas === 0 ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30' : 'bg-rose-500/20 text-rose-400 border-rose-500/30'}`}>
+                            {diferenciaFinanzas === 0 ? 'CUADRADO' : 'DESCUADRE'}
+                        </span>
+                    </div>
+                    
+                    <div className="grid grid-cols-2 gap-4 relative z-10 mb-4">
+                        <div className="bg-slate-900/50 p-4 rounded-2xl border border-slate-700/50 text-center">
+                            <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mb-1">Caja Tesorería</p>
+                            <p className="text-xl font-black text-sky-400">${Number(fondoTotal || 0).toFixed(2)}</p>
+                        </div>
+                        <div className="bg-slate-900/50 p-4 rounded-2xl border border-slate-700/50 text-center">
+                            <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mb-1">Reg. Secretaría</p>
+                            <p className="text-xl font-black text-pink-400">${Number(fondoSecretariaTotal || 0).toFixed(2)}</p>
+                        </div>
+                    </div>
+                    {diferenciaFinanzas !== 0 && (
+                        <p className="text-[10px] text-rose-400 bg-rose-500/10 p-2 rounded-xl text-center border border-rose-500/20 relative z-10">
+                            <i className="fas fa-exclamation-triangle mr-1"></i> Descuadre detectado de ${Math.abs(diferenciaFinanzas).toFixed(2)}
+                        </p>
+                    )}
+                </div>
+
+                <div className="bg-white rounded-[32px] border border-slate-100 p-6 shadow-sm mx-1"><div className="flex justify-between items-center mb-4"><div><h3 className="font-bold text-slate-700 text-sm flex items-center"><i className="fas fa-clipboard-check text-emerald-500 mr-2"></i> Asistencia Global</h3><p className="text-[10px] text-slate-400 pl-6">Acumulado Semanal</p></div><span className="text-[10px] bg-slate-100 text-slate-500 font-bold px-3 py-1 rounded-lg border border-slate-200">{textoFechas}</span></div><div className="flex justify-around text-center divide-x divide-slate-50"><div className="px-2"><p className="text-3xl font-black text-emerald-500">{tp}</p><p className="text-[9px] font-bold text-slate-400 uppercase tracking-wide mt-1">Presentes</p></div><div className="px-2"><p className="text-3xl font-black text-rose-500">{ta}</p><p className="text-[9px] font-bold text-slate-400 uppercase tracking-wide mt-1">Ausentes</p></div><div className="px-2"><p className="text-3xl font-black text-amber-500">{tperm}</p><p className="text-[9px] font-bold text-slate-400 uppercase tracking-wide mt-1">Permisos</p></div></div></div>
                 
-                <div className="bg-white rounded-[32px] border border-slate-100 shadow-sm overflow-hidden transition-all duration-300">
+                <div className="bg-white rounded-[32px] border border-slate-100 shadow-sm overflow-hidden transition-all duration-300 mx-1">
                     <button onClick={() => setExpandirFiltroAdmin(!expandirFiltroAdmin)} className="w-full flex items-center justify-between p-6 bg-white hover:bg-slate-50 transition-colors">
                         <div className="flex items-center"><div className="w-10 h-10 bg-sky-50 text-sky-500 rounded-xl flex items-center justify-center mr-3"><i className="fas fa-filter"></i></div><div className="text-left"><h3 className="font-bold text-slate-700 text-sm">Filtro Demográfico</h3><p className="text-[10px] text-slate-400">Analizar edades globales</p></div></div>
                         <i className={`fas fa-chevron-down text-slate-300 transition-transform duration-300 ${expandirFiltroAdmin ? 'rotate-180' : ''}`}></i>
@@ -98,7 +133,7 @@ function AdminDashboard({
                         </div>
                     )}
                 </div>
-                <div className="grid grid-cols-2 gap-4"><div className="bg-indigo-600 p-6 rounded-[32px] text-white shadow-xl shadow-indigo-200 flex flex-col justify-between h-40 relative overflow-hidden"><div className="absolute top-0 right-0 w-20 h-20 bg-white opacity-10 rounded-bl-[100px] pointer-events-none"></div><p className="text-xs font-bold uppercase opacity-70 tracking-widest">Personal Activo</p><div><p className="text-5xl font-black tracking-tighter">{activos.length}</p><p className="text-[10px] opacity-70 mt-1">Miembros Totales</p></div></div><button onClick={onToggleModal} className="bg-white p-6 rounded-[32px] border border-slate-100 flex flex-col justify-between h-40 text-left shadow-sm group hover:shadow-md transition-all active:scale-95"><div className="w-12 h-12 bg-indigo-50 text-indigo-600 rounded-2xl flex items-center justify-center text-xl transition-colors"><i className="fas fa-plus"></i></div><div><p className="font-bold text-slate-700 text-lg leading-tight">Inscribir<br/>Personal</p><p className="text-[10px] text-slate-400 mt-1">Manual</p></div></button></div>
+                <div className="grid grid-cols-2 gap-4 px-1"><div className="bg-indigo-600 p-6 rounded-[32px] text-white shadow-xl shadow-indigo-200 flex flex-col justify-between h-40 relative overflow-hidden"><div className="absolute top-0 right-0 w-20 h-20 bg-white opacity-10 rounded-bl-[100px] pointer-events-none"></div><p className="text-xs font-bold uppercase opacity-70 tracking-widest">Personal Activo</p><div><p className="text-5xl font-black tracking-tighter">{activos.length}</p><p className="text-[10px] opacity-70 mt-1">Miembros Totales</p></div></div><button onClick={onToggleModal} className="bg-white p-6 rounded-[32px] border border-slate-100 flex flex-col justify-between h-40 text-left shadow-sm group hover:shadow-md transition-all active:scale-95"><div className="w-12 h-12 bg-indigo-50 text-indigo-600 rounded-2xl flex items-center justify-center text-xl transition-colors"><i className="fas fa-plus"></i></div><div><p className="font-bold text-slate-700 text-lg leading-tight">Inscribir<br/>Personal</p><p className="text-[10px] text-slate-400 mt-1">Manual</p></div></button></div>
             </div>
         );
     }
@@ -111,7 +146,7 @@ function AdminDashboard({
             <div className="space-y-4 animate-in slide-in-from-right duration-300">
                 <div className="px-2 mb-2"><h2 className="text-2xl font-black text-slate-800">Gestión por Campo</h2><p className="text-slate-400 text-xs">Población, currículo y clases del año</p></div>
                 
-                <div className="bg-sky-50 rounded-[32px] p-6 shadow-sm border border-sky-100">
+                <div className="bg-sky-50 rounded-[32px] p-6 shadow-sm border border-sky-100 mx-1">
                     <h3 className="font-bold text-sky-800 text-sm mb-4 flex items-center"><i className="fas fa-filter mr-2"></i> Rango de Edades</h3>
                     <div className="flex space-x-4"><div className="w-1/2"><label className="text-[10px] font-bold text-sky-600 uppercase ml-2">Mínima (Años)</label><input type="number" placeholder="Ej: 0" className="w-full p-4 mt-1 bg-white rounded-2xl outline-none border border-sky-100 focus:ring-2 focus:ring-sky-300 text-lg font-bold" value={edadMin} onChange={e=>setEdadMin(e.target.value)} /></div><div className="w-1/2"><label className="text-[10px] font-bold text-sky-600 uppercase ml-2">Máxima (Años)</label><input type="number" placeholder="Ej: 5" className="w-full p-4 mt-1 bg-white rounded-2xl outline-none border border-sky-100 focus:ring-2 focus:ring-sky-300 text-lg font-bold" value={edadMax} onChange={e=>setEdadMax(e.target.value)} /></div></div>
                     <div className="flex justify-around items-center bg-white p-4 rounded-2xl mt-4 shadow-sm">
@@ -124,7 +159,7 @@ function AdminDashboard({
                 </div>
 
                 <h3 className="font-bold text-slate-700 text-sm mt-6 px-2">Campos Activos</h3>
-                <div className="space-y-3 pb-24">
+                <div className="space-y-3 pb-24 px-1">
                     {camposActivos.length === 0 ? (
                         <div className="text-center p-8 bg-slate-50 rounded-[32px] mt-4 border-2 border-dashed border-slate-200">
                             <div className="w-16 h-16 bg-white rounded-full flex items-center justify-center text-2xl text-slate-300 mx-auto mb-3 shadow-sm"><i className="fas fa-seedling"></i></div>
@@ -216,7 +251,6 @@ function AdminDashboard({
                                                             <div className="flex space-x-1 text-[10px] font-bold">
                                                                 <span className="bg-emerald-100 text-emerald-700 px-1.5 py-1 rounded">P: {h.totales?.presentes || 0}</span>
                                                                 <span className="bg-rose-100 text-rose-700 px-1.5 py-1 rounded">A: {h.totales?.ausentes || 0}</span>
-                                                                {/* TAMBIÉN SE REFLEJA EL PERMISO AQUÍ */}
                                                                 <span className="bg-amber-100 text-amber-700 px-1.5 py-1 rounded">Pe: {h.totales?.permisos || 0}</span>
                                                             </div>
                                                         </div>
