@@ -25,7 +25,6 @@ function App() {
     const [campoABorrar, setCampoABorrar] = useState(null);
     const [edadCalculada, setEdadCalculada] = useState(null);
 
-    // NUEVOS ESTADOS PARA LA FECHA SEPARADA
     const [diaNac, setDiaNac] = useState('');
     const [mesNac, setMesNac] = useState('');
     const [anioNac, setAnioNac] = useState('');
@@ -99,7 +98,6 @@ function App() {
         return () => { unsubs.forEach(unsub => unsub && unsub()); };
     }, [usuario, datosUsuarioActual?.campo]); 
 
-    // Calcula la edad en tiempo real al seleccionar Día, Mes y Año
     useEffect(() => {
         if (diaNac && mesNac && anioNac) {
             setEdadCalculada(calcularEdad(`${anioNac}-${mesNac}-${diaNac}`));
@@ -210,7 +208,6 @@ function App() {
     const handleCerrarJornada = async (rutasParaArchivar) => {
         try {
             await window.db.collection('sistema').doc('inventario').set({ actualRecibido: 0 }, { merge: true });
-            
             if (rutasParaArchivar && rutasParaArchivar.length > 0) {
                 const batch = window.db.batch();
                 rutasParaArchivar.forEach(ruta => {
@@ -243,8 +240,14 @@ function App() {
             <header className="sticky top-0 bg-white/95 backdrop-blur-md p-5 flex justify-between items-center border-b border-slate-100 z-40">
                 <div>
                     <p className="text-[10px] font-black uppercase tracking-widest text-indigo-500">Gestión Ministerial</p>
-                    <h1 className="text-xl font-black text-slate-800">{usuario === 'ADMIN' ? 'Panel Director' : usuario === 'SECRETARIA' ? 'Secretaría' : usuario}</h1>
-                    {!usuario === 'ADMIN' && usuario !== 'SECRETARIA' && datosUsuarioActual && <p className="text-[9px] text-slate-400 font-bold uppercase">{datosUsuarioActual.campo || (datosUsuarioActual.grupo || 'Logística')}</p>}
+                    <h1 className="text-xl font-black text-slate-800">
+                        {usuario === 'ADMIN' ? 'Director' : `${usuario.charAt(0).toUpperCase() + usuario.slice(1).toLowerCase()}: ${datosUsuarioActual?.nombre?.split(' ')[0] || ''}`}
+                    </h1>
+                    {usuario !== 'ADMIN' && datosUsuarioActual && (
+                        <p className="text-[10px] text-slate-500 font-bold mt-1">
+                            Campo: <span className="text-indigo-500 uppercase">{datosUsuarioActual.campo || datosUsuarioActual.grupo || 'Global'}</span>
+                        </p>
+                    )}
                 </div>
                 <button onClick={handleLogout} className="w-10 h-10 bg-slate-50 text-slate-400 rounded-xl hover:text-rose-500 transition-all"><i className="fas fa-sign-out-alt"></i></button>
             </header>
@@ -275,12 +278,10 @@ function App() {
                 />
             </main>
 
-            {/* MODAL INSCRIBIR MAESTRO/PERSONAL */}
+            {/* MODALES */}
             {modalAbierto && (<div className="fixed inset-0 bg-slate-900/40 backdrop-blur-md flex items-center justify-center z-50 p-4 animate-in fade-in"><div className="bg-white w-full max-w-md rounded-[32px] p-8 shadow-2xl animate-in slide-in-from-bottom max-h-[90vh] overflow-y-auto"><h2 className="text-2xl font-black text-slate-800 mb-6">{maestroEdicion ? 'Editar' : 'Inscribir'}</h2><form onSubmit={handleGuardar} className="space-y-4"><input type="text" name="nombre" required defaultValue={maestroEdicion?.nombre || ''} className="w-full p-4 bg-slate-50 rounded-2xl outline-none" placeholder="Nombre" />
             <select name="clase" defaultValue={maestroEdicion?.clase || 'MAESTRO'} className="w-full p-4 bg-slate-50 rounded-2xl outline-none bg-white border border-slate-100">{['MAESTRO', 'AUXILIAR', 'LOGISTICA', 'SECRETARIA', 'Dirección'].map(c => <option key={c} value={c}>{c}</option>)}</select>
             <select name="campo" defaultValue={maestroEdicion?.campo || ''} className="w-full p-4 bg-slate-50 rounded-2xl outline-none bg-white border border-slate-100"><option value="">-- Ninguno --</option>{camposDisponibles.map(c => <option key={c} value={c}>{c}</option>)}</select><input type="tel" name="telefono" defaultValue={maestroEdicion?.telefono || ''} className="w-full p-4 bg-slate-50 rounded-2xl outline-none" placeholder="WhatsApp" /><div className="pt-4 flex flex-col space-y-3"><button type="submit" className="w-full py-4 bg-indigo-600 text-white font-black rounded-2xl shadow-xl">Guardar</button><button type="button" onClick={() => setModalAbierto(false)} className="text-slate-400 font-bold text-xs uppercase">Cancelar</button></div></form></div></div>)}
-            
-            {/* MODAL REGISTRAR ALUMNO (CON SELECTORES DE DÍA, MES, AÑO) */}
             {modalAlumno && (
                 <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-md flex items-center justify-center z-50 p-4 animate-in fade-in">
                     <div className="bg-white w-full max-w-md rounded-[32px] p-8 shadow-2xl animate-in slide-in-from-bottom">
@@ -288,8 +289,6 @@ function App() {
                         <h2 className="text-2xl font-black text-slate-800 mb-2 text-center">{alumnoEdicion ? 'Editar' : 'Registrar'}</h2>
                         <form onSubmit={handleGuardarAlumno} className="space-y-4 mt-4">
                             <input type="text" name="nombre" required defaultValue={alumnoEdicion?.nombre || ''} placeholder="Nombre Completo" className="w-full p-4 bg-slate-50 rounded-2xl outline-none" />
-                            
-                            {/* NUEVOS SELECTORES DE FECHA */}
                             <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1 block mb-[-10px]">Fecha de Nacimiento</label>
                             <div className="flex space-x-2">
                                 <select className="w-1/3 p-3 bg-slate-50 rounded-2xl outline-none font-bold text-slate-600" value={diaNac} onChange={e=>setDiaNac(e.target.value)} required>
@@ -305,13 +304,10 @@ function App() {
                                     {Array.from({length: 25}, (_, i) => new Date().getFullYear() - i).map(a => <option key={a} value={a}>{a}</option>)}
                                 </select>
                             </div>
-
                             <select name="genero" required defaultValue={alumnoEdicion?.genero || ''} className="w-full p-4 bg-slate-50 rounded-2xl outline-none bg-white border border-slate-100 text-slate-600 font-bold"><option value="">Seleccionar Género</option><option value="M">Masculino</option><option value="F">Femenino</option></select>
-                            
                             {edadCalculada !== null && (
                                 <div className="bg-emerald-50 p-4 rounded-2xl border border-emerald-100 flex items-center justify-between"><span className="text-emerald-800 text-xs font-bold uppercase tracking-widest">Edad detectada:</span><span className="text-2xl font-black text-emerald-600">{edadCalculada} Años</span></div>
                             )}
-                            
                             <div className="pt-2 flex flex-col space-y-3"><button type="submit" className="w-full py-4 bg-emerald-500 hover:bg-emerald-600 active:scale-95 transition-all text-white font-black rounded-2xl shadow-xl">Guardar</button><button type="button" onClick={() => { setModalAlumno(false); setAlumnoEdicion(null); setDiaNac(''); setMesNac(''); setAnioNac(''); }} className="text-slate-400 font-bold text-xs uppercase tracking-widest">Cancelar</button></div>
                         </form>
                     </div>
