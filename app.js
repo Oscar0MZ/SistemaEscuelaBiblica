@@ -16,6 +16,10 @@ function App() {
     
     const [inventarioDatos, setInventarioDatos] = useState({ historicoRecibido: 0, actualRecibido: 0 });
 
+    // --- NUEVOS ESTADOS PARA LA TESORERÍA ---
+    const [fondoTotal, setFondoTotal] = useState(0);
+    const [historialIngresos, setHistorialIngresos] = useState([]);
+
     const [modalAbierto, setModalAbierto] = useState(false);
     const [modalAlumno, setModalAlumno] = useState(false);
     const [maestroEdicion, setMaestroEdicion] = useState(null);
@@ -74,12 +78,25 @@ function App() {
         if (!usuario) return;
         const unsubs = [];
 
-        // --- AQUÍ SE AGREGA AL TESORERO PARA QUE RECIBA LOS DATOS GLOBALES ---
         if (usuario === 'ADMIN' || usuario === 'SECRETARIA' || usuario === 'TESORERO') {
             unsubs.push(AlumnosService.suscribirTodos(setTodosLosAlumnos));
             unsubs.push(AlumnosService.suscribirAsistenciaSemanal(setDatosGlobalesAsistencia));
             unsubs.push(AlumnosService.suscribirHistorialGlobal(setHistorialAsistencias));
             
+            // --- DESCARGA DE DATOS DE TESORERÍA ---
+            const unsubFondo = window.db.collection('sistema').doc('tesoreria').onSnapshot(doc => {
+                if (doc.exists) setFondoTotal(doc.data().total || 0);
+                else setFondoTotal(0);
+            });
+            unsubs.push(unsubFondo);
+
+            const unsubIngresos = window.db.collection('ingresos_tesoreria').orderBy('timestamp', 'desc').limit(100).onSnapshot(snapshot => {
+                const hist = [];
+                snapshot.forEach(doc => hist.push({ id: doc.id, ...doc.data() }));
+                setHistorialIngresos(hist);
+            });
+            unsubs.push(unsubIngresos);
+
             if (usuario === 'ADMIN') {
                 if(LogisticaService) unsubs.push(LogisticaService.suscribirTodas(setEntregasLogistica)); 
                 const unsubInv = window.db.collection('sistema').doc('inventario').onSnapshot(doc => {
@@ -187,6 +204,39 @@ function App() {
         } catch (e) { return false; } 
     };
 
+    // --- NUEVA FUNCIÓN PARA GUARDAR INGRESOS DEL TESORERO ---
+    const handleGuardarIngreso = async (monto, descripcion) => {
+        try {
+            const montoNum = parseFloat(monto);
+            if (isNaN(montoNum) || montoNum <= 0) {
+                alert("Por favor ingresa un monto válido mayor a 0.");
+                return false;
+            }
+            
+            // 1. Guardar el registro en el historial
+            await window.db.collection('ingresos_tesoreria').add({
+                monto: montoNum,
+                descripcion: descripcion.trim() || 'Ingreso mensual',
+                fecha: new Date().toLocaleDateString('en-CA'),
+                timestamp: Date.now(),
+                registradoPor: datosUsuarioActual.nombre
+            });
+
+            // 2. Sumar al Fondo General
+            const docRef = window.db.collection('sistema').doc('tesoreria');
+            const docSnap = await docRef.get();
+            let actual = 0;
+            if(docSnap.exists) actual = docSnap.data().total || 0;
+            await docRef.set({ total: actual + montoNum }, { merge: true });
+
+            alert(`✅ Se han agregado $${montoNum.toFixed(2)} al Fondo General.`);
+            return true;
+        } catch (error) {
+            alert("Error al guardar el ingreso. Verifica tu conexión.");
+            return false;
+        }
+    };
+
     const handleCrearEntrega = async (datos) => { try { await LogisticaService.crear({ ...datos, asignadoPor: 'Director' }); alert("Ruta y víveres asignados correctamente al grupo."); } catch (error) { alert("Error al asignar la ruta."); } };
     const handleActualizarEntrega = async (id, estado, detalles = null, bloqueos = null) => { try { const payload = { estado: estado }; if (estado === 'Entregado') payload.fechaEntrega = Date.now(); if (detalles) payload.detalles = detalles; if (bloqueos) payload.bloqueos = bloqueos; await window.db.collection('entregas').doc(id).update(payload); } catch (error) { alert("Error actualizando estado."); } };
     const handleGuardarAvanceEntrega = async (id, detalles, bloqueos) => { try { await window.db.collection('entregas').doc(id).update({ detalles: detalles, bloqueos: bloqueos }); alert("Avance guardado correctamente."); } catch (error) { alert("Error guardando avance."); } };
@@ -276,12 +326,15 @@ function App() {
                     onGuardarAvanceEntrega={handleGuardarAvanceEntrega}
                     onBorrarEntrega={handleBorrarEntrega}
                     onAssignGroup={handleAssignGroup}
+                    /* PASAMOS LOS NUEVOS DATOS AL TESORERO */
+                    fondoTotal={fondoTotal}
+                    historialIngresos={historialIngresos}
+                    onGuardarIngreso={handleGuardarIngreso}
                 />
             </main>
 
             {/* MODALES */}
             {modalAbierto && (<div className="fixed inset-0 bg-slate-900/40 backdrop-blur-md flex items-center justify-center z-50 p-4 animate-in fade-in"><div className="bg-white w-full max-w-md rounded-[32px] p-8 shadow-2xl animate-in slide-in-from-bottom max-h-[90vh] overflow-y-auto"><h2 className="text-2xl font-black text-slate-800 mb-6">{maestroEdicion ? 'Editar' : 'Inscribir'}</h2><form onSubmit={handleGuardar} className="space-y-4"><input type="text" name="nombre" required defaultValue={maestroEdicion?.nombre || ''} className="w-full p-4 bg-slate-50 rounded-2xl outline-none" placeholder="Nombre" />
-            {/* AQUI SE AGREGÓ EL TESORERO A LA LISTA */}
             <select name="clase" defaultValue={maestroEdicion?.clase || 'MAESTRO'} className="w-full p-4 bg-slate-50 rounded-2xl outline-none bg-white border border-slate-100">{['MAESTRO', 'AUXILIAR', 'LOGISTICA', 'SECRETARIA', 'TESORERO', 'Dirección'].map(c => <option key={c} value={c}>{c}</option>)}</select>
             <select name="campo" defaultValue={maestroEdicion?.campo || ''} className="w-full p-4 bg-slate-50 rounded-2xl outline-none bg-white border border-slate-100"><option value="">-- Ninguno --</option>{camposDisponibles.map(c => <option key={c} value={c}>{c}</option>)}</select><input type="tel" name="telefono" defaultValue={maestroEdicion?.telefono || ''} className="w-full p-4 bg-slate-50 rounded-2xl outline-none" placeholder="WhatsApp" /><div className="pt-4 flex flex-col space-y-3"><button type="submit" className="w-full py-4 bg-indigo-600 text-white font-black rounded-2xl shadow-xl">Guardar</button><button type="button" onClick={() => setModalAbierto(false)} className="text-slate-400 font-bold text-xs uppercase">Cancelar</button></div></form></div></div>)}
             {modalAlumno && (
