@@ -5,7 +5,9 @@ const CLAVES = {
     MAESTRO: "2222",
     AUXILIAR: "3333",
     LOGISTICA: "4444",
-    SECRETARIA: "5555"  // <-- AQUÍ AGREGAMOS LA NUEVA CLAVE
+    SECRETARIA: "5555",  // <-- AQUÍ AGREGAMOS LA NUEVA CLAVE
+    TESORERO: "8888" // <-- NUEVA CLAVE PARA TESORERÍA
+    
 };
 
 window.AuthService = {
