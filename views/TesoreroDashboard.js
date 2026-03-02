@@ -13,25 +13,19 @@ function TesoreroDashboard({
 
     // Estados para el Acordeón Mensual y Filtros
     const [mesExpandido, setMesExpandido] = useState(null);
+    const [repMesExpandido, setRepMesExpandido] = useState(null); // Acordeón para reportes
     const [fechaDesde, setFechaDesde] = useState('');
     const [fechaHasta, setFechaHasta] = useState('');
 
     const handleSubmit = async (e) => {
         e.preventDefault();
         setLoading(true);
-        
         let exito = false;
-        if (tipoTransaccion === 'ingreso') {
-            exito = await onGuardarIngreso(monto, descripcion);
-        } else {
-            exito = await onGuardarEgreso(monto, descripcion);
-        }
+        if (tipoTransaccion === 'ingreso') exito = await onGuardarIngreso(monto, descripcion);
+        else exito = await onGuardarEgreso(monto, descripcion);
 
         if (exito) {
-            setMonto('');
-            setDescripcion('');
-            setVistaActual('historial'); 
-            // Expandimos automáticamente el mes actual para que vea su registro
+            setMonto(''); setDescripcion(''); setVistaActual('historial'); 
             const hoy = new Date().toLocaleDateString('en-CA').substring(0, 7);
             setMesExpandido(hoy);
         }
@@ -39,27 +33,9 @@ function TesoreroDashboard({
     };
 
     const formatoFecha = (f) => {
-        if (!f) return '';
-        const p = f.split('-');
-        if (p.length !== 3) return f;
+        if (!f) return ''; const p = f.split('-'); if (p.length !== 3) return f;
         return `${p[2]}/${p[1]}/${p[0]}`; 
     };
-
-    // --- LÓGICA PARA EL ACORDEÓN MENSUAL ---
-    const historialPorMes = {};
-    historialIngresos.forEach(mov => {
-        // Extraemos solo "YYYY-MM" (Ej: "2026-03")
-        const mesKey = mov.fecha ? mov.fecha.substring(0, 7) : 'Desconocido';
-        if (!historialPorMes[mesKey]) {
-            historialPorMes[mesKey] = { ingresos: 0, egresos: 0, movimientos: [] };
-        }
-        if (mov.tipo === 'egreso') historialPorMes[mesKey].egresos += Number(mov.monto);
-        else historialPorMes[mesKey].ingresos += Number(mov.monto);
-        
-        historialPorMes[mesKey].movimientos.push(mov);
-    });
-    // Ordenamos los meses del más reciente al más antiguo
-    const mesesOrdenados = Object.keys(historialPorMes).sort((a,b) => b.localeCompare(a));
 
     const nombreMes = (mesKey) => {
         if (mesKey === 'Desconocido') return 'Fecha Desconocida';
@@ -68,20 +44,38 @@ function TesoreroDashboard({
         return `${meses[parseInt(m, 10) - 1]} ${y}`;
     };
 
-    // --- LÓGICA PARA LOS REPORTES ---
+    // Acordeón Historial
+    const historialPorMes = {};
+    historialIngresos.forEach(mov => {
+        const mesKey = mov.fecha ? mov.fecha.substring(0, 7) : 'Desconocido';
+        if (!historialPorMes[mesKey]) historialPorMes[mesKey] = { ingresos: 0, egresos: 0, movimientos: [] };
+        if (mov.tipo === 'egreso') historialPorMes[mesKey].egresos += Number(mov.monto);
+        else historialPorMes[mesKey].ingresos += Number(mov.monto);
+        historialPorMes[mesKey].movimientos.push(mov);
+    });
+    const mesesOrdenados = Object.keys(historialPorMes).sort((a,b) => b.localeCompare(a));
+
+    // Acordeón Reportes (Filtrados)
     const movsFiltrados = historialIngresos.filter(mov => {
         if (fechaDesde && mov.fecha < fechaDesde) return false;
         if (fechaHasta && mov.fecha > fechaHasta) return false;
         return true;
     });
 
-    let repIngresos = 0;
-    let repEgresos = 0;
-    movsFiltrados.forEach(m => {
-        if (m.tipo === 'egreso') repEgresos += Number(m.monto);
-        else repIngresos += Number(m.monto);
+    let repIngresos = 0; let repEgresos = 0;
+    const repPorMes = {};
+    movsFiltrados.forEach(mov => {
+        if (mov.tipo === 'egreso') repEgresos += Number(mov.monto);
+        else repIngresos += Number(mov.monto);
+
+        const mKey = mov.fecha ? mov.fecha.substring(0, 7) : 'Desconocido';
+        if (!repPorMes[mKey]) repPorMes[mKey] = { ingresos: 0, egresos: 0, movimientos: [] };
+        if (mov.tipo === 'egreso') repPorMes[mKey].egresos += Number(mov.monto);
+        else repPorMes[mKey].ingresos += Number(mov.monto);
+        repPorMes[mKey].movimientos.push(mov);
     });
     const repBalance = repIngresos - repEgresos;
+    const repMesesOrdenados = Object.keys(repPorMes).sort((a,b) => b.localeCompare(a));
 
     const NavButton = ({ id, icon, label }) => (
         <button onClick={() => setVistaActual(id)} className={`flex flex-col items-center justify-center w-[90px] h-14 rounded-2xl transition-all ${vistaActual === id ? 'text-amber-600 bg-amber-50 font-black' : 'text-slate-400 hover:text-slate-600 font-bold'}`}>
@@ -160,7 +154,6 @@ function TesoreroDashboard({
 
                             return (
                                 <div key={mesKey} className="bg-white rounded-[24px] border border-slate-100 shadow-sm overflow-hidden transition-all duration-300">
-                                    {/* CABECERA DEL ACORDEÓN */}
                                     <button onClick={() => setMesExpandido(isExpanded ? null : mesKey)} className="w-full p-5 flex justify-between items-center bg-white hover:bg-slate-50 transition-colors">
                                         <div className="text-left">
                                             <span className="font-black text-slate-700 text-lg uppercase tracking-wide">{nombreMes(mesKey)}</span>
@@ -177,7 +170,6 @@ function TesoreroDashboard({
                                         </div>
                                     </button>
 
-                                    {/* CONTENIDO DEL MES DESPLEGADO */}
                                     {isExpanded && (
                                         <div className="p-4 pt-0 border-t border-slate-100 bg-slate-50 animate-in slide-in-from-top-2 duration-200">
                                             <div className="flex justify-between p-3 bg-white rounded-xl shadow-sm mb-3 mt-4 border border-slate-100">
@@ -234,7 +226,6 @@ function TesoreroDashboard({
                     <p className="text-slate-400 text-xs mt-1">Filtra ingresos y egresos por fechas</p>
                 </div>
                 
-                {/* CAJA DE FILTROS */}
                 <div className="bg-white p-5 rounded-[24px] mx-1 border border-slate-100 shadow-sm space-y-4">
                     <div className="flex space-x-3">
                         <div className="w-1/2">
@@ -248,7 +239,6 @@ function TesoreroDashboard({
                     </div>
                 </div>
 
-                {/* RESUMEN DEL FILTRO */}
                 {(fechaDesde || fechaHasta) && (
                     <div className="bg-slate-800 p-6 rounded-[24px] text-white shadow-xl mx-1 relative overflow-hidden animate-in zoom-in-95">
                         <div className="absolute top-0 right-0 w-24 h-24 bg-white opacity-5 rounded-bl-[100px] pointer-events-none"></div>
@@ -274,31 +264,57 @@ function TesoreroDashboard({
                     </div>
                 )}
 
-                {/* LISTA FILTRADA */}
                 <h3 className="font-bold text-slate-700 text-sm mt-6 px-2 border-b border-slate-100 pb-2">
-                    Detalle de Transacciones ({movsFiltrados.length})
+                    Detalle de Transacciones (Acordeón)
                 </h3>
-                <div className="space-y-2 px-1">
-                    {movsFiltrados.length === 0 ? (
+                <div className="space-y-3 px-1">
+                    {repMesesOrdenados.length === 0 ? (
                         <div className="text-center p-6 bg-slate-50 rounded-2xl mt-2 border border-slate-100">
                             <p className="text-xs font-bold text-slate-400">Ajusta las fechas para ver resultados.</p>
                         </div>
                     ) : (
-                        movsFiltrados.map((mov, i) => {
-                            const esIngreso = mov.tipo !== 'egreso';
+                        repMesesOrdenados.map(mesKey => {
+                            const data = repPorMes[mesKey];
+                            const isExpanded = repMesExpandido === mesKey;
+
                             return (
-                                <div key={i} className="bg-white p-3 rounded-xl border border-slate-100 flex justify-between items-center shadow-sm">
-                                    <div className="w-2/3 pr-2">
-                                        <p className="font-bold text-slate-700 text-xs truncate">{mov.descripcion}</p>
-                                        <p className="text-[9px] text-slate-400 font-bold uppercase mt-0.5">{formatoFecha(mov.fecha)}</p>
-                                    </div>
-                                    <div className="text-right w-1/3">
-                                        <span className={`text-sm font-black px-2 py-1 rounded-lg ${esIngreso ? 'bg-emerald-50 text-emerald-600' : 'bg-rose-50 text-rose-600'}`}>
-                                            {esIngreso ? '+' : '-'}${Number(mov.monto).toFixed(2)}
-                                        </span>
-                                    </div>
+                                <div key={mesKey} className="bg-white rounded-[24px] border border-slate-100 shadow-sm overflow-hidden transition-all duration-300">
+                                    <button onClick={() => setRepMesExpandido(isExpanded ? null : mesKey)} className="w-full p-4 flex justify-between items-center bg-white hover:bg-slate-50 transition-colors">
+                                        <div className="text-left">
+                                            <span className="font-bold text-slate-700 text-sm uppercase">{nombreMes(mesKey)}</span>
+                                        </div>
+                                        <div className="flex items-center space-x-3">
+                                            <div className={`w-8 h-8 flex items-center justify-center rounded-xl transition-colors shadow-sm ${isExpanded ? 'bg-amber-500 text-white' : 'bg-slate-50 text-slate-400'}`}>
+                                                <i className={`fas fa-chevron-down transition-transform duration-300 ${isExpanded ? 'rotate-180' : ''}`}></i>
+                                            </div>
+                                        </div>
+                                    </button>
+
+                                    {isExpanded && (
+                                        <div className="p-4 pt-0 border-t border-slate-100 bg-slate-50 animate-in slide-in-from-top-2 duration-200">
+                                            <div className="space-y-2 max-h-[350px] overflow-y-auto pr-1 mt-4">
+                                                {data.movimientos.map(mov => {
+                                                    const esIngreso = mov.tipo !== 'egreso';
+                                                    return (
+                                                        <div key={mov.id} className="bg-white p-3 rounded-xl border border-slate-100 shadow-sm flex justify-between items-center relative overflow-hidden group">
+                                                            <div className={`absolute left-0 top-0 bottom-0 w-1 ${esIngreso ? 'bg-emerald-400' : 'bg-rose-400'}`}></div>
+                                                            <div className="pl-2 w-2/3 pr-2">
+                                                                <p className="font-bold text-slate-700 text-xs truncate">{mov.descripcion}</p>
+                                                                <p className="text-[9px] text-slate-400 font-bold uppercase mt-0.5">{formatoFecha(mov.fecha)}</p>
+                                                            </div>
+                                                            <div className="text-right w-1/3">
+                                                                <span className={`text-xs font-black px-2 py-1 rounded-lg ${esIngreso ? 'bg-emerald-50 text-emerald-600' : 'bg-rose-50 text-rose-600'}`}>
+                                                                    {esIngreso ? '+' : '-'}${Number(mov.monto).toFixed(2)}
+                                                                </span>
+                                                            </div>
+                                                        </div>
+                                                    )
+                                                })}
+                                            </div>
+                                        </div>
+                                    )}
                                 </div>
-                            )
+                            );
                         })
                     )}
                 </div>
