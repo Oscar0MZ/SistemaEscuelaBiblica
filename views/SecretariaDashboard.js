@@ -19,6 +19,7 @@ function SecretariaDashboard({
     const [fechaDesde, setFechaDesde] = useState('');
     const [fechaHasta, setFechaHasta] = useState('');
     const [filtroCampo, setFiltroCampo] = useState('TODOS');
+    const [mesRepExpandido, setMesRepExpandido] = useState(null); // NUEVO ESTADO PARA ACORDEÓN DE REPORTES
 
     const historialVisible = historialAsistencias.filter(h => !h.esReset);
     const todasAsistencias = datosGlobalesAsistencia?.registros || [];
@@ -75,7 +76,7 @@ function SecretariaDashboard({
 
     const diferencia = fondoTotal - fondoSecretariaTotal;
 
-    // 3. Lógica de la Pestaña REPORTES (Filtrado de Campos)
+    // 3. Lógica de la Pestaña REPORTES
     const registrosFiltrados = historialVisible.filter(h => {
         if (fechaDesde && h.fecha < fechaDesde) return false;
         if (fechaHasta && h.fecha > fechaHasta) return false;
@@ -84,7 +85,9 @@ function SecretariaDashboard({
     });
 
     let ofrendaPeriodo = 0, presentesPeriodo = 0, ausentesPeriodo = 0, permisosPeriodo = 0;
-    const resumenPorCampo = {};
+    
+    // --- NUEVO: AGRUPAR REPORTES GLOBALES POR MES ---
+    const reportesPorMes = {}; 
 
     registrosFiltrados.forEach(h => {
         const ofr = Number(h.ofrenda || 0);
@@ -94,19 +97,23 @@ function SecretariaDashboard({
 
         ofrendaPeriodo += ofr; presentesPeriodo += p; ausentesPeriodo += a; permisosPeriodo += per;
 
-        if (!resumenPorCampo[h.campo]) {
-            resumenPorCampo[h.campo] = { ofrenda: 0, presentes: 0, ausentes: 0, permisos: 0, clases: 0 };
+        if (filtroCampo === 'TODOS') {
+            const mesKey = h.fecha ? h.fecha.substring(0, 7) : 'Desconocido';
+            if (!reportesPorMes[mesKey]) {
+                reportesPorMes[mesKey] = { totalOfrenda: 0, campos: {} };
+            }
+            reportesPorMes[mesKey].totalOfrenda += ofr;
+
+            if (!reportesPorMes[mesKey].campos[h.campo]) {
+                reportesPorMes[mesKey].campos[h.campo] = { ofrenda: 0, clases: 0 };
+            }
+            reportesPorMes[mesKey].campos[h.campo].ofrenda += ofr;
+            reportesPorMes[mesKey].campos[h.campo].clases += 1;
         }
-        resumenPorCampo[h.campo].ofrenda += ofr;
-        resumenPorCampo[h.campo].presentes += p;
-        resumenPorCampo[h.campo].ausentes += a;
-        resumenPorCampo[h.campo].permisos += per;
-        resumenPorCampo[h.campo].clases += 1;
     });
 
-    const camposOrdenadosReporte = Object.keys(resumenPorCampo).sort((a,b) => resumenPorCampo[b].ofrenda - resumenPorCampo[a].ofrenda);
+    const mesesReporteOrdenados = Object.keys(reportesPorMes).sort((a,b) => b.localeCompare(a));
 
-    // Navegación (Ahora son 4 botones)
     const NavButton = ({ id, icon, label }) => (
         <button onClick={() => setVistaActual(id)} className={`flex flex-col items-center justify-center w-[75px] h-14 rounded-2xl transition-all ${vistaActual === id ? 'text-pink-600 bg-pink-50 font-black' : 'text-slate-400 hover:text-slate-600 font-bold'}`}>
             <i className={`fas ${icon} text-xl mb-1 ${vistaActual === id ? 'animate-bounce' : ''}`}></i><span className="text-[9px] tracking-wide">{label}</span>
@@ -160,11 +167,11 @@ function SecretariaDashboard({
                     <div className="grid grid-cols-2 gap-4 relative z-10">
                         <div className="border-r border-slate-700">
                             <p className="text-[9px] text-slate-400 uppercase font-bold tracking-widest mb-1">Mi Control (Secretaría)</p>
-                            <p className="text-2xl font-black text-pink-400">${fondoSecretariaTotal.toFixed(2)}</p>
+                            <p className="text-2xl font-black text-pink-400">${Number(fondoSecretariaTotal || 0).toFixed(2)}</p>
                         </div>
                         <div className="pl-2">
                             <p className="text-[9px] text-slate-400 uppercase font-bold tracking-widest mb-1">Reporte Tesorería</p>
-                            <p className="text-2xl font-black text-sky-400">${fondoTotal.toFixed(2)}</p>
+                            <p className="text-2xl font-black text-sky-400">${Number(fondoTotal || 0).toFixed(2)}</p>
                         </div>
                     </div>
                     
@@ -399,9 +406,8 @@ function SecretariaDashboard({
                     </div>
                 </div>
 
-                {/* DESGLOSE */}
                 <h3 className="font-bold text-slate-700 text-sm mt-6 px-2 border-b border-slate-100 pb-2">
-                    {filtroCampo === 'TODOS' ? 'Ranking de Aportes por Campo' : `Historial de Clases: ${filtroCampo}`}
+                    {filtroCampo === 'TODOS' ? 'Aportes por Mes y Campo' : `Historial de Clases: ${filtroCampo}`}
                 </h3>
                 <div className="space-y-3 px-1">
                     {registrosFiltrados.length === 0 ? (
@@ -410,20 +416,50 @@ function SecretariaDashboard({
                             <p className="text-sm font-bold text-slate-500">No hay registros en estas fechas</p>
                         </div>
                     ) : filtroCampo === 'TODOS' ? (
-                        camposOrdenadosReporte.map((campo, index) => {
-                            const data = resumenPorCampo[campo];
+                        // ACORDEÓN POR MESES PARA VISTA GLOBAL
+                        mesesReporteOrdenados.map(mesKey => {
+                            const dataMes = reportesPorMes[mesKey];
+                            const isExpanded = mesRepExpandido === mesKey;
+                            const camposDelMes = Object.keys(dataMes.campos).sort((a,b) => dataMes.campos[b].ofrenda - dataMes.campos[a].ofrenda);
+
                             return (
-                                <div key={campo} className="bg-white p-4 rounded-2xl border border-slate-100 shadow-sm flex justify-between items-center relative overflow-hidden">
-                                    <div className="flex items-center space-x-4 flex-1">
-                                        <div className={`w-8 h-8 shrink-0 rounded-full flex items-center justify-center text-xs font-black ${index === 0 ? 'bg-amber-100 text-amber-600' : index === 1 ? 'bg-slate-200 text-slate-600' : index === 2 ? 'bg-orange-100 text-orange-800' : 'bg-slate-50 text-slate-400 border border-slate-100'}`}>#{index + 1}</div>
-                                        <div>
-                                            <p className="font-bold text-slate-700 text-sm">{campo}</p>
-                                            <p className="text-[9px] text-slate-400 font-bold uppercase mt-0.5">{data.clases} domingos reportados</p>
+                                <div key={mesKey} className="bg-white rounded-[24px] border border-slate-100 shadow-sm overflow-hidden transition-all duration-300">
+                                    <button onClick={() => setMesRepExpandido(isExpanded ? null : mesKey)} className="w-full p-4 flex justify-between items-center bg-white hover:bg-slate-50 transition-colors">
+                                        <div className="text-left">
+                                            <span className="font-bold text-slate-700 text-sm uppercase">{nombreMes(mesKey)}</span>
+                                            <p className="text-[9px] text-slate-400 mt-1 font-bold">{camposDelMes.length} campos reportaron</p>
                                         </div>
-                                    </div>
-                                    <div className="text-right">
-                                        <p className="font-black text-emerald-600 text-base">${data.ofrenda.toFixed(2)}</p>
-                                    </div>
+                                        <div className="flex items-center space-x-3">
+                                            <span className="text-emerald-500 font-black text-sm">${dataMes.totalOfrenda.toFixed(2)}</span>
+                                            <div className={`w-8 h-8 flex items-center justify-center rounded-xl transition-colors shadow-sm ${isExpanded ? 'bg-pink-500 text-white' : 'bg-slate-50 text-slate-400'}`}>
+                                                <i className={`fas fa-chevron-down transition-transform duration-300 ${isExpanded ? 'rotate-180' : ''}`}></i>
+                                            </div>
+                                        </div>
+                                    </button>
+
+                                    {isExpanded && (
+                                        <div className="p-4 pt-0 border-t border-slate-100 bg-slate-50 animate-in slide-in-from-top-2 duration-200">
+                                            <div className="space-y-2 mt-4 max-h-[300px] overflow-y-auto pr-1">
+                                                {camposDelMes.map((campo, index) => {
+                                                    const cData = dataMes.campos[campo];
+                                                    return (
+                                                        <div key={campo} className="bg-white p-3 rounded-xl border border-slate-100 shadow-sm flex justify-between items-center">
+                                                            <div className="flex items-center space-x-3 flex-1">
+                                                                <div className={`w-6 h-6 shrink-0 rounded-full flex items-center justify-center text-[10px] font-black ${index === 0 ? 'bg-amber-100 text-amber-600' : index === 1 ? 'bg-slate-200 text-slate-600' : index === 2 ? 'bg-orange-100 text-orange-800' : 'bg-slate-50 text-slate-400 border border-slate-100'}`}>#{index + 1}</div>
+                                                                <div>
+                                                                    <p className="font-bold text-slate-700 text-xs">{campo}</p>
+                                                                    <p className="text-[8px] text-slate-400 font-bold uppercase mt-0.5">{cData.clases} domingos</p>
+                                                                </div>
+                                                            </div>
+                                                            <div className="text-right">
+                                                                <p className="font-black text-emerald-600 text-sm">${cData.ofrenda.toFixed(2)}</p>
+                                                            </div>
+                                                        </div>
+                                                    )
+                                                })}
+                                            </div>
+                                        </div>
+                                    )}
                                 </div>
                             )
                         })
