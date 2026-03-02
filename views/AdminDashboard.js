@@ -9,7 +9,6 @@ function AdminDashboard({
     const [busqueda, setBusqueda] = useState('');
     const [vistaActual, setVistaActual] = useState('inicio'); 
     
-    // ESTADOS ADMIN
     const [expandirFiltroAdmin, setExpandirFiltroAdmin] = useState(false);
     const [campoExpandido, setCampoExpandido] = useState(null); 
     const [campoResetUI, setCampoResetUI] = useState(null); 
@@ -31,7 +30,6 @@ function AdminDashboard({
     };
     const textoFechas = datosGlobalesAsistencia?.rango ? `${formatoFecha(datosGlobalesAsistencia.rango.inicio).substring(0,5)} - ${formatoFecha(datosGlobalesAsistencia.rango.fin).substring(0,5)}` : 'Calculando...';
 
-    // --- MAGIA MATEMÁTICA EXACTA PARA EL ADMIN ---
     const calcProgreso = (lec) => {
         const l = parseInt(lec);
         if (isNaN(l) || l === 0) return { parte: 1, leccion: 0, porc: 0 };
@@ -72,7 +70,7 @@ function AdminDashboard({
     if (vistaActual === 'inicio') {
         let tp = 0, ta = 0, tperm = 0; todasAsistencias.forEach(r => { if(r.totales){ tp+=r.totales.presentes; ta+=r.totales.ausentes; tperm+=r.totales.permisos; } });
         contenidoAdmin = (
-            <div className="space-y-6 animate-in fade-in duration-300">
+            <div className="space-y-6 animate-in fade-in duration-300 pt-2">
                 <div className={`p-5 rounded-3xl border shadow-sm transition-colors duration-500 flex justify-between items-center ${mantenimiento ? 'bg-rose-50 border-rose-200' : 'bg-white border-slate-100'}`}>
                     <div><h3 className={`font-black flex items-center ${mantenimiento ? 'text-rose-600' : 'text-slate-700'}`}><i className={`fas fa-tools mr-2 ${mantenimiento ? 'text-rose-500 animate-pulse' : 'text-slate-400'}`}></i> Mantenimiento</h3><p className="text-[10px] text-slate-500 mt-1 leading-tight">{mantenimiento ? 'App bloqueada. Nadie puede entrar.' : 'Sistema activo. Maestros operando.'}</p></div>
                     <button onClick={onToggleMantenimiento} className={`w-14 h-8 rounded-full relative transition-colors duration-300 shadow-inner ${mantenimiento ? 'bg-rose-500' : 'bg-slate-200'}`}><div className={`w-6 h-6 bg-white rounded-full absolute top-1 shadow-sm transition-all duration-300 ${mantenimiento ? 'right-1' : 'left-1'}`}></div></button>
@@ -131,7 +129,6 @@ function AdminDashboard({
                         <div className="text-center p-8 bg-slate-50 rounded-[32px] mt-4 border-2 border-dashed border-slate-200">
                             <div className="w-16 h-16 bg-white rounded-full flex items-center justify-center text-2xl text-slate-300 mx-auto mb-3 shadow-sm"><i className="fas fa-seedling"></i></div>
                             <p className="text-sm font-bold text-slate-500">No hay campos activos aún</p>
-                            <p className="text-xs text-slate-400 mt-2 leading-relaxed">Los campos aparecerán aquí automáticamente cuando un maestro se asigne a ellos o se inscriban alumnos.</p>
                         </div>
                     ) : (
                         camposActivos.map(campo => {
@@ -219,6 +216,8 @@ function AdminDashboard({
                                                             <div className="flex space-x-1 text-[10px] font-bold">
                                                                 <span className="bg-emerald-100 text-emerald-700 px-1.5 py-1 rounded">P: {h.totales?.presentes || 0}</span>
                                                                 <span className="bg-rose-100 text-rose-700 px-1.5 py-1 rounded">A: {h.totales?.ausentes || 0}</span>
+                                                                {/* TAMBIÉN SE REFLEJA EL PERMISO AQUÍ */}
+                                                                <span className="bg-amber-100 text-amber-700 px-1.5 py-1 rounded">Pe: {h.totales?.permisos || 0}</span>
                                                             </div>
                                                         </div>
                                                     ))}
