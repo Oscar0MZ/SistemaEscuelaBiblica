@@ -5,7 +5,7 @@ function AdminDashboard({
     mantenimiento, onToggleMantenimiento, onApprove, onDelete, onToggleModal, 
     onDeleteCampo, onResetLecciones, onCrearEntrega, onBorrarEntrega, onAssignGroup,
     inventarioDatos, onActualizarInventario, onCerrarJornada,
-    fondoTotal, fondoSecretariaTotal
+    fondoTotal, fondoSecretariaTotal, onEdit
 }) {
     const [busqueda, setBusqueda] = useState('');
     const [vistaActual, setVistaActual] = useState('inicio'); 
@@ -13,7 +13,7 @@ function AdminDashboard({
     const [expandirFiltroAdmin, setExpandirFiltroAdmin] = useState(false);
     const [campoExpandido, setCampoExpandido] = useState(null); 
     const [campoResetUI, setCampoResetUI] = useState(null); 
-    const [rolExpandido, setRolExpandido] = useState(null); // NUEVO ESTADO PARA ACORDEÓN DE ROLES
+    const [rolExpandido, setRolExpandido] = useState(null); 
     
     const [subVistaAdminLogistica, setSubVistaAdminLogistica] = useState('bodega'); 
     const [edadMin, setEdadMin] = useState('');
@@ -28,6 +28,7 @@ function AdminDashboard({
     const formatoFecha = (f) => {
         if (!f) return '';
         const p = f.split('-');
+        if (p.length !== 3) return f;
         return `${p[2]}/${p[1]}/${p[0]}`; 
     };
     const textoFechas = datosGlobalesAsistencia?.rango ? `${formatoFecha(datosGlobalesAsistencia.rango.inicio).substring(0,5)} - ${formatoFecha(datosGlobalesAsistencia.rango.fin).substring(0,5)}` : 'Calculando...';
@@ -50,7 +51,6 @@ function AdminDashboard({
     const activos = maestros.filter(m => m.estado === 'Activo');
     const listaAdminVisible = maestros.filter(m => m.nombre.toLowerCase().includes(busqueda.toLowerCase()) || (m.campo && m.campo.toLowerCase().includes(busqueda.toLowerCase())));
     
-    // --- NUEVA LÓGICA: AGRUPAR PERSONAL POR ROL ---
     const gruposPersonal = {
         'MAESTRO': [], 'AUXILIAR': [], 'LOGISTICA': [], 'SECRETARIA': [], 'TESORERO': [], 'Dirección': []
     };
@@ -565,11 +565,15 @@ function AdminDashboard({
                                                             <p className="text-[9px] text-slate-400 font-bold uppercase mt-0.5 truncate">
                                                                 {m.campo ? `Campo: ${m.campo}` : m.grupo ? `Grupo: ${m.grupo}` : 'Global'} • <span className="text-indigo-400">{m.edad ? `${m.edad} Años` : 'Edad N/D'}</span>
                                                             </p>
+                                                            <p className="text-[9px] text-slate-500 mt-0.5 font-bold truncate">
+                                                                Nacimiento: {m.fechaNacimiento ? formatoFecha(m.fechaNacimiento) : 'No registrada'}
+                                                            </p>
                                                         </div>
                                                     </div>
-                                                    <div className="flex space-x-1.5 shrink-0">
-                                                        <button onClick={() => onEdit(m)} className="text-indigo-400 w-8 h-8 flex items-center justify-center bg-indigo-50 hover:bg-indigo-100 rounded-xl transition-colors shadow-sm"><i className="fas fa-edit"></i></button>
+                                                    {/* ICONOS APILADOS: BORRAR ARRIBA, EDITAR ABAJO */}
+                                                    <div className="flex flex-col space-y-1.5 shrink-0 ml-2">
                                                         <button onClick={() => onDelete(m)} className="text-rose-400 w-8 h-8 flex items-center justify-center bg-rose-50 hover:bg-rose-100 rounded-xl transition-colors shadow-sm"><i className="fas fa-trash"></i></button>
+                                                        <button onClick={() => onEdit(m)} className="text-indigo-400 w-8 h-8 flex items-center justify-center bg-indigo-50 hover:bg-indigo-100 rounded-xl transition-colors shadow-sm"><i className="fas fa-edit"></i></button>
                                                     </div>
                                                 </div>
                                             ))}
