@@ -126,14 +126,23 @@ function App() {
         if (diaNac && mesNac && anioNac) { setEdadCalculada(calcularEdad(`${anioNac}-${mesNac}-${diaNac}`)); } else { setEdadCalculada(null); }
     }, [diaNac, mesNac, anioNac]);
 
-    const handleLogin = async (rol, clave, nombre, campo) => {
+    // --- NUEVO: HANDLE LOGIN RECIBE FECHA Y EDAD ---
+    const handleLogin = async (rol, clave, nombre, campo, fechaNacimiento, edad) => {
         if (mantenimiento && rol !== 'ADMIN') return { exito: false, mensaje: "El sistema está en Mantenimiento." };
         if (!AuthService.verificar(rol, clave)) return { exito: false, mensaje: "Clave incorrecta." };
         if (rol === 'ADMIN') { setUsuario(rol); AuthService.guardarSesion(rol, null); return { exito: true }; }
         try {
             const snapshot = await window.db.collection('maestros').where('nombre', '==', nombre.trim()).where('clase', '==', rol).get();
-            if (snapshot.empty) { await MaestrosService.guardar({ nombre: nombre.trim(), clase: rol, campo: campo || '', telefono: '', grupo: '' }, null, 'SISTEMA_AUTO'); return { exito: true, mensaje: "Solicitud enviada." }; } 
-            else { const doc = snapshot.docs[0]; const d = doc.data(); if (d.estado === 'Activo') { setUsuario(rol); const datos = { ...d, id: doc.id }; setDatosUsuarioActual(datos); AuthService.guardarSesion(rol, datos); return { exito: true }; } else return { exito: true, mensaje: "Pendiente." }; }
+            if (snapshot.empty) { 
+                // AQUÍ SE GUARDA LA EDAD Y LA FECHA
+                await MaestrosService.guardar({ nombre: nombre.trim(), clase: rol, campo: campo || '', telefono: '', grupo: '', fechaNacimiento: fechaNacimiento || '', edad: edad || null }, null, 'SISTEMA_AUTO'); 
+                return { exito: true, mensaje: "Solicitud enviada." }; 
+            } 
+            else { 
+                const doc = snapshot.docs[0]; const d = doc.data(); 
+                if (d.estado === 'Activo') { setUsuario(rol); const datos = { ...d, id: doc.id }; setDatosUsuarioActual(datos); AuthService.guardarSesion(rol, datos); return { exito: true }; } 
+                else return { exito: true, mensaje: "Pendiente." }; 
+            }
         } catch (error) { return { exito: false, mensaje: "Error conexión." }; }
     };
 
@@ -142,7 +151,7 @@ function App() {
 
     const handleGuardarAlumno = async (e) => {
         e.preventDefault(); const fd = new FormData(e.target); const nombre = fd.get('nombre').trim(); const genero = fd.get('genero'); 
-        if (!nombre || !diaNac || !mesNac || !anioNac || !genero) { alert("Por favor completa todos los campos."); return; }
+        if (!nombre || !diaNac || !mesNac || !anioNac || !genero) { alert("Por favor completa todos los campos (incluyendo Día, Mes y Año)."); return; }
         const fechaFinal = `${anioNac}-${mesNac}-${diaNac}`; const edad = calcularEdad(fechaFinal);
         const datos = { nombre: nombre, fechaNacimiento: fechaFinal, edad: edad, genero: genero, maestroResponsable: datosUsuarioActual?.nombre, registradoPorId: datosUsuarioActual?.id, campo: datosUsuarioActual?.campo || 'Sin Campo', clase: 'General' };
         try {
@@ -159,26 +168,19 @@ function App() {
         setModalAlumno(true);
     };
 
-    // --- PROTECCIÓN FINANCIERA: ELIMINACIÓN SEGURA DE USUARIOS ---
     const handleBorrarMaestro = async () => { 
         if (!maestroABorrar) return; 
         try { 
             const nombreUser = maestroABorrar.nombre; 
-            
-            // Si es Secretaria o Tesorero, SOLO borramos su acceso, sin tocar nada más.
             if (maestroABorrar.clase === 'SECRETARIA' || maestroABorrar.clase === 'TESORERO') {
                 await window.db.collection('maestros').doc(maestroABorrar.id).delete();
                 alert(`El acceso de ${nombreUser} ha sido revocado. Todo el dinero y reportes siguen a salvo.`);
             } else {
-                // Si es maestro, hace su borrado normal (conservando a los niños)
                 await MaestrosService.eliminarConAlumnos(maestroABorrar.id, null); 
                 alert(`El usuario ${nombreUser} ha sido eliminado del sistema.`);
             }
-            
             setMaestroABorrar(null); 
-        } catch (e) { 
-            alert("Error al eliminar usuario."); 
-        } 
+        } catch (e) { alert("Error al eliminar usuario."); } 
     };
 
     const handleBorrarAlumno = async () => { if (!alumnoBorrar) return; try { await AlumnosService.eliminar(alumnoBorrar.id, alumnoBorrar.campo); setAlumnoBorrar(null); alert("Alumno eliminado y asistencia actualizada correctamente."); } catch (e) { alert("Error al eliminar alumno"); } };
@@ -277,10 +279,11 @@ function App() {
                 />
             </main>
 
-            {/* MODAL CON MENSAJE DE PROTECCIÓN ACTUALIZADO */}
+            {/* MODALES MANUALES ADMIN */}
             {modalAbierto && (<div className="fixed inset-0 bg-slate-900/40 backdrop-blur-md flex items-center justify-center z-50 p-4 animate-in fade-in"><div className="bg-white w-full max-w-md rounded-[32px] p-8 shadow-2xl animate-in slide-in-from-bottom max-h-[90vh] overflow-y-auto"><h2 className="text-2xl font-black text-slate-800 mb-6">{maestroEdicion ? 'Editar' : 'Inscribir'}</h2><form onSubmit={handleGuardar} className="space-y-4"><input type="text" name="nombre" required defaultValue={maestroEdicion?.nombre || ''} className="w-full p-4 bg-slate-50 rounded-2xl outline-none" placeholder="Nombre" />
             <select name="clase" defaultValue={maestroEdicion?.clase || 'MAESTRO'} className="w-full p-4 bg-slate-50 rounded-2xl outline-none bg-white border border-slate-100">{['MAESTRO', 'AUXILIAR', 'LOGISTICA', 'SECRETARIA', 'TESORERO', 'Dirección'].map(c => <option key={c} value={c}>{c}</option>)}</select>
             <select name="campo" defaultValue={maestroEdicion?.campo || ''} className="w-full p-4 bg-slate-50 rounded-2xl outline-none bg-white border border-slate-100"><option value="">-- Ninguno --</option>{camposDisponibles.map(c => <option key={c} value={c}>{c}</option>)}</select><input type="tel" name="telefono" defaultValue={maestroEdicion?.telefono || ''} className="w-full p-4 bg-slate-50 rounded-2xl outline-none" placeholder="WhatsApp" /><div className="pt-4 flex flex-col space-y-3"><button type="submit" className="w-full py-4 bg-indigo-600 text-white font-black rounded-2xl shadow-xl">Guardar</button><button type="button" onClick={() => setModalAbierto(false)} className="text-slate-400 font-bold text-xs uppercase">Cancelar</button></div></form></div></div>)}
+            
             {modalAlumno && ( <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-md flex items-center justify-center z-50 p-4 animate-in fade-in"><div className="bg-white w-full max-w-md rounded-[32px] p-8 shadow-2xl animate-in slide-in-from-bottom"><div className="w-16 h-16 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mx-auto mb-4 text-3xl"><i className="fas fa-child"></i></div><h2 className="text-2xl font-black text-slate-800 mb-2 text-center">{alumnoEdicion ? 'Editar' : 'Registrar'}</h2><form onSubmit={handleGuardarAlumno} className="space-y-4 mt-4"><input type="text" name="nombre" required defaultValue={alumnoEdicion?.nombre || ''} placeholder="Nombre Completo" className="w-full p-4 bg-slate-50 rounded-2xl outline-none" /><label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1 block mb-[-10px]">Fecha de Nacimiento</label><div className="flex space-x-2"><select className="w-1/3 p-3 bg-slate-50 rounded-2xl outline-none font-bold text-slate-600" value={diaNac} onChange={e=>setDiaNac(e.target.value)} required><option value="" disabled>Día</option>{Array.from({length: 31}, (_, i) => i + 1).map(d => <option key={d} value={d.toString().padStart(2, '0')}>{d}</option>)}</select><select className="w-1/3 p-3 bg-slate-50 rounded-2xl outline-none font-bold text-slate-600" value={mesNac} onChange={e=>setMesNac(e.target.value)} required><option value="" disabled>Mes</option>{['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'].map((m, i) => <option key={m} value={(i+1).toString().padStart(2, '0')}>{m}</option>)}</select><select className="w-1/3 p-3 bg-slate-50 rounded-2xl outline-none font-bold text-slate-600" value={anioNac} onChange={e=>setAnioNac(e.target.value)} required><option value="" disabled>Año</option>{Array.from({length: 25}, (_, i) => new Date().getFullYear() - i).map(a => <option key={a} value={a}>{a}</option>)}</select></div><select name="genero" required defaultValue={alumnoEdicion?.genero || ''} className="w-full p-4 bg-slate-50 rounded-2xl outline-none bg-white border border-slate-100 text-slate-600 font-bold"><option value="">Seleccionar Género</option><option value="M">Masculino</option><option value="F">Femenino</option></select>{edadCalculada !== null && (<div className="bg-emerald-50 p-4 rounded-2xl border border-emerald-100 flex items-center justify-between"><span className="text-emerald-800 text-xs font-bold uppercase tracking-widest">Edad detectada:</span><span className="text-2xl font-black text-emerald-600">{edadCalculada} Años</span></div>)}<div className="pt-2 flex flex-col space-y-3"><button type="submit" className="w-full py-4 bg-emerald-500 hover:bg-emerald-600 active:scale-95 transition-all text-white font-black rounded-2xl shadow-xl">Guardar</button><button type="button" onClick={() => { setModalAlumno(false); setAlumnoEdicion(null); setDiaNac(''); setMesNac(''); setAnioNac(''); }} className="text-slate-400 font-bold text-xs uppercase tracking-widest">Cancelar</button></div></form></div></div>)}
             {maestroABorrar && (
                 <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-[60] p-6 animate-in fade-in">
