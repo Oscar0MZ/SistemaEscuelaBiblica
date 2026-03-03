@@ -5,6 +5,11 @@ function MaestroDashboard({
     onOpenAlumnoModal, onEditAlumno, onDeleteAlumno, onSaveAsistencia
 }) {
     const [vistaActual, setVistaActual] = useState('inicio'); 
+    
+    // Estados para la pestaña de Alumnos
+    const [subVistaGestion, setSubVistaGestion] = useState('directorio'); // 'directorio' o 'cumpleanos'
+    const [mesCumpleExpandido, setMesCumpleExpandido] = useState(null);
+
     const [listaAsistencia, setListaAsistencia] = useState({});
     const [subVistaReporte, setSubVistaReporte] = useState('ranking');
     const [fechaInicioRanking, setFechaInicioRanking] = useState('');
@@ -80,6 +85,40 @@ function MaestroDashboard({
         if (exito) setVistaActual('inicio');
     };
 
+    // --- LÓGICA PARA AGRUPAR CUMPLEAÑOS ---
+    const mesesNombres = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
+    
+    const agruparCumpleanos = () => {
+        const grupos = Array.from({length: 12}, (_, i) => ({
+            mesNum: (i + 1).toString().padStart(2, '0'),
+            nombreMes: mesesNombres[i],
+            ninos: []
+        }));
+        
+        const anioActual = new Date().getFullYear();
+
+        alumnos.forEach(a => {
+            if (a.fechaNacimiento) {
+                const partes = a.fechaNacimiento.split('-');
+                if (partes.length === 3) {
+                    const anioNac = parseInt(partes[0], 10);
+                    const mIndex = parseInt(partes[1], 10) - 1;
+                    if(mIndex >= 0 && mIndex < 12) {
+                        grupos[mIndex].ninos.push({
+                            ...a,
+                            diaNac: parseInt(partes[2], 10),
+                            edadA Cumplir: anioActual - anioNac // Calcula cuántos años cumple este año
+                        });
+                    }
+                }
+            }
+        });
+        
+        grupos.forEach(g => g.ninos.sort((a, b) => a.diaNac - b.diaNac));
+        return grupos;
+    };
+    const cumpleanosAgrupados = agruparCumpleanos();
+
     const NavButton = ({ id, icon, label, width = 'w-[70px]' }) => (
         <button onClick={() => setVistaActual(id)} className={`flex flex-col items-center justify-center ${width} h-14 rounded-2xl transition-all ${vistaActual === id ? 'text-indigo-600 bg-indigo-50 font-black' : 'text-slate-400 hover:text-slate-600 font-bold'}`}>
             <i className={`fas ${icon} text-xl mb-1 ${vistaActual === id ? 'animate-bounce' : ''}`}></i><span className="text-[9px] tracking-wide">{label}</span>
@@ -124,7 +163,7 @@ function MaestroDashboard({
                 <div className={`w-full p-6 rounded-[32px] text-left relative overflow-hidden group shadow-lg ${estaBloqueada ? 'bg-slate-50 border border-slate-200' : asistenciaTomada ? 'bg-white border border-slate-100' : 'bg-rose-500 text-white shadow-rose-200'}`}>
                     {asistenciaTomada ? (
                         <>
-                            <div className="flex justify-between items-center mb-6"><h3 className={`font-bold text-sm flex items-center ${estaBloqueada ? 'text-slate-500' : 'text-slate-700'}`}><i className={`fas ${estaBloqueada ? 'fa-lock' : 'fa-clipboard-check'} mr-2 text-lg ${estaBloqueada ? 'text-slate-400' : 'text-emerald-500'}`}></i> {estaBloqueada ? 'Asistencia (Solo Lectura)' : 'Asistencia Completada'}</h3>{estaBloqueada ? (<span className="text-[9px] bg-slate-200 text-slate-500 px-2 py-1 rounded-lg font-bold uppercase">Bloqueada</span>) : (<span className="text-[10px] bg-emerald-100 text-emerald-700 px-2 py-1 rounded-lg font-bold">TUYA</span>)}</div>
+                            <div className="flex justify-between items-center mb-6"><h3 className={`font-bold text-sm flex items-center ${estaBloqueada ? 'text-slate-500' : 'text-slate-700'}`}><i className={`fas ${estaBloqueada ? 'fa-lock' : 'fa-clipboard-check'} mr-2 text-lg ${estaBloqueada ? 'text-slate-400' : 'text-emerald-500'}`}></i> {estaBloqueada ? 'Asistencia (Lectura)' : 'Asistencia Completada'}</h3>{estaBloqueada ? (<span className="text-[9px] bg-slate-200 text-slate-500 px-2 py-1 rounded-lg font-bold uppercase">Bloqueada</span>) : (<span className="text-[10px] bg-emerald-100 text-emerald-700 px-2 py-1 rounded-lg font-bold">TUYA</span>)}</div>
                             <div className="flex justify-around text-center mb-6"><div><p className={`text-3xl font-black ${estaBloqueada ? 'text-slate-500' : 'text-emerald-500'}`}>{asistenciaHoy.totales.presentes}</p><p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">Presentes</p></div><div><p className={`text-3xl font-black ${estaBloqueada ? 'text-slate-500' : 'text-rose-500'}`}>{asistenciaHoy.totales.ausentes}</p><p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">Ausentes</p></div><div><p className={`text-3xl font-black ${estaBloqueada ? 'text-slate-500' : 'text-amber-500'}`}>{asistenciaHoy.totales.permisos}</p><p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">Permisos</p></div></div>
                             <div className={`pt-4 border-t ${estaBloqueada ? 'border-slate-200' : 'border-slate-50'}`}>
                                 <div className="flex justify-between text-[10px] font-bold text-slate-400 mb-2"><span>{!ultimoReg ? 'Material: Sin asignar' : `Material: Parte ${progInicio.parte} • Lección ${progInicio.leccion}`}</span><span className="text-emerald-500"><i className="fas fa-coins mr-1"></i>${Number(asistenciaHoy.ofrenda||0).toFixed(2)}</span></div>
@@ -224,36 +263,110 @@ function MaestroDashboard({
     if (vistaActual === 'gestion') {
         contenidoMaestro = (
             <div className="flex flex-col h-full pt-4 animate-in slide-in-from-right duration-300">
-                <div className="px-2 mb-6"><h2 className="text-2xl font-black text-slate-800">Directorio Alumnos</h2><p className="text-slate-400 text-xs">{alumnos.length} Registrados en tu campo</p></div>
-                <button onClick={onOpenAlumnoModal} className="w-full bg-emerald-500 p-5 rounded-[24px] shadow-lg shadow-emerald-200 active:scale-95 transition-all text-white flex items-center justify-between mb-6"><div className="flex items-center space-x-4"><div className="w-12 h-12 bg-white/20 rounded-xl flex items-center justify-center text-xl backdrop-blur-sm"><i className="fas fa-plus"></i></div><span className="font-bold text-lg">Inscribir Nuevo</span></div><i className="fas fa-chevron-right opacity-50 text-xl"></i></button>
+                <div className="px-2 mb-4"><h2 className="text-2xl font-black text-slate-800">Alumnos</h2><p className="text-slate-400 text-xs">Directorio y Cumpleaños</p></div>
+                
+                {/* SUB-PESTAÑAS DIRECTORIO VS CUMPLEAÑOS */}
+                <div className="flex px-2 space-x-2 mb-4">
+                    <button onClick={() => setSubVistaGestion('directorio')} className={`flex-1 py-2 rounded-xl text-xs font-bold transition-all ${subVistaGestion === 'directorio' ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-50 text-slate-400'}`}>
+                        <i className="fas fa-address-book mr-2"></i>Directorio
+                    </button>
+                    <button onClick={() => setSubVistaGestion('cumpleanos')} className={`flex-1 py-2 rounded-xl text-xs font-bold transition-all ${subVistaGestion === 'cumpleanos' ? 'bg-orange-100 text-orange-700' : 'bg-slate-50 text-slate-400'}`}>
+                        <i className="fas fa-birthday-cake mr-2"></i>Cumpleaños
+                    </button>
+                </div>
                 
                 <div className="flex-1 bg-white rounded-t-[40px] shadow-[0_-10px_40px_rgba(0,0,0,0.05)] border-t border-slate-100 p-6 overflow-hidden flex flex-col">
-                    <div className="overflow-y-auto space-y-4 pb-24 pr-2">
-                        {alumnos.map(nino => (
-                            <div key={nino.id} className="flex flex-col p-4 bg-slate-50 rounded-3xl border border-slate-100 shadow-sm">
-                                <div className="flex items-center space-x-3 mb-3">
-                                    <div className={`w-12 h-12 rounded-xl flex items-center justify-center text-lg font-black shrink-0 shadow-sm ${nino.genero === 'M' ? 'bg-sky-100 text-sky-600' : nino.genero === 'F' ? 'bg-pink-100 text-pink-600' : 'bg-white text-slate-400 border border-slate-200'}`}>
-                                        {nino.nombre.charAt(0)}
+                    
+                    {subVistaGestion === 'directorio' && (
+                        <div className="animate-in fade-in h-full flex flex-col">
+                            <button onClick={onOpenAlumnoModal} className="w-full bg-emerald-500 p-4 rounded-2xl shadow-lg shadow-emerald-200 active:scale-95 transition-all text-white flex items-center justify-center mb-6 shrink-0">
+                                <i className="fas fa-user-plus mr-2 text-lg"></i><span className="font-bold">Inscribir Nuevo Niño</span>
+                            </button>
+                            
+                            <div className="overflow-y-auto space-y-4 pb-24 pr-2 flex-1">
+                                {alumnos.length === 0 ? <p className="text-center text-slate-400 text-sm italic mt-8">No hay alumnos inscritos.</p> : 
+                                alumnos.map(nino => (
+                                    <div key={nino.id} className="flex flex-col p-4 bg-slate-50 rounded-3xl border border-slate-100 shadow-sm">
+                                        <div className="flex items-center space-x-3 mb-3">
+                                            <div className={`w-10 h-10 rounded-xl flex items-center justify-center text-sm font-black shrink-0 shadow-sm ${nino.genero === 'M' ? 'bg-sky-100 text-sky-600' : nino.genero === 'F' ? 'bg-pink-100 text-pink-600' : 'bg-white text-slate-400 border border-slate-200'}`}>
+                                                {nino.nombre.charAt(0)}
+                                            </div>
+                                            <div className="flex-1">
+                                                <p className="font-black text-slate-700 text-sm leading-tight">{nino.nombre}</p>
+                                            </div>
+                                        </div>
+                                        
+                                        <div className="flex justify-between items-center bg-white p-2 pl-3 rounded-2xl border border-slate-100 shadow-sm">
+                                            <p className="text-[11px] text-slate-500 font-bold tracking-wide">
+                                                <i className="fas fa-birthday-cake mr-1.5 text-rose-300"></i>{nino.edad} Años 
+                                                <span className="mx-2 text-slate-200">|</span> 
+                                                <span className={nino.genero === 'M' ? 'text-sky-500' : 'text-pink-500'}>{nino.genero === 'M' ? 'Niño' : nino.genero === 'F' ? 'Niña' : '-'}</span>
+                                            </p>
+                                            <div className="flex space-x-1.5">
+                                                <button onClick={() => onEditAlumno(nino)} className="w-8 h-8 flex items-center justify-center bg-indigo-50 text-indigo-500 hover:bg-indigo-100 rounded-xl transition-colors shadow-sm"><i className="fas fa-edit text-xs"></i></button>
+                                                <button onClick={() => onDeleteAlumno(nino)} className="w-8 h-8 flex items-center justify-center bg-rose-50 text-rose-500 hover:bg-rose-100 rounded-xl transition-colors shadow-sm"><i className="fas fa-trash text-xs"></i></button>
+                                            </div>
+                                        </div>
                                     </div>
-                                    <div className="flex-1">
-                                        <p className="font-black text-slate-700 text-base leading-tight">{nino.nombre}</p>
-                                    </div>
-                                </div>
-                                
-                                <div className="flex justify-between items-center bg-white p-2 pl-3 rounded-2xl border border-slate-100 shadow-sm">
-                                    <p className="text-[11px] text-slate-500 font-bold tracking-wide">
-                                        <i className="fas fa-birthday-cake mr-1.5 text-rose-300"></i>{nino.edad} Años 
-                                        <span className="mx-2 text-slate-200">|</span> 
-                                        <span className={nino.genero === 'M' ? 'text-sky-500' : 'text-pink-500'}>{nino.genero === 'M' ? 'Niño' : nino.genero === 'F' ? 'Niña' : '-'}</span>
-                                    </p>
-                                    <div className="flex space-x-1.5">
-                                        <button onClick={() => onEditAlumno(nino)} className="w-10 h-10 flex items-center justify-center bg-indigo-50 text-indigo-500 hover:bg-indigo-100 rounded-xl transition-colors shadow-sm"><i className="fas fa-edit"></i></button>
-                                        <button onClick={() => onDeleteAlumno(nino)} className="w-10 h-10 flex items-center justify-center bg-rose-50 text-rose-500 hover:bg-rose-100 rounded-xl transition-colors shadow-sm"><i className="fas fa-trash"></i></button>
-                                    </div>
-                                </div>
+                                ))}
                             </div>
-                        ))}
-                    </div>
+                        </div>
+                    )}
+
+                    {subVistaGestion === 'cumpleanos' && (
+                        <div className="animate-in fade-in h-full flex flex-col">
+                            <p className="text-xs text-slate-500 mb-4 text-center leading-relaxed">
+                                Aquí puedes ver todos los cumpleañeros de tu clase organizados por mes para que planifiques las celebraciones.
+                            </p>
+                            <div className="overflow-y-auto space-y-3 pb-24 pr-1">
+                                {cumpleanosAgrupados.map(grupo => {
+                                    const isExp = mesCumpleExpandido === grupo.mesNum;
+                                    const tieneNinos = grupo.ninos.length > 0;
+                                    
+                                    return (
+                                        <div key={grupo.mesNum} className="bg-white rounded-[24px] border border-slate-100 shadow-sm overflow-hidden transition-all duration-300">
+                                            <button onClick={() => setMesCumpleExpandido(isExp ? null : grupo.mesNum)} className="w-full p-4 flex justify-between items-center bg-white hover:bg-slate-50 transition-colors">
+                                                <div className="flex items-center space-x-3">
+                                                    <div className={`w-8 h-8 rounded-xl flex items-center justify-center font-black text-xs shadow-sm ${tieneNinos ? 'bg-orange-100 text-orange-600' : 'bg-slate-50 text-slate-300'}`}>
+                                                        {grupo.ninos.length}
+                                                    </div>
+                                                    <span className={`font-black text-sm uppercase tracking-wide ${tieneNinos ? 'text-slate-700' : 'text-slate-400'}`}>{grupo.nombreMes}</span>
+                                                </div>
+                                                <i className={`fas fa-chevron-down text-slate-300 transition-transform duration-300 ${isExp ? 'rotate-180' : ''}`}></i>
+                                            </button>
+                                            
+                                            {isExp && (
+                                                <div className="p-4 pt-0 border-t border-slate-100 bg-slate-50 animate-in slide-in-from-top-2 duration-200">
+                                                    {grupo.ninos.length === 0 ? (
+                                                        <p className="text-xs text-slate-400 italic text-center mt-3 mb-2">Nadie cumple años este mes.</p>
+                                                    ) : (
+                                                        <div className="space-y-2 mt-3">
+                                                            {grupo.ninos.map(nino => (
+                                                                <div key={nino.id} className="bg-white p-3 rounded-xl border border-slate-100 flex justify-between items-center shadow-sm">
+                                                                    <div className="flex items-center space-x-3">
+                                                                        <div className="w-8 h-8 bg-orange-50 text-orange-500 rounded-xl flex items-center justify-center font-black text-xs border border-orange-100">
+                                                                            {nino.diaNac}
+                                                                        </div>
+                                                                        <div>
+                                                                            <p className="font-bold text-slate-700 text-xs">{nino.nombre}</p>
+                                                                            <p className="text-[9px] text-slate-400 font-bold uppercase mt-0.5">
+                                                                                <i className="fas fa-gift mr-1 text-orange-300"></i>
+                                                                                Cumplirá <span className="text-orange-500">{nino.edadACumplir || '?'}</span> años
+                                                                            </p>
+                                                                        </div>
+                                                                    </div>
+                                                                </div>
+                                                            ))}
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            )}
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        </div>
+                    )}
                 </div>
             </div>
         );
@@ -292,10 +405,7 @@ function MaestroDashboard({
                                         <div><p className="font-bold text-slate-700 text-sm">{formatoFecha(h.fecha)}</p><p className="text-[9px] text-slate-400 uppercase mt-1">Por: {h.maestro}</p>{h.leccion && (<p className={`text-[9px] font-bold mt-1 ${h.leccionImpartida ? 'text-indigo-500' : 'text-rose-500'}`}><i className="fas fa-book-open mr-1"></i>Lección {h.leccion} {h.leccionImpartida ? '✅' : '❌'}</p>)}</div>
                                         <div className="flex flex-col space-y-1 items-end">
                                             <span className="text-[10px] font-black text-emerald-600 mb-1">${Number(h.ofrenda||0).toFixed(2)}</span>
-                                            <div className="flex space-x-1 text-[10px] font-bold">
-                                                <span className="bg-emerald-100 text-emerald-700 px-1.5 py-1 rounded">P: {h.totales?.presentes||0}</span>
-                                                <span className="bg-rose-100 text-rose-700 px-1.5 py-1 rounded">A: {h.totales?.ausentes||0}</span>
-                                            </div>
+                                            <div className="flex space-x-1 text-[10px] font-bold"><span className="bg-emerald-100 text-emerald-700 px-1.5 py-1 rounded">P: {h.totales?.presentes||0}</span><span className="bg-rose-100 text-rose-700 px-1.5 py-1 rounded">A: {h.totales?.ausentes||0}</span></div>
                                         </div>
                                     </div>
                                 ))}
