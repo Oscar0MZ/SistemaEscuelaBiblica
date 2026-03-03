@@ -58,6 +58,10 @@ function App() {
                 if (!u) { 
                     if (usuario === 'LOGISTICA') alert("Tu usuario ha sido eliminado y no puedes acceder al sistema hasta que te vuelvas a registrar.");
                     else alert("Tu usuario ha sido eliminado.");
+                    
+                    // --- NUEVA LÍNEA: ELIMINA EL AUTO-LOGIN SI EL ADMIN LO BORRÓ ---
+                    localStorage.removeItem('datos_recientes_login');
+                    
                     handleLogout(); 
                 }
                 else { 
@@ -250,7 +254,6 @@ function App() {
     const handleActualizarInventario = async (cantidadAgregada) => { try { const docRef = window.db.collection('sistema').doc('inventario'); const data = inventarioDatos; await docRef.set({ historicoRecibido: (data.historicoRecibido || 0) + cantidadAgregada, actualRecibido: (data.actualRecibido || 0) + cantidadAgregada }, { merge: true }); alert(`✅ Se agregaron ${cantidadAgregada} paquetes al stock actual y al histórico.`); } catch(e) { alert("Error al guardar el inventario."); } };
     const handleCerrarJornada = async (rutasParaArchivar) => { try { await window.db.collection('sistema').doc('inventario').set({ actualRecibido: 0 }, { merge: true }); if (rutasParaArchivar && rutasParaArchivar.length > 0) { const batch = window.db.batch(); rutasParaArchivar.forEach(ruta => { const ref = window.db.collection('entregas').doc(ruta.id); batch.update(ref, { archivado: true }); }); await batch.commit(); } alert("🏁 Jornada Finalizada."); } catch (e) { alert("Error."); } };
 
-    // --- NUEVO: LÓGICA DE CUMPLEAÑOS SEMANAL AUTOMÁTICA ---
     const hoy = new Date();
     const mesHoy = (hoy.getMonth() + 1).toString().padStart(2, '0');
     const diaHoy = hoy.getDate().toString().padStart(2, '0');
@@ -281,7 +284,7 @@ function App() {
             if (mmdd === mmddHoy) {
                 cumpleanerosHoy.push(m);
             } else if (esDomingo && diasPasadosMap[mmdd]) {
-                m.diaCumplePasado = diasPasadosMap[mmdd]; // Guarda qué día fue ("Martes")
+                m.diaCumplePasado = diasPasadosMap[mmdd]; 
                 cumpleanerosSemana.push(m);
             }
         }
@@ -310,7 +313,6 @@ function App() {
                 <button onClick={handleLogout} className="w-10 h-10 bg-slate-50 text-slate-400 rounded-xl hover:text-rose-500 transition-all"><i className="fas fa-sign-out-alt"></i></button>
             </header>
 
-            {/* --- BANNERS DE CUMPLEAÑOS --- */}
             {soyCumpleanero && (
                 <div className="bg-gradient-to-r from-amber-400 to-orange-500 text-white p-3 text-center shadow-md animate-in slide-in-from-top-2 z-30 relative">
                     <p className="font-black text-sm">🎉 ¡Muchas Felicidades en tu cumpleaños, {datosUsuarioActual?.nombre?.split(' ')[0]}!</p>
@@ -327,7 +329,6 @@ function App() {
                 </div>
             )}
 
-            {/* BANNER DE CUMPLEAÑEROS DE LA SEMANA (SOLO LOS DOMINGOS) */}
             {esDomingo && cumpleanerosSemana.length > 0 && (
                 <div className="bg-gradient-to-r from-sky-400 to-blue-500 text-white p-3 text-center shadow-md animate-in slide-in-from-top-2 z-30 relative">
                     <p className="font-black text-xs">🎈 Cumpleañeros de la semana</p>
