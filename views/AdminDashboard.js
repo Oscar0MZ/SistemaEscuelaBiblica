@@ -5,7 +5,7 @@ function AdminDashboard({
     mantenimiento, onToggleMantenimiento, onApprove, onDelete, onToggleModal, 
     onDeleteCampo, onResetLecciones, onCrearEntrega, onBorrarEntrega, onAssignGroup,
     inventarioDatos, onActualizarInventario, onCerrarJornada,
-    fondoTotal, fondoSecretariaTotal // RECIBIMOS LOS FONDOS PARA LA AUDITORÍA DEL DIRECTOR
+    fondoTotal, fondoSecretariaTotal
 }) {
     const [busqueda, setBusqueda] = useState('');
     const [vistaActual, setVistaActual] = useState('inicio'); 
@@ -13,6 +13,7 @@ function AdminDashboard({
     const [expandirFiltroAdmin, setExpandirFiltroAdmin] = useState(false);
     const [campoExpandido, setCampoExpandido] = useState(null); 
     const [campoResetUI, setCampoResetUI] = useState(null); 
+    const [rolExpandido, setRolExpandido] = useState(null); // NUEVO ESTADO PARA ACORDEÓN DE ROLES
     
     const [subVistaAdminLogistica, setSubVistaAdminLogistica] = useState('bodega'); 
     const [edadMin, setEdadMin] = useState('');
@@ -49,6 +50,18 @@ function AdminDashboard({
     const activos = maestros.filter(m => m.estado === 'Activo');
     const listaAdminVisible = maestros.filter(m => m.nombre.toLowerCase().includes(busqueda.toLowerCase()) || (m.campo && m.campo.toLowerCase().includes(busqueda.toLowerCase())));
     
+    // --- NUEVA LÓGICA: AGRUPAR PERSONAL POR ROL ---
+    const gruposPersonal = {
+        'MAESTRO': [], 'AUXILIAR': [], 'LOGISTICA': [], 'SECRETARIA': [], 'TESORERO': [], 'Dirección': []
+    };
+    listaAdminVisible.forEach(m => {
+        if (m.estado === 'Activo') {
+            if (gruposPersonal[m.clase]) gruposPersonal[m.clase].push(m);
+            else gruposPersonal[m.clase] = [m];
+        }
+    });
+    const rolesConGente = Object.keys(gruposPersonal).filter(k => gruposPersonal[k].length > 0);
+
     const camposActivos = [...new Set([...maestros.filter(m => m.clase !== 'LOGISTICA' && m.campo).map(m => m.campo), ...todosLosAlumnos.map(a => a.campo), ...historialVisible.map(h => h.campo)].filter(Boolean))].sort();
     const camposFijos = ["La Isla", "Las Delicias", "El Amatal", "El Manguito", "Buenos Aires", "Corozal #1", "El Porvenir", "El Caulote", "Corozal #2", "Valle Encantado", "La Playa"];
 
@@ -71,7 +84,6 @@ function AdminDashboard({
     if (vistaActual === 'inicio') {
         let tp = 0, ta = 0, tperm = 0; todasAsistencias.forEach(r => { if(r.totales){ tp+=r.totales.presentes; ta+=r.totales.ausentes; tperm+=r.totales.permisos; } });
         
-        // MATEMÁTICA DE AUDITORÍA
         const diferenciaFinanzas = (fondoTotal || 0) - (fondoSecretariaTotal || 0);
 
         contenidoAdmin = (
@@ -83,7 +95,6 @@ function AdminDashboard({
 
                 {pendientes.length > 0 && (<div className="bg-amber-50 border border-amber-100 p-5 rounded-[32px]"><h3 className="text-amber-800 font-bold text-sm mb-3"><i className="fas fa-user-clock mr-2"></i> Solicitudes ({pendientes.length})</h3><div className="space-y-3">{pendientes.map(p => (<div key={p.id} className="bg-white p-4 rounded-2xl shadow-sm flex justify-between items-center border border-amber-100"><div><p className="font-bold text-slate-700 text-sm">{p.nombre}</p><span className="text-[10px] text-slate-400 font-bold uppercase">{p.clase} - {p.campo}</span></div><div className="flex space-x-2"><button onClick={() => onApprove(p.id)} className="w-9 h-9 bg-emerald-500 text-white rounded-xl"><i className="fas fa-check"></i></button><button onClick={() => onDelete(p)} className="w-9 h-9 bg-rose-100 text-rose-500 rounded-xl"><i className="fas fa-times"></i></button></div></div>))}</div></div>)}
                 
-                {/* NUEVA TARJETA DE AUDITORÍA PARA EL DIRECTOR */}
                 <div className="bg-slate-800 rounded-[32px] border border-slate-700 p-6 shadow-xl relative overflow-hidden mx-1">
                     <div className="absolute top-0 right-0 w-32 h-32 bg-white opacity-5 rounded-bl-[100px] pointer-events-none"></div>
                     <div className="flex justify-between items-center mb-4 relative z-10">
@@ -522,13 +533,52 @@ function AdminDashboard({
 
     if (vistaActual === 'personal') {
         contenidoAdmin = (
-            <div className="space-y-4 animate-in slide-in-from-right duration-300 h-full flex flex-col">
+            <div className="space-y-4 animate-in slide-in-from-right duration-300 h-full flex flex-col pt-2">
                 <div className="px-2 mb-2"><h2 className="text-2xl font-black text-slate-800">Directorio Personal</h2><p className="text-slate-400 text-xs">{activos.length} Miembros Activos</p></div>
-                <div className="flex items-center bg-white rounded-2xl px-5 py-4 shadow-sm border border-slate-100"><i className="fas fa-search text-slate-300 mr-3 text-lg"></i><input type="text" placeholder="Buscar..." className="bg-transparent w-full outline-none text-sm font-bold text-slate-700" value={busqueda} onChange={(e) => setBusqueda(e.target.value)} /></div>
-                <div className="flex-1 overflow-y-auto space-y-3 pb-24 pr-2 mt-4">
-                    {listaAdminVisible.map(m => (
-                        <div key={m.id} className="flex items-center justify-between p-4 bg-white rounded-2xl shadow-sm border border-slate-100"><div className="flex items-center space-x-4"><div className="w-12 h-12 bg-indigo-50 text-indigo-600 rounded-2xl flex items-center justify-center font-bold text-lg">{m.nombre.charAt(0)}</div><div><p className="font-bold text-slate-700 text-sm">{m.nombre}</p><span className="text-[10px] text-slate-400 font-bold uppercase">{m.clase} {m.campo ? `- ${m.campo}` : m.grupo ? `- ${m.grupo}` : ''}</span></div></div><div className="flex space-x-2"><button onClick={() => onEdit(m)} className="text-indigo-400 w-10 h-10 flex items-center justify-center bg-indigo-50 rounded-xl"><i className="fas fa-edit"></i></button><button onClick={() => onDelete(m)} className="text-rose-400 w-10 h-10 flex items-center justify-center bg-rose-50 rounded-xl"><i className="fas fa-trash"></i></button></div></div>
-                    ))}
+                <div className="flex items-center bg-white rounded-2xl px-5 py-4 shadow-sm border border-slate-100 mx-1"><i className="fas fa-search text-slate-300 mr-3 text-lg"></i><input type="text" placeholder="Buscar por nombre o campo..." className="bg-transparent w-full outline-none text-sm font-bold text-slate-700" value={busqueda} onChange={(e) => setBusqueda(e.target.value)} /></div>
+                
+                <div className="flex-1 overflow-y-auto space-y-3 pb-24 pr-1 mt-4 px-1">
+                    {rolesConGente.map(rolGrp => {
+                        const isExp = rolExpandido === rolGrp;
+                        const miembros = gruposPersonal[rolGrp];
+                        return (
+                            <div key={rolGrp} className="bg-white rounded-[24px] border border-slate-100 shadow-sm overflow-hidden">
+                                <button onClick={() => setRolExpandido(isExp ? null : rolGrp)} className="w-full p-4 flex justify-between items-center bg-white hover:bg-slate-50 transition-colors">
+                                    <div className="text-left">
+                                        <span className="font-black text-slate-700 text-sm uppercase tracking-wide">{rolGrp}</span>
+                                        <p className="text-[10px] text-slate-400 mt-1 font-bold">{miembros.length} registrados</p>
+                                    </div>
+                                    <div className={`w-8 h-8 flex items-center justify-center rounded-xl transition-colors shadow-sm ${isExp ? 'bg-indigo-500 text-white' : 'bg-slate-50 text-slate-400'}`}>
+                                        <i className={`fas fa-chevron-down transition-transform duration-300 ${isExp ? 'rotate-180' : ''}`}></i>
+                                    </div>
+                                </button>
+                                
+                                {isExp && (
+                                    <div className="p-4 pt-0 border-t border-slate-100 bg-slate-50 animate-in slide-in-from-top-2 duration-200">
+                                        <div className="space-y-2 mt-4 max-h-[350px] overflow-y-auto pr-1">
+                                            {miembros.map(m => (
+                                                <div key={m.id} className="bg-white p-3 rounded-2xl border border-slate-100 flex justify-between items-center shadow-sm">
+                                                    <div className="flex items-center space-x-3 w-3/4">
+                                                        <div className="w-10 h-10 bg-indigo-50 text-indigo-600 rounded-xl flex items-center justify-center font-black text-sm shrink-0">{m.nombre.charAt(0)}</div>
+                                                        <div className="truncate">
+                                                            <p className="font-bold text-slate-700 text-xs truncate">{m.nombre}</p>
+                                                            <p className="text-[9px] text-slate-400 font-bold uppercase mt-0.5 truncate">
+                                                                {m.campo ? `Campo: ${m.campo}` : m.grupo ? `Grupo: ${m.grupo}` : 'Global'} • <span className="text-indigo-400">{m.edad ? `${m.edad} Años` : 'Edad N/D'}</span>
+                                                            </p>
+                                                        </div>
+                                                    </div>
+                                                    <div className="flex space-x-1.5 shrink-0">
+                                                        <button onClick={() => onEdit(m)} className="text-indigo-400 w-8 h-8 flex items-center justify-center bg-indigo-50 hover:bg-indigo-100 rounded-xl transition-colors shadow-sm"><i className="fas fa-edit"></i></button>
+                                                        <button onClick={() => onDelete(m)} className="text-rose-400 w-8 h-8 flex items-center justify-center bg-rose-50 hover:bg-rose-100 rounded-xl transition-colors shadow-sm"><i className="fas fa-trash"></i></button>
+                                                    </div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                        )
+                    })}
                 </div>
             </div>
         );
