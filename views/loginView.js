@@ -9,12 +9,30 @@ function LoginView({ onLogin }) {
     const [estadoPendiente, setEstadoPendiente] = useState(false); 
     const [loading, setLoading] = useState(false);
 
-    // NUEVOS ESTADOS PARA FECHA DE NACIMIENTO
+    // ESTADOS PARA FECHA DE NACIMIENTO
     const [diaNac, setDiaNac] = useState('');
     const [mesNac, setMesNac] = useState('');
     const [anioNac, setAnioNac] = useState('');
 
     const camposDisponibles = ["La Isla", "Las Delicias", "El Amatal", "El Manguito", "Buenos Aires", "Corozal #1", "El Porvenir", "El Caulote", "Corozal #2", "Valle Encantado", "La Playa"];
+
+    // --- NUEVO: CARGAR DATOS GUARDADOS AL ABRIR LA PANTALLA ---
+    useEffect(() => {
+        const datosGuardados = localStorage.getItem('datos_recientes_login');
+        if (datosGuardados) {
+            try {
+                const parsed = JSON.parse(datosGuardados);
+                if (parsed.rol) setRol(parsed.rol);
+                if (parsed.nombre) setNombre(parsed.nombre);
+                if (parsed.campo) setCampo(parsed.campo);
+                if (parsed.diaNac) setDiaNac(parsed.diaNac);
+                if (parsed.mesNac) setMesNac(parsed.mesNac);
+                if (parsed.anioNac) setAnioNac(parsed.anioNac);
+            } catch (e) {
+                console.error("Error leyendo datos guardados");
+            }
+        }
+    }, []);
 
     const calcularEdad = (f) => { 
         if (!f) return null; const h = new Date(); const c = new Date(f); 
@@ -38,16 +56,19 @@ function LoginView({ onLogin }) {
             setLoading(false); return;
         }
 
-        // Validación de fecha para usuarios nuevos
         if (rol !== 'ADMIN' && (!diaNac || !mesNac || !anioNac)) {
             setError('Debes ingresar tu fecha de nacimiento completa.');
             setLoading(false); return;
         }
 
+        // --- NUEVO: GUARDAR DATOS EN MEMORIA (EXCEPTO LA CLAVE) ---
+        localStorage.setItem('datos_recientes_login', JSON.stringify({
+            rol: rol, nombre: nombre, campo: campo, diaNac: diaNac, mesNac: mesNac, anioNac: anioNac
+        }));
+
         const fechaNacimiento = rol !== 'ADMIN' ? `${anioNac}-${mesNac}-${diaNac}` : null;
         const edad = rol !== 'ADMIN' ? calcularEdad(fechaNacimiento) : null;
 
-        // Pasamos la fecha y edad a App.js
         const res = await onLogin(rol, clave, nombre, campo, fechaNacimiento, edad);
         
         if (!res.exito) {
@@ -60,9 +81,25 @@ function LoginView({ onLogin }) {
         setLoading(false);
     };
 
+    // Función para limpiar el formulario si el usuario quiere entrar como alguien más
+    const limpiarFormulario = () => {
+        setRol(''); setNombre(''); setCampo(''); setClave(''); 
+        setDiaNac(''); setMesNac(''); setAnioNac('');
+        setError(''); setEstadoPendiente(false);
+        localStorage.removeItem('datos_recientes_login');
+    };
+
     return (
         <div className="flex flex-col items-center justify-center min-h-[100dvh] px-6 bg-slate-100 py-10">
-            <div className="w-full max-w-sm bg-white p-8 rounded-[32px] shadow-2xl animate-in zoom-in-95">
+            <div className="w-full max-w-sm bg-white p-8 rounded-[32px] shadow-2xl animate-in zoom-in-95 relative">
+                
+                {/* BOTÓN PARA LIMPIAR DATOS */}
+                {(rol || nombre) && !estadoPendiente && (
+                    <button onClick={limpiarFormulario} className="absolute top-6 right-6 w-8 h-8 bg-slate-50 text-slate-400 rounded-full flex items-center justify-center hover:bg-rose-50 hover:text-rose-500 transition-colors" title="Cambiar usuario">
+                        <i className="fas fa-sync-alt"></i>
+                    </button>
+                )}
+
                 <div className="w-20 h-20 bg-indigo-50 text-indigo-600 rounded-full flex items-center justify-center text-4xl mx-auto mb-6 shadow-inner">
                     <i className="fas fa-church"></i>
                 </div>
@@ -100,7 +137,6 @@ function LoginView({ onLogin }) {
                         </div>
                     )}
 
-                    {/* NUEVO: FECHA DE NACIMIENTO EN EL LOGIN */}
                     {rol && rol !== 'ADMIN' && (
                         <div className="animate-in fade-in slide-in-from-top-2">
                             <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-2 mb-1 block">Fecha de Nacimiento</label>
