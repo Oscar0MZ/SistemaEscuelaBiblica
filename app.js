@@ -145,7 +145,26 @@ function App() {
     };
 
     const handleLogout = () => { setUsuario(null); setDatosUsuarioActual(null); setAlumnos([]); setTodosLosAlumnos([]); setHistorialAsistencias([]); setEntregasLogistica([]); AuthService.cerrarSesion(); };
-    const handleGuardar = async (e) => { e.preventDefault(); const d = Object.fromEntries(new FormData(e.target)); try { const n = await MaestrosService.guardar(d, maestroEdicion?.id, usuario); if (n && usuario !== 'ADMIN') MaestrosService.notificar(n); setModalAbierto(false); setMaestroEdicion(null); } catch (err) { alert("Error"); } };
+    
+    // --- ACTUALIZADO: GUARDAR EDICIÓN DEL PERSONAL DESDE EL PANEL ADMIN ---
+    const handleGuardar = async (e) => { 
+        e.preventDefault(); 
+        const d = Object.fromEntries(new FormData(e.target)); 
+        
+        // Incluir la fecha de nacimiento en la edición del maestro
+        if (diaNac && mesNac && anioNac) {
+            const fechaFinal = `${anioNac}-${mesNac}-${diaNac}`;
+            d.fechaNacimiento = fechaFinal;
+            d.edad = calcularEdad(fechaFinal);
+        }
+
+        try { 
+            const n = await MaestrosService.guardar(d, maestroEdicion?.id, usuario); 
+            if (n && usuario !== 'ADMIN') MaestrosService.notificar(n); 
+            setModalAbierto(false); setMaestroEdicion(null); 
+            setDiaNac(''); setMesNac(''); setAnioNac('');
+        } catch (err) { alert("Error"); } 
+    };
 
     const handleGuardarAlumno = async (e) => {
         e.preventDefault(); const fd = new FormData(e.target); const nombre = fd.get('nombre').trim(); const genero = fd.get('genero'); 
@@ -238,7 +257,6 @@ function App() {
     const handleActualizarInventario = async (cantidadAgregada) => { try { const docRef = window.db.collection('sistema').doc('inventario'); const data = inventarioDatos; await docRef.set({ historicoRecibido: (data.historicoRecibido || 0) + cantidadAgregada, actualRecibido: (data.actualRecibido || 0) + cantidadAgregada }, { merge: true }); alert(`✅ Se agregaron ${cantidadAgregada} paquetes al stock actual y al histórico.`); } catch(e) { alert("Error al guardar el inventario."); } };
     const handleCerrarJornada = async (rutasParaArchivar) => { try { await window.db.collection('sistema').doc('inventario').set({ actualRecibido: 0 }, { merge: true }); if (rutasParaArchivar && rutasParaArchivar.length > 0) { const batch = window.db.batch(); rutasParaArchivar.forEach(ruta => { const ref = window.db.collection('entregas').doc(ruta.id); batch.update(ref, { archivado: true }); }); await batch.commit(); } alert("🏁 Jornada Finalizada."); } catch (e) { alert("Error."); } };
 
-    // --- LÓGICA DE CUMPLEAÑOS (GLOBAL) ---
     const hoy = new Date();
     const mesHoy = (hoy.getMonth() + 1).toString().padStart(2, '0');
     const diaHoy = hoy.getDate().toString().padStart(2, '0');
@@ -246,7 +264,7 @@ function App() {
 
     const cumpleanerosHoy = maestros.filter(m => {
         if (m.estado !== 'Activo' || !m.fechaNacimiento) return false;
-        const partes = m.fechaNacimiento.split('-'); // [YYYY, MM, DD]
+        const partes = m.fechaNacimiento.split('-');
         if (partes.length === 3) {
             const mmdd = `${partes[1]}-${partes[2]}`;
             return mmdd === mmddHoy;
@@ -277,7 +295,6 @@ function App() {
                 <button onClick={handleLogout} className="w-10 h-10 bg-slate-50 text-slate-400 rounded-xl hover:text-rose-500 transition-all"><i className="fas fa-sign-out-alt"></i></button>
             </header>
 
-            {/* --- BANNER DE CUMPLEAÑOS --- */}
             {soyCumpleanero && (
                 <div className="bg-gradient-to-r from-amber-400 to-orange-500 text-white p-3 text-center shadow-md animate-in slide-in-from-top-2 z-30 relative">
                     <p className="font-black text-sm">🎉 ¡Muchas Felicidades en tu cumpleaños, {datosUsuarioActual?.nombre?.split(' ')[0]}!</p>
@@ -300,7 +317,21 @@ function App() {
                     historialAsistencias={historialAsistencias} entregasLogistica={entregasLogistica} 
                     usuario={usuario} datosUsuarioActual={datosUsuarioActual} mantenimiento={mantenimiento} onToggleMantenimiento={handleToggleMantenimiento}
                     inventarioDatos={inventarioDatos} onActualizarInventario={handleActualizarInventario} onCerrarJornada={handleCerrarJornada}
-                    onApprove={MaestrosService.aprobar} onDelete={setMaestroABorrar} onEdit={(m) => { setMaestroEdicion(m); setModalAbierto(true); }} onToggleModal={() => { setMaestroEdicion(null); setModalAbierto(true); }}
+                    onApprove={MaestrosService.aprobar} onDelete={setMaestroABorrar} 
+                    // AQUI CARGAMOS LAS FECHAS AL ABRIR EL EDITOR DEL ADMIN
+                    onEdit={(m) => { 
+                        setMaestroEdicion(m); 
+                        if (m.fechaNacimiento) {
+                            const p = m.fechaNacimiento.split('-');
+                            if(p.length === 3) { setAnioNac(p[0]); setMesNac(p[1]); setDiaNac(p[2]); }
+                        } else { setAnioNac(''); setMesNac(''); setDiaNac(''); }
+                        setModalAbierto(true); 
+                    }} 
+                    onToggleModal={() => { 
+                        setMaestroEdicion(null); 
+                        setAnioNac(''); setMesNac(''); setDiaNac(''); 
+                        setModalAbierto(true); 
+                    }}
                     onSaveAsistencia={handleGuardarAsistencia} onOpenAlumnoModal={handleAbrirModalAlumno} onEditAlumno={handleEditarAlumno} onDeleteAlumno={setAlumnoBorrar} onDeleteCampo={setCampoABorrar}
                     onResetLecciones={handleResetLecciones} onCrearEntrega={handleCrearEntrega} onActualizarEntrega={handleActualizarEntrega} onGuardarAvanceEntrega={handleGuardarAvanceEntrega} onBorrarEntrega={handleBorrarEntrega} onAssignGroup={handleAssignGroup}
                     
@@ -312,10 +343,27 @@ function App() {
                 />
             </main>
 
-            {/* MODALES */}
-            {modalAbierto && (<div className="fixed inset-0 bg-slate-900/40 backdrop-blur-md flex items-center justify-center z-50 p-4 animate-in fade-in"><div className="bg-white w-full max-w-md rounded-[32px] p-8 shadow-2xl animate-in slide-in-from-bottom max-h-[90vh] overflow-y-auto"><h2 className="text-2xl font-black text-slate-800 mb-6">{maestroEdicion ? 'Editar' : 'Inscribir'}</h2><form onSubmit={handleGuardar} className="space-y-4"><input type="text" name="nombre" required defaultValue={maestroEdicion?.nombre || ''} className="w-full p-4 bg-slate-50 rounded-2xl outline-none" placeholder="Nombre" />
+            {/* MODAL DE EDICIÓN DEL PERSONAL CON FECHA DE NACIMIENTO */}
+            {modalAbierto && (<div className="fixed inset-0 bg-slate-900/40 backdrop-blur-md flex items-center justify-center z-50 p-4 animate-in fade-in"><div className="bg-white w-full max-w-md rounded-[32px] p-8 shadow-2xl animate-in slide-in-from-bottom max-h-[90vh] overflow-y-auto"><h2 className="text-2xl font-black text-slate-800 mb-6">{maestroEdicion ? 'Editar Personal' : 'Inscribir Manual'}</h2><form onSubmit={handleGuardar} className="space-y-4"><input type="text" name="nombre" required defaultValue={maestroEdicion?.nombre || ''} className="w-full p-4 bg-slate-50 rounded-2xl outline-none" placeholder="Nombre Completo" />
+            
+            <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1 block mb-[-10px]">Fecha de Nacimiento</label>
+            <div className="flex space-x-2">
+                <select className="w-1/3 p-3 bg-slate-50 rounded-2xl outline-none font-bold text-slate-600" value={diaNac} onChange={e=>setDiaNac(e.target.value)} required>
+                    <option value="" disabled>Día</option>
+                    {Array.from({length: 31}, (_, i) => i + 1).map(d => <option key={d} value={d.toString().padStart(2, '0')}>{d}</option>)}
+                </select>
+                <select className="w-1/3 p-3 bg-slate-50 rounded-2xl outline-none font-bold text-slate-600" value={mesNac} onChange={e=>setMesNac(e.target.value)} required>
+                    <option value="" disabled>Mes</option>
+                    {['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'].map((m, i) => <option key={m} value={(i+1).toString().padStart(2, '0')}>{m}</option>)}
+                </select>
+                <select className="w-1/3 p-3 bg-slate-50 rounded-2xl outline-none font-bold text-slate-600" value={anioNac} onChange={e=>setAnioNac(e.target.value)} required>
+                    <option value="" disabled>Año</option>
+                    {Array.from({length: 80}, (_, i) => new Date().getFullYear() - 10 - i).map(a => <option key={a} value={a}>{a}</option>)}
+                </select>
+            </div>
+
             <select name="clase" defaultValue={maestroEdicion?.clase || 'MAESTRO'} className="w-full p-4 bg-slate-50 rounded-2xl outline-none bg-white border border-slate-100">{['MAESTRO', 'AUXILIAR', 'LOGISTICA', 'SECRETARIA', 'TESORERO', 'Dirección'].map(c => <option key={c} value={c}>{c}</option>)}</select>
-            <select name="campo" defaultValue={maestroEdicion?.campo || ''} className="w-full p-4 bg-slate-50 rounded-2xl outline-none bg-white border border-slate-100"><option value="">-- Ninguno --</option>{camposDisponibles.map(c => <option key={c} value={c}>{c}</option>)}</select><input type="tel" name="telefono" defaultValue={maestroEdicion?.telefono || ''} className="w-full p-4 bg-slate-50 rounded-2xl outline-none" placeholder="WhatsApp" /><div className="pt-4 flex flex-col space-y-3"><button type="submit" className="w-full py-4 bg-indigo-600 text-white font-black rounded-2xl shadow-xl">Guardar</button><button type="button" onClick={() => setModalAbierto(false)} className="text-slate-400 font-bold text-xs uppercase">Cancelar</button></div></form></div></div>)}
+            <select name="campo" defaultValue={maestroEdicion?.campo || ''} className="w-full p-4 bg-slate-50 rounded-2xl outline-none bg-white border border-slate-100"><option value="">-- Ninguno --</option>{camposDisponibles.map(c => <option key={c} value={c}>{c}</option>)}</select><input type="tel" name="telefono" defaultValue={maestroEdicion?.telefono || ''} className="w-full p-4 bg-slate-50 rounded-2xl outline-none" placeholder="Teléfono/WhatsApp" /><div className="pt-4 flex flex-col space-y-3"><button type="submit" className="w-full py-4 bg-indigo-600 text-white font-black rounded-2xl shadow-xl">Guardar Cambios</button><button type="button" onClick={() => {setModalAbierto(false); setDiaNac(''); setMesNac(''); setAnioNac('');}} className="text-slate-400 font-bold text-xs uppercase">Cancelar</button></div></form></div></div>)}
             {modalAlumno && ( <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-md flex items-center justify-center z-50 p-4 animate-in fade-in"><div className="bg-white w-full max-w-md rounded-[32px] p-8 shadow-2xl animate-in slide-in-from-bottom"><div className="w-16 h-16 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mx-auto mb-4 text-3xl"><i className="fas fa-child"></i></div><h2 className="text-2xl font-black text-slate-800 mb-2 text-center">{alumnoEdicion ? 'Editar' : 'Registrar'}</h2><form onSubmit={handleGuardarAlumno} className="space-y-4 mt-4"><input type="text" name="nombre" required defaultValue={alumnoEdicion?.nombre || ''} placeholder="Nombre Completo" className="w-full p-4 bg-slate-50 rounded-2xl outline-none" /><label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1 block mb-[-10px]">Fecha de Nacimiento</label><div className="flex space-x-2"><select className="w-1/3 p-3 bg-slate-50 rounded-2xl outline-none font-bold text-slate-600" value={diaNac} onChange={e=>setDiaNac(e.target.value)} required><option value="" disabled>Día</option>{Array.from({length: 31}, (_, i) => i + 1).map(d => <option key={d} value={d.toString().padStart(2, '0')}>{d}</option>)}</select><select className="w-1/3 p-3 bg-slate-50 rounded-2xl outline-none font-bold text-slate-600" value={mesNac} onChange={e=>setMesNac(e.target.value)} required><option value="" disabled>Mes</option>{['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'].map((m, i) => <option key={m} value={(i+1).toString().padStart(2, '0')}>{m}</option>)}</select><select className="w-1/3 p-3 bg-slate-50 rounded-2xl outline-none font-bold text-slate-600" value={anioNac} onChange={e=>setAnioNac(e.target.value)} required><option value="" disabled>Año</option>{Array.from({length: 25}, (_, i) => new Date().getFullYear() - i).map(a => <option key={a} value={a}>{a}</option>)}</select></div><select name="genero" required defaultValue={alumnoEdicion?.genero || ''} className="w-full p-4 bg-slate-50 rounded-2xl outline-none bg-white border border-slate-100 text-slate-600 font-bold"><option value="">Seleccionar Género</option><option value="M">Masculino</option><option value="F">Femenino</option></select>{edadCalculada !== null && (<div className="bg-emerald-50 p-4 rounded-2xl border border-emerald-100 flex items-center justify-between"><span className="text-emerald-800 text-xs font-bold uppercase tracking-widest">Edad detectada:</span><span className="text-2xl font-black text-emerald-600">{edadCalculada} Años</span></div>)}<div className="pt-2 flex flex-col space-y-3"><button type="submit" className="w-full py-4 bg-emerald-500 hover:bg-emerald-600 active:scale-95 transition-all text-white font-black rounded-2xl shadow-xl">Guardar</button><button type="button" onClick={() => { setModalAlumno(false); setAlumnoEdicion(null); setDiaNac(''); setMesNac(''); setAnioNac(''); }} className="text-slate-400 font-bold text-xs uppercase tracking-widest">Cancelar</button></div></form></div></div>)}
             {maestroABorrar && (
                 <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-[60] p-6 animate-in fade-in">
@@ -327,7 +375,7 @@ function App() {
                             {maestroABorrar.clase === 'LOGISTICA' ? (
                                 <span className="text-rose-600 font-bold"><i className="fas fa-exclamation-circle mr-1"></i> Sus datos se borrarán.</span>
                             ) : maestroABorrar.clase === 'SECRETARIA' || maestroABorrar.clase === 'TESORERO' ? (
-                                <span className="text-emerald-600 font-bold"><i className="fas fa-shield-alt mr-1"></i> SEGURO: Todos sus registros financieros y fondos quedarán intactos en la base de datos global.</span>
+                                <span className="text-emerald-600 font-bold"><i className="fas fa-shield-alt mr-1"></i> SEGURO: Todos sus registros financieros y fondos quedarán intactos.</span>
                             ) : (
                                 <span className="text-emerald-600 font-bold"><i className="fas fa-shield-alt mr-1"></i> SEGURO: Los alumnos y la asistencia de su campo se conservarán seguros.</span>
                             )}
