@@ -85,7 +85,7 @@ function MaestroDashboard({
         if (exito) setVistaActual('inicio');
     };
 
-    // --- LÓGICA PARA AGRUPAR CUMPLEAÑOS ---
+    // --- LÓGICA PARA AGRUPAR CUMPLEAÑOS CORREGIDA ---
     const mesesNombres = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
     
     const agruparCumpleanos = () => {
@@ -107,7 +107,7 @@ function MaestroDashboard({
                         grupos[mIndex].ninos.push({
                             ...a,
                             diaNac: parseInt(partes[2], 10),
-                            edadA Cumplir: anioActual - anioNac // Calcula cuántos años cumple este año
+                            edadACumplir: anioActual - anioNac // <-- ESTA ERA LA LÍNEA DEL ERROR (SIN ESPACIO AHORA)
                         });
                     }
                 }
