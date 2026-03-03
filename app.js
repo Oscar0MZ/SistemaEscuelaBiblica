@@ -126,7 +126,6 @@ function App() {
         if (diaNac && mesNac && anioNac) { setEdadCalculada(calcularEdad(`${anioNac}-${mesNac}-${diaNac}`)); } else { setEdadCalculada(null); }
     }, [diaNac, mesNac, anioNac]);
 
-    // --- NUEVO: HANDLE LOGIN RECIBE FECHA Y EDAD ---
     const handleLogin = async (rol, clave, nombre, campo, fechaNacimiento, edad) => {
         if (mantenimiento && rol !== 'ADMIN') return { exito: false, mensaje: "El sistema está en Mantenimiento." };
         if (!AuthService.verificar(rol, clave)) return { exito: false, mensaje: "Clave incorrecta." };
@@ -134,7 +133,6 @@ function App() {
         try {
             const snapshot = await window.db.collection('maestros').where('nombre', '==', nombre.trim()).where('clase', '==', rol).get();
             if (snapshot.empty) { 
-                // AQUÍ SE GUARDA LA EDAD Y LA FECHA
                 await MaestrosService.guardar({ nombre: nombre.trim(), clase: rol, campo: campo || '', telefono: '', grupo: '', fechaNacimiento: fechaNacimiento || '', edad: edad || null }, null, 'SISTEMA_AUTO'); 
                 return { exito: true, mensaje: "Solicitud enviada." }; 
             } 
@@ -151,7 +149,7 @@ function App() {
 
     const handleGuardarAlumno = async (e) => {
         e.preventDefault(); const fd = new FormData(e.target); const nombre = fd.get('nombre').trim(); const genero = fd.get('genero'); 
-        if (!nombre || !diaNac || !mesNac || !anioNac || !genero) { alert("Por favor completa todos los campos (incluyendo Día, Mes y Año)."); return; }
+        if (!nombre || !diaNac || !mesNac || !anioNac || !genero) { alert("Por favor completa todos los campos."); return; }
         const fechaFinal = `${anioNac}-${mesNac}-${diaNac}`; const edad = calcularEdad(fechaFinal);
         const datos = { nombre: nombre, fechaNacimiento: fechaFinal, edad: edad, genero: genero, maestroResponsable: datosUsuarioActual?.nombre, registradoPorId: datosUsuarioActual?.id, campo: datosUsuarioActual?.campo || 'Sin Campo', clase: 'General' };
         try {
@@ -240,6 +238,25 @@ function App() {
     const handleActualizarInventario = async (cantidadAgregada) => { try { const docRef = window.db.collection('sistema').doc('inventario'); const data = inventarioDatos; await docRef.set({ historicoRecibido: (data.historicoRecibido || 0) + cantidadAgregada, actualRecibido: (data.actualRecibido || 0) + cantidadAgregada }, { merge: true }); alert(`✅ Se agregaron ${cantidadAgregada} paquetes al stock actual y al histórico.`); } catch(e) { alert("Error al guardar el inventario."); } };
     const handleCerrarJornada = async (rutasParaArchivar) => { try { await window.db.collection('sistema').doc('inventario').set({ actualRecibido: 0 }, { merge: true }); if (rutasParaArchivar && rutasParaArchivar.length > 0) { const batch = window.db.batch(); rutasParaArchivar.forEach(ruta => { const ref = window.db.collection('entregas').doc(ruta.id); batch.update(ref, { archivado: true }); }); await batch.commit(); } alert("🏁 Jornada Finalizada."); } catch (e) { alert("Error."); } };
 
+    // --- LÓGICA DE CUMPLEAÑOS (GLOBAL) ---
+    const hoy = new Date();
+    const mesHoy = (hoy.getMonth() + 1).toString().padStart(2, '0');
+    const diaHoy = hoy.getDate().toString().padStart(2, '0');
+    const mmddHoy = `${mesHoy}-${diaHoy}`;
+
+    const cumpleanerosHoy = maestros.filter(m => {
+        if (m.estado !== 'Activo' || !m.fechaNacimiento) return false;
+        const partes = m.fechaNacimiento.split('-'); // [YYYY, MM, DD]
+        if (partes.length === 3) {
+            const mmdd = `${partes[1]}-${partes[2]}`;
+            return mmdd === mmddHoy;
+        }
+        return false;
+    });
+
+    const soyCumpleanero = datosUsuarioActual && cumpleanerosHoy.some(c => c.id === datosUsuarioActual.id);
+    const otrosCumpleaneros = datosUsuarioActual ? cumpleanerosHoy.filter(c => c.id !== datosUsuarioActual.id) : cumpleanerosHoy;
+
     if (!usuario) return <LoginView onLogin={handleLogin} />;
     if (mantenimiento && usuario !== 'ADMIN') { return ( <div className="flex flex-col items-center justify-center min-h-[100dvh] max-w-md mx-auto bg-slate-900 p-8 text-center shadow-2xl animate-in zoom-in-95"><div className="w-32 h-32 bg-rose-500/20 text-rose-500 rounded-full flex items-center justify-center text-6xl mb-8 animate-pulse shadow-[0_0_40px_rgba(244,63,94,0.3)]"><i className="fas fa-tools"></i></div><h1 className="text-3xl font-black text-white mb-4">Sistema en<br/>Mantenimiento</h1><p className="text-slate-400 text-sm leading-relaxed mb-10">El Director está realizando ajustes.</p><button onClick={handleLogout} className="w-full py-4 bg-slate-800 hover:bg-slate-700 text-white font-black rounded-2xl transition-colors">Cerrar Sesión</button></div> ); }
 
@@ -259,6 +276,22 @@ function App() {
                 </div>
                 <button onClick={handleLogout} className="w-10 h-10 bg-slate-50 text-slate-400 rounded-xl hover:text-rose-500 transition-all"><i className="fas fa-sign-out-alt"></i></button>
             </header>
+
+            {/* --- BANNER DE CUMPLEAÑOS --- */}
+            {soyCumpleanero && (
+                <div className="bg-gradient-to-r from-amber-400 to-orange-500 text-white p-3 text-center shadow-md animate-in slide-in-from-top-2 z-30 relative">
+                    <p className="font-black text-sm">🎉 ¡Muchas Felicidades en tu cumpleaños, {datosUsuarioActual?.nombre?.split(' ')[0]}!</p>
+                    <p className="text-[10px] font-bold opacity-90">Que pases un día excelente y muy especial.</p>
+                </div>
+            )}
+            {!soyCumpleanero && otrosCumpleaneros.length > 0 && (
+                <div className="bg-gradient-to-r from-indigo-500 to-purple-600 text-white p-3 text-center shadow-md animate-in slide-in-from-top-2 z-30 relative">
+                    <p className="font-black text-xs">🎉 ¡Cumpleaños de hoy!</p>
+                    <p className="text-[10px] font-bold opacity-90 mt-0.5">
+                        No olvides felicitar a: {otrosCumpleaneros.map(c => `${c.nombre.split(' ')[0]} (${c.clase})`).join(', ')}
+                    </p>
+                </div>
+            )}
             
             <main className="flex-1 p-5 pb-28 bg-slate-50/50">
                 <DashboardView 
@@ -279,11 +312,10 @@ function App() {
                 />
             </main>
 
-            {/* MODALES MANUALES ADMIN */}
+            {/* MODALES */}
             {modalAbierto && (<div className="fixed inset-0 bg-slate-900/40 backdrop-blur-md flex items-center justify-center z-50 p-4 animate-in fade-in"><div className="bg-white w-full max-w-md rounded-[32px] p-8 shadow-2xl animate-in slide-in-from-bottom max-h-[90vh] overflow-y-auto"><h2 className="text-2xl font-black text-slate-800 mb-6">{maestroEdicion ? 'Editar' : 'Inscribir'}</h2><form onSubmit={handleGuardar} className="space-y-4"><input type="text" name="nombre" required defaultValue={maestroEdicion?.nombre || ''} className="w-full p-4 bg-slate-50 rounded-2xl outline-none" placeholder="Nombre" />
             <select name="clase" defaultValue={maestroEdicion?.clase || 'MAESTRO'} className="w-full p-4 bg-slate-50 rounded-2xl outline-none bg-white border border-slate-100">{['MAESTRO', 'AUXILIAR', 'LOGISTICA', 'SECRETARIA', 'TESORERO', 'Dirección'].map(c => <option key={c} value={c}>{c}</option>)}</select>
             <select name="campo" defaultValue={maestroEdicion?.campo || ''} className="w-full p-4 bg-slate-50 rounded-2xl outline-none bg-white border border-slate-100"><option value="">-- Ninguno --</option>{camposDisponibles.map(c => <option key={c} value={c}>{c}</option>)}</select><input type="tel" name="telefono" defaultValue={maestroEdicion?.telefono || ''} className="w-full p-4 bg-slate-50 rounded-2xl outline-none" placeholder="WhatsApp" /><div className="pt-4 flex flex-col space-y-3"><button type="submit" className="w-full py-4 bg-indigo-600 text-white font-black rounded-2xl shadow-xl">Guardar</button><button type="button" onClick={() => setModalAbierto(false)} className="text-slate-400 font-bold text-xs uppercase">Cancelar</button></div></form></div></div>)}
-            
             {modalAlumno && ( <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-md flex items-center justify-center z-50 p-4 animate-in fade-in"><div className="bg-white w-full max-w-md rounded-[32px] p-8 shadow-2xl animate-in slide-in-from-bottom"><div className="w-16 h-16 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mx-auto mb-4 text-3xl"><i className="fas fa-child"></i></div><h2 className="text-2xl font-black text-slate-800 mb-2 text-center">{alumnoEdicion ? 'Editar' : 'Registrar'}</h2><form onSubmit={handleGuardarAlumno} className="space-y-4 mt-4"><input type="text" name="nombre" required defaultValue={alumnoEdicion?.nombre || ''} placeholder="Nombre Completo" className="w-full p-4 bg-slate-50 rounded-2xl outline-none" /><label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1 block mb-[-10px]">Fecha de Nacimiento</label><div className="flex space-x-2"><select className="w-1/3 p-3 bg-slate-50 rounded-2xl outline-none font-bold text-slate-600" value={diaNac} onChange={e=>setDiaNac(e.target.value)} required><option value="" disabled>Día</option>{Array.from({length: 31}, (_, i) => i + 1).map(d => <option key={d} value={d.toString().padStart(2, '0')}>{d}</option>)}</select><select className="w-1/3 p-3 bg-slate-50 rounded-2xl outline-none font-bold text-slate-600" value={mesNac} onChange={e=>setMesNac(e.target.value)} required><option value="" disabled>Mes</option>{['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'].map((m, i) => <option key={m} value={(i+1).toString().padStart(2, '0')}>{m}</option>)}</select><select className="w-1/3 p-3 bg-slate-50 rounded-2xl outline-none font-bold text-slate-600" value={anioNac} onChange={e=>setAnioNac(e.target.value)} required><option value="" disabled>Año</option>{Array.from({length: 25}, (_, i) => new Date().getFullYear() - i).map(a => <option key={a} value={a}>{a}</option>)}</select></div><select name="genero" required defaultValue={alumnoEdicion?.genero || ''} className="w-full p-4 bg-slate-50 rounded-2xl outline-none bg-white border border-slate-100 text-slate-600 font-bold"><option value="">Seleccionar Género</option><option value="M">Masculino</option><option value="F">Femenino</option></select>{edadCalculada !== null && (<div className="bg-emerald-50 p-4 rounded-2xl border border-emerald-100 flex items-center justify-between"><span className="text-emerald-800 text-xs font-bold uppercase tracking-widest">Edad detectada:</span><span className="text-2xl font-black text-emerald-600">{edadCalculada} Años</span></div>)}<div className="pt-2 flex flex-col space-y-3"><button type="submit" className="w-full py-4 bg-emerald-500 hover:bg-emerald-600 active:scale-95 transition-all text-white font-black rounded-2xl shadow-xl">Guardar</button><button type="button" onClick={() => { setModalAlumno(false); setAlumnoEdicion(null); setDiaNac(''); setMesNac(''); setAnioNac(''); }} className="text-slate-400 font-bold text-xs uppercase tracking-widest">Cancelar</button></div></form></div></div>)}
             {maestroABorrar && (
                 <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-[60] p-6 animate-in fade-in">
