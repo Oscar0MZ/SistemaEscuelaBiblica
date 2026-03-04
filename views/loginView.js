@@ -10,7 +10,7 @@ function LoginView({ onLogin }) {
     const [loading, setLoading] = useState(false);
     
     const [esRecordado, setEsRecordado] = useState(false);
-    const [recordarClave, setRecordarClave] = useState(false); // NUEVO ESTADO PARA EL CHECKBOX
+    const [recordarClave, setRecordarClave] = useState(false);
 
     const [diaNac, setDiaNac] = useState('');
     const [mesNac, setMesNac] = useState('');
@@ -23,7 +23,8 @@ function LoginView({ onLogin }) {
         if (datosGuardados) {
             try {
                 const parsed = JSON.parse(datosGuardados);
-                if (parsed.rol) {
+                // Evitar recordar el modo prueba por seguridad
+                if (parsed.rol && parsed.rol !== 'PRUEBA') {
                     setRol(parsed.rol);
                     setEsRecordado(true); 
                 }
@@ -33,7 +34,6 @@ function LoginView({ onLogin }) {
                 if (parsed.mesNac) setMesNac(parsed.mesNac);
                 if (parsed.anioNac) setAnioNac(parsed.anioNac);
                 
-                // Si el usuario pidió recordar la clave, se la precargamos
                 if (parsed.recordarClave) {
                     setRecordarClave(true);
                     if (parsed.clave) setClave(parsed.clave);
@@ -56,31 +56,33 @@ function LoginView({ onLogin }) {
         setError('');
         setLoading(true);
         
-        if (rol !== 'ADMIN' && rol !== 'LOGISTICA' && rol !== 'SECRETARIA' && rol !== 'TESORERO' && !campo) {
+        // El modo PRUEBA y ADMIN no necesitan campo, ni nombre, ni fecha
+        if (rol !== 'ADMIN' && rol !== 'PRUEBA' && rol !== 'LOGISTICA' && rol !== 'SECRETARIA' && rol !== 'TESORERO' && !campo) {
             setError('Debes seleccionar un campo.');
             setLoading(false); return;
         }
 
-        if (rol !== 'ADMIN' && !nombre.trim()) {
+        if (rol !== 'ADMIN' && rol !== 'PRUEBA' && !nombre.trim()) {
             setError('Debes ingresar tu nombre.');
             setLoading(false); return;
         }
 
-        if (rol !== 'ADMIN' && (!diaNac || !mesNac || !anioNac)) {
+        if (rol !== 'ADMIN' && rol !== 'PRUEBA' && (!diaNac || !mesNac || !anioNac)) {
             setError('Debes ingresar tu fecha de nacimiento completa.');
             setLoading(false); return;
         }
 
-        // GUARDAR DATOS EN MEMORIA (INCLUYENDO LA CLAVE SI ACTIVÓ EL CHECKBOX)
-        const datosAGuardar = {
-            rol: rol, nombre: nombre, campo: campo, diaNac: diaNac, mesNac: mesNac, anioNac: anioNac, recordarClave: recordarClave
-        };
-        if (recordarClave) datosAGuardar.clave = clave;
-        
-        localStorage.setItem('datos_recientes_login', JSON.stringify(datosAGuardar));
+        // NO guardar en memoria si es el Modo Prueba
+        if (rol !== 'PRUEBA') {
+            const datosAGuardar = {
+                rol: rol, nombre: nombre, campo: campo, diaNac: diaNac, mesNac: mesNac, anioNac: anioNac, recordarClave: recordarClave
+            };
+            if (recordarClave) datosAGuardar.clave = clave;
+            localStorage.setItem('datos_recientes_login', JSON.stringify(datosAGuardar));
+        }
 
-        const fechaNacimiento = rol !== 'ADMIN' ? `${anioNac}-${mesNac}-${diaNac}` : null;
-        const edad = rol !== 'ADMIN' ? calcularEdad(fechaNacimiento) : null;
+        const fechaNacimiento = (rol !== 'ADMIN' && rol !== 'PRUEBA') ? `${anioNac}-${mesNac}-${diaNac}` : null;
+        const edad = (rol !== 'ADMIN' && rol !== 'PRUEBA') ? calcularEdad(fechaNacimiento) : null;
 
         const res = await onLogin(rol, clave, nombre, campo, fechaNacimiento, edad);
         
@@ -89,7 +91,6 @@ function LoginView({ onLogin }) {
             setEstadoPendiente(false); 
         } else if (res.mensaje) {
             setEstadoPendiente(true);
-            // Si no pidió recordar la clave, la borramos de la pantalla por seguridad
             if (!recordarClave) setClave(''); 
         }
         setLoading(false);
@@ -103,27 +104,35 @@ function LoginView({ onLogin }) {
     };
 
     const bloqueado = estadoPendiente || esRecordado;
+    const esModoPrueba = rol === 'PRUEBA';
 
     return (
         <div className="flex flex-col items-center justify-center min-h-[100dvh] px-6 bg-slate-100 py-10">
-            <div className="w-full max-w-sm bg-white p-8 rounded-[32px] shadow-2xl animate-in zoom-in-95 relative">
+            <div className="w-full max-w-sm bg-white p-8 rounded-[32px] shadow-2xl animate-in zoom-in-95 relative overflow-hidden">
                 
+                {/* FONDO ESPECIAL MODO HACKER */}
+                {esModoPrueba && <div className="absolute inset-0 bg-slate-900 pointer-events-none rounded-[32px]"></div>}
+
                 {(rol || nombre) && !estadoPendiente && (
-                    <button onClick={limpiarFormulario} className="absolute top-6 right-6 w-8 h-8 bg-slate-50 text-slate-400 rounded-full flex items-center justify-center hover:bg-rose-50 hover:text-rose-500 transition-colors" title="Cambiar usuario">
+                    <button onClick={limpiarFormulario} className={`absolute top-6 right-6 w-8 h-8 rounded-full flex items-center justify-center transition-colors z-10 ${esModoPrueba ? 'bg-slate-800 text-slate-400 hover:text-white' : 'bg-slate-50 text-slate-400 hover:bg-rose-50 hover:text-rose-500'}`} title="Cambiar usuario">
                         <i className="fas fa-sync-alt"></i>
                     </button>
                 )}
 
-                <div className="w-20 h-20 bg-indigo-50 text-indigo-600 rounded-full flex items-center justify-center text-4xl mx-auto mb-6 shadow-inner">
-                    <i className="fas fa-church"></i>
+                <div className={`w-20 h-20 rounded-full flex items-center justify-center text-4xl mx-auto mb-6 shadow-inner relative z-10 ${esModoPrueba ? 'bg-emerald-500/20 text-emerald-400' : 'bg-indigo-50 text-indigo-600'}`}>
+                    <i className={`fas ${esModoPrueba ? 'fa-user-secret' : 'fa-church'}`}></i>
                 </div>
-                <h1 className="text-2xl font-black text-slate-800 text-center mb-2">Bienvenido</h1>
-                <p className="text-sm text-slate-500 text-center mb-8">
-                    {esRecordado ? "Bienvenido de nuevo, " + nombre.split(' ')[0] : "Ingresa tus datos para registrarte"}
+                
+                <h1 className={`text-2xl font-black text-center mb-2 relative z-10 ${esModoPrueba ? 'text-white' : 'text-slate-800'}`}>
+                    {esModoPrueba ? 'Modo Desarrollador' : 'Bienvenido'}
+                </h1>
+                
+                <p className={`text-sm text-center mb-8 relative z-10 ${esModoPrueba ? 'text-slate-400' : 'text-slate-500'}`}>
+                    {esModoPrueba ? 'Ingresa el PIN de seguridad' : esRecordado ? "Bienvenido de nuevo, " + nombre.split(' ')[0] : "Ingresa tus datos para registrarte"}
                 </p>
 
                 {estadoPendiente && (
-                    <div className="mb-6 p-4 bg-amber-50 border border-amber-200 rounded-2xl animate-in fade-in">
+                    <div className="mb-6 p-4 bg-amber-50 border border-amber-200 rounded-2xl animate-in fade-in relative z-10">
                         <p className="text-xs font-bold text-amber-800 text-center leading-relaxed">
                             <i className="fas fa-clock mr-2 text-amber-500 text-lg"></i><br/>
                             Tu solicitud está en espera.<br/><br/>
@@ -132,11 +141,11 @@ function LoginView({ onLogin }) {
                     </div>
                 )}
 
-                <form onSubmit={handleSubmit} className="space-y-4">
+                <form onSubmit={handleSubmit} className="space-y-4 relative z-10">
                     {!esRecordado && (
                         <div>
-                            <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-2 mb-1 block">¿Cuál es tu rol?</label>
-                            <select className={`w-full p-4 rounded-2xl outline-none border transition-colors font-bold text-slate-700 ${bloqueado ? 'bg-slate-100 border-slate-200 opacity-70 cursor-not-allowed' : 'bg-slate-50 border-slate-100 focus:border-indigo-400'}`} value={rol} onChange={(e) => { setRol(e.target.value); setError(''); }} required disabled={bloqueado}>
+                            <label className={`text-[10px] font-bold uppercase tracking-widest ml-2 mb-1 block ${esModoPrueba ? 'text-slate-500' : 'text-slate-400'}`}>¿Cuál es tu rol?</label>
+                            <select className={`w-full p-4 rounded-2xl outline-none border transition-colors font-bold ${bloqueado ? 'bg-slate-100 border-slate-200 opacity-70 cursor-not-allowed text-slate-700' : esModoPrueba ? 'bg-slate-800 border-slate-700 text-emerald-400 focus:border-emerald-500' : 'bg-slate-50 border-slate-100 focus:border-indigo-400 text-slate-700'}`} value={rol} onChange={(e) => { setRol(e.target.value); setError(''); }} required disabled={bloqueado}>
                                 <option value="" disabled>Selecciona un rol...</option>
                                 <option value="MAESTRO">Maestro</option>
                                 <option value="AUXILIAR">Auxiliar</option>
@@ -144,18 +153,19 @@ function LoginView({ onLogin }) {
                                 <option value="SECRETARIA">Secretaría</option>
                                 <option value="TESORERO">Tesorero/a</option>
                                 <option value="ADMIN">Director (Admin)</option>
+                                <option value="PRUEBA">⚙️ Modo Desarrollador</option>
                             </select>
                         </div>
                     )}
 
-                    {rol && rol !== 'ADMIN' && !esRecordado && (
+                    {rol && rol !== 'ADMIN' && rol !== 'PRUEBA' && !esRecordado && (
                         <div className="animate-in fade-in slide-in-from-top-2">
                             <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-2 mb-1 block">Tu Nombre Completo</label>
                             <input type="text" placeholder="Ej: Ana Pérez" className={`w-full p-4 rounded-2xl outline-none border transition-colors font-bold text-slate-700 ${bloqueado ? 'bg-slate-100 border-slate-200 opacity-70 cursor-not-allowed' : 'bg-slate-50 border-slate-100 focus:border-indigo-400'}`} value={nombre} onChange={(e) => setNombre(e.target.value)} required disabled={bloqueado} />
                         </div>
                     )}
 
-                    {rol && rol !== 'ADMIN' && !esRecordado && (
+                    {rol && rol !== 'ADMIN' && rol !== 'PRUEBA' && !esRecordado && (
                         <div className="animate-in fade-in slide-in-from-top-2">
                             <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-2 mb-1 block">Fecha de Nacimiento</label>
                             <div className="flex space-x-2">
@@ -175,7 +185,7 @@ function LoginView({ onLogin }) {
                         </div>
                     )}
 
-                    {rol && rol !== 'ADMIN' && rol !== 'LOGISTICA' && rol !== 'SECRETARIA' && rol !== 'TESORERO' && !esRecordado && (
+                    {rol && rol !== 'ADMIN' && rol !== 'PRUEBA' && rol !== 'LOGISTICA' && rol !== 'SECRETARIA' && rol !== 'TESORERO' && !esRecordado && (
                         <div className="animate-in fade-in slide-in-from-top-2">
                             <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-2 mb-1 block">Tu Campo Asignado</label>
                             <select className={`w-full p-4 rounded-2xl outline-none border transition-colors font-bold text-slate-700 ${bloqueado ? 'bg-slate-100 border-slate-200 opacity-70 cursor-not-allowed' : 'bg-slate-50 border-slate-100 focus:border-indigo-400'}`} value={campo} onChange={(e) => setCampo(e.target.value)} required disabled={bloqueado}>
@@ -187,11 +197,12 @@ function LoginView({ onLogin }) {
 
                     {rol && (
                         <div className="animate-in fade-in slide-in-from-top-2">
-                            <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-2 mb-1 block">Contraseña de Acceso</label>
-                            <input type="password" placeholder="****" className="w-full p-4 bg-slate-50 rounded-2xl outline-none border border-slate-100 focus:border-indigo-400 font-black text-slate-700 tracking-widest transition-colors" value={clave} onChange={(e) => setClave(e.target.value)} required />
+                            <label className={`text-[10px] font-bold uppercase tracking-widest ml-2 mb-1 block ${esModoPrueba ? 'text-slate-500' : 'text-slate-400'}`}>
+                                {esModoPrueba ? 'PIN Secreto (9999)' : 'Contraseña de Acceso'}
+                            </label>
+                            <input type="password" placeholder="****" className={`w-full p-4 rounded-2xl outline-none border font-black tracking-widest transition-colors ${esModoPrueba ? 'bg-slate-800 border-slate-700 text-emerald-400 focus:border-emerald-500 text-center text-xl' : 'bg-slate-50 border-slate-100 focus:border-indigo-400 text-slate-700'}`} value={clave} onChange={(e) => setClave(e.target.value)} required />
                             
-                            {/* CHECKBOX RECORDAR CONTRASEÑA */}
-                            {!estadoPendiente && (
+                            {!estadoPendiente && !esModoPrueba && (
                                 <div className="flex items-center space-x-2 mt-3 ml-2">
                                     <input type="checkbox" id="recordar" checked={recordarClave} onChange={(e) => setRecordarClave(e.target.checked)} className="w-4 h-4 text-indigo-600 bg-slate-100 rounded border-slate-300 focus:ring-indigo-500 cursor-pointer" />
                                     <label htmlFor="recordar" className="text-xs font-bold text-slate-500 cursor-pointer">Recordar mi contraseña para entrar directo</label>
@@ -200,10 +211,10 @@ function LoginView({ onLogin }) {
                         </div>
                     )}
 
-                    {error && <p className="text-xs font-bold text-rose-500 text-center animate-pulse"><i className="fas fa-exclamation-circle mr-1"></i>{error}</p>}
+                    {error && <p className={`text-xs font-bold text-center animate-pulse ${esModoPrueba ? 'text-rose-400' : 'text-rose-500'}`}><i className="fas fa-exclamation-circle mr-1"></i>{error}</p>}
 
-                    <button type="submit" disabled={loading || !rol} className={`w-full mt-4 py-4 rounded-2xl font-black text-white shadow-xl transition-all ${!rol ? 'bg-slate-300 shadow-none' : estadoPendiente ? 'bg-amber-500 hover:bg-amber-600 shadow-amber-200' : 'bg-indigo-600 hover:bg-indigo-700 active:scale-95 shadow-indigo-200'}`}>
-                        {loading ? 'Verificando...' : estadoPendiente ? 'Revisar Aprobación' : esRecordado ? 'Iniciar Sesión' : rol === 'ADMIN' ? 'Ingresar al Panel' : 'Solicitar Acceso'}
+                    <button type="submit" disabled={loading || !rol} className={`w-full mt-4 py-4 rounded-2xl font-black text-white shadow-xl transition-all ${!rol ? 'bg-slate-300 shadow-none' : esModoPrueba ? 'bg-emerald-600 hover:bg-emerald-700 shadow-emerald-900/50' : estadoPendiente ? 'bg-amber-500 hover:bg-amber-600 shadow-amber-200' : 'bg-indigo-600 hover:bg-indigo-700 active:scale-95 shadow-indigo-200'}`}>
+                        {loading ? 'Procesando...' : estadoPendiente ? 'Revisar Aprobación' : esModoPrueba ? 'Desbloquear Sistema' : esRecordado ? 'Iniciar Sesión' : rol === 'ADMIN' ? 'Ingresar al Panel' : 'Solicitar Acceso'}
                     </button>
 
                     {estadoPendiente && (
