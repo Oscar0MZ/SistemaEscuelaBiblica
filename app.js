@@ -5,7 +5,7 @@ function App() {
     const [usuario, setUsuario] = useState(null);
     const [datosUsuarioActual, setDatosUsuarioActual] = useState(null);
     
-    // NUEVO ESTADO PARA EL MODO DESARROLLADOR
+    // ESTADO PARA EL MODO DESARROLLADOR
     const [modoSandboxActivo, setModoSandboxActivo] = useState(false);
 
     const [maestros, setMaestros] = useState([]);
@@ -58,7 +58,6 @@ function App() {
 
     useEffect(() => {
         if (usuario && usuario !== 'ADMIN' && datosUsuarioActual?.id) {
-            // SI ESTAMOS EN MODO SANDBOX, EVITAMOS QUE EL SISTEMA NOS EXPULSE POR NO EXISTIR EN LA BD
             if (datosUsuarioActual.id === 'user_sandbox_secreto') return;
 
             const unsubscribe = MaestrosService.vigilarUsuario(datosUsuarioActual.id, (u) => {
@@ -136,7 +135,6 @@ function App() {
 
     const handleLogin = async (rol, clave, nombre, campo, fechaNacimiento, edad) => {
         
-        // --- PUERTA TRASERA: MODO SANDBOX / PRUEBAS ---
         if (rol === 'PRUEBA') {
             if (clave === '9999') {
                 setModoSandboxActivo(true);
@@ -164,10 +162,22 @@ function App() {
         } catch (error) { return { exito: false, mensaje: "Error conexión." }; }
     };
 
+    // FUNCIÓN ORIGINAL PARA SALIR COMPLETAMENTE
     const handleLogout = () => { 
         setUsuario(null); setDatosUsuarioActual(null); setAlumnos([]); setTodosLosAlumnos([]); 
         setHistorialAsistencias([]); setEntregasLogistica([]); AuthService.cerrarSesion(); 
-        setModoSandboxActivo(false); // Apagamos el modo pruebas al salir
+        setModoSandboxActivo(false);
+    };
+
+    // --- NUEVA FUNCIÓN PARA CAMBIAR DE TRAJE EN EL SANDBOX ---
+    const handleVolverSandbox = () => {
+        setUsuario(null); 
+        setDatosUsuarioActual(null); 
+        setAlumnos([]); 
+        setTodosLosAlumnos([]); 
+        setHistorialAsistencias([]); 
+        setEntregasLogistica([]); 
+        // No tocamos la sesión principal ni apagamos el Sandbox
     };
     
     const handleGuardar = async (e) => { 
@@ -313,16 +323,15 @@ function App() {
     const soyCumpleanero = datosUsuarioActual && cumpleanerosHoy.some(c => c.id === datosUsuarioActual.id);
     const otrosCumpleaneros = datosUsuarioActual ? cumpleanerosHoy.filter(c => c.id !== datosUsuarioActual.id) : cumpleanerosHoy;
 
-    // --- PANTALLA INICIAL DE APLICACIÓN ---
     if (!usuario && !modoSandboxActivo) return <LoginView onLogin={handleLogin} />;
     
-    // --- PANTALLA HACKER: MODO SANDBOX ---
+    // --- PANTALLA HACKER CON SCROLL CORREGIDO ---
     if (modoSandboxActivo && !usuario) {
         return (
-            <div className="flex flex-col items-center justify-center min-h-[100dvh] bg-slate-900 px-6 py-10 animate-in fade-in duration-500 relative overflow-hidden">
-                <div className="absolute inset-0 opacity-10 bg-[linear-gradient(rgba(0,255,0,0.1)_1px,transparent_1px),linear-gradient(90deg,rgba(0,255,0,0.1)_1px,transparent_1px)] bg-[size:20px_20px] pointer-events-none"></div>
+            <div className="flex flex-col items-center justify-center min-h-[100dvh] bg-slate-900 px-6 py-10 animate-in fade-in duration-500 relative overflow-y-auto overflow-x-hidden">
+                <div className="absolute inset-0 opacity-10 bg-[linear-gradient(rgba(0,255,0,0.1)_1px,transparent_1px),linear-gradient(90deg,rgba(0,255,0,0.1)_1px,transparent_1px)] bg-[size:20px_20px] pointer-events-none fixed"></div>
                 
-                <div className="w-20 h-20 bg-emerald-500/20 text-emerald-400 rounded-full flex items-center justify-center text-4xl mx-auto mb-4 relative z-10 shadow-[0_0_30px_rgba(16,185,129,0.3)] border border-emerald-500/30">
+                <div className="w-20 h-20 bg-emerald-500/20 text-emerald-400 rounded-full flex items-center justify-center text-4xl mx-auto mb-4 relative z-10 shadow-[0_0_30px_rgba(16,185,129,0.3)] border border-emerald-500/30 mt-8">
                     <i className="fas fa-terminal"></i>
                 </div>
                 <h1 className="text-3xl font-black text-white mb-2 relative z-10 tracking-wider">MODO SANDBOX</h1>
@@ -348,7 +357,7 @@ function App() {
                     ))}
                 </div>
                 
-                <button onClick={() => setModoSandboxActivo(false)} className="mt-12 py-3 px-6 bg-slate-800/50 text-slate-500 font-bold rounded-xl border border-slate-700 hover:bg-rose-500/20 hover:text-rose-400 hover:border-rose-500/30 transition-all relative z-10 text-xs uppercase tracking-widest">
+                <button onClick={handleLogout} className="mt-12 mb-8 py-3 px-6 bg-slate-800/50 text-slate-500 font-bold rounded-xl border border-slate-700 hover:bg-rose-500/20 hover:text-rose-400 hover:border-rose-500/30 transition-all relative z-10 text-xs uppercase tracking-widest">
                     <i className="fas fa-power-off mr-2"></i> Cerrar Entorno
                 </button>
             </div>
@@ -375,8 +384,14 @@ function App() {
                         </p>
                     )}
                 </div>
-                <button onClick={handleLogout} className={`w-10 h-10 rounded-xl transition-all ${datosUsuarioActual?.id === 'user_sandbox_secreto' ? 'bg-slate-800 text-emerald-500 hover:bg-rose-500/20 hover:text-rose-400' : 'bg-slate-50 text-slate-400 hover:text-rose-500'}`}>
-                    <i className="fas fa-sign-out-alt"></i>
+                
+                {/* --- NUEVO BOTÓN DINÁMICO: SALIR AL MENÚ DE DISFRACES SI ESTAMOS EN SANDBOX --- */}
+                <button 
+                    onClick={datosUsuarioActual?.id === 'user_sandbox_secreto' ? handleVolverSandbox : handleLogout} 
+                    className={`w-10 h-10 flex items-center justify-center rounded-xl transition-all ${datosUsuarioActual?.id === 'user_sandbox_secreto' ? 'bg-slate-800 text-emerald-500 hover:bg-emerald-500/20 hover:text-emerald-400' : 'bg-slate-50 text-slate-400 hover:text-rose-500'}`}
+                    title={datosUsuarioActual?.id === 'user_sandbox_secreto' ? 'Cambiar Traje' : 'Cerrar Sesión'}
+                >
+                    <i className={`fas ${datosUsuarioActual?.id === 'user_sandbox_secreto' ? 'fa-exchange-alt' : 'fa-sign-out-alt'}`}></i>
                 </button>
             </header>
 
