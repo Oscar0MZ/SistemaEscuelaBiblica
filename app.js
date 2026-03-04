@@ -42,6 +42,12 @@ function App() {
 
     const calcularEdad = (f) => { if (!f) return null; const h = new Date(); const c = new Date(f); let e = h.getFullYear() - c.getFullYear(); if (h.getMonth() < c.getMonth() || (h.getMonth()===c.getMonth() && h.getDate()<c.getDate())) e--; return e; };
 
+    // --- LÓGICA DE SEGURIDAD: CANDADO SOLO LECTURA ---
+    const isSandbox = datosUsuarioActual?.id === 'user_sandbox_secreto';
+    const candadoSandbox = (accion) => {
+        alert(`🔒 MODO DESARROLLADOR\n\nAcción simulada: [${accion}]\n\nLos datos reales están protegidos y no se han modificado en la base de datos.`);
+    };
+
     useEffect(() => {
         const sesion = AuthService.obtenerSesion();
         const datosGuardados = AuthService.obtenerDatosUsuario();
@@ -58,7 +64,7 @@ function App() {
 
     useEffect(() => {
         if (usuario && usuario !== 'ADMIN' && datosUsuarioActual?.id) {
-            if (datosUsuarioActual.id === 'user_sandbox_secreto') return;
+            if (isSandbox) return; // Evitar que el sistema expulse al usuario de prueba
 
             const unsubscribe = MaestrosService.vigilarUsuario(datosUsuarioActual.id, (u) => {
                 if (!u) { 
@@ -122,9 +128,26 @@ function App() {
         } else if (usuario === 'LOGISTICA') {
             if(LogisticaService) unsubs.push(LogisticaService.suscribirTodas(setEntregasLogistica)); 
         } else if (datosUsuarioActual && datosUsuarioActual.campo) {
-            unsubs.push(AlumnosService.suscribirPorCampo(datosUsuarioActual.campo, setAlumnos));
-            unsubs.push(AlumnosService.suscribirAsistenciaHoy(datosUsuarioActual.campo, setAsistenciaHoy));
-            unsubs.push(AlumnosService.suscribirHistorialPorCampo(datosUsuarioActual.campo, setHistorialAsistencias));
+            if (isSandbox) {
+                // INYECCIÓN DE DATOS FALSOS PARA PODER PROBAR LA VISTA DE MAESTRO
+                setAlumnos([
+                    { id: 'fake1', nombre: '👧 Anita Prueba', edad: 10, genero: 'F', campo: '🧪 Zona Pruebas', fechaNacimiento: '2016-05-10' },
+                    { id: 'fake2', nombre: '👦 Juanito Prueba', edad: 8, genero: 'M', campo: '🧪 Zona Pruebas', fechaNacimiento: '2018-08-20' },
+                    { id: 'fake3', nombre: '👦 Pedrito Code', edad: 12, genero: 'M', campo: '🧪 Zona Pruebas', fechaNacimiento: '2014-01-15' }
+                ]);
+                setAsistenciaHoy(null);
+                
+                // Le damos una lección pasada ficticia para que no bloquee la interfaz
+                const d = new Date(); d.setDate(d.getDate() - 7);
+                setHistorialAsistencias([{ 
+                    fecha: d.toLocaleDateString('en-CA'), maestro: '🧪 Admin Pruebas', campo: '🧪 Zona Pruebas',
+                    totales: { presentes: 3, ausentes: 0, permisos: 0 }, ofrenda: 5.50, leccion: 1, leccionImpartida: true, esReset: false, timestamp: Date.now() - 600000 
+                }]);
+            } else {
+                unsubs.push(AlumnosService.suscribirPorCampo(datosUsuarioActual.campo, setAlumnos));
+                unsubs.push(AlumnosService.suscribirAsistenciaHoy(datosUsuarioActual.campo, setAsistenciaHoy));
+                unsubs.push(AlumnosService.suscribirHistorialPorCampo(datosUsuarioActual.campo, setHistorialAsistencias));
+            }
         }
         return () => { unsubs.forEach(unsub => unsub && unsub()); };
     }, [usuario, datosUsuarioActual?.campo]); 
@@ -134,7 +157,6 @@ function App() {
     }, [diaNac, mesNac, anioNac]);
 
     const handleLogin = async (rol, clave, nombre, campo, fechaNacimiento, edad) => {
-        
         if (rol === 'PRUEBA') {
             if (clave === '9999') {
                 setModoSandboxActivo(true);
@@ -143,11 +165,9 @@ function App() {
                 return { exito: false, mensaje: "PIN de seguridad incorrecto." };
             }
         }
-
         if (mantenimiento && rol !== 'ADMIN') return { exito: false, mensaje: "El sistema está en Mantenimiento." };
         if (!AuthService.verificar(rol, clave)) return { exito: false, mensaje: "Clave incorrecta." };
         if (rol === 'ADMIN') { setUsuario(rol); AuthService.guardarSesion(rol, null); return { exito: true }; }
-        
         try {
             const snapshot = await window.db.collection('maestros').where('nombre', '==', nombre.trim()).where('clase', '==', rol).get();
             if (snapshot.empty) { 
@@ -162,127 +182,92 @@ function App() {
         } catch (error) { return { exito: false, mensaje: "Error conexión." }; }
     };
 
-    // FUNCIÓN ORIGINAL PARA SALIR COMPLETAMENTE
     const handleLogout = () => { 
         setUsuario(null); setDatosUsuarioActual(null); setAlumnos([]); setTodosLosAlumnos([]); 
         setHistorialAsistencias([]); setEntregasLogistica([]); AuthService.cerrarSesion(); 
         setModoSandboxActivo(false);
     };
 
-    // --- NUEVA FUNCIÓN PARA CAMBIAR DE TRAJE EN EL SANDBOX ---
     const handleVolverSandbox = () => {
-        setUsuario(null); 
-        setDatosUsuarioActual(null); 
-        setAlumnos([]); 
-        setTodosLosAlumnos([]); 
-        setHistorialAsistencias([]); 
-        setEntregasLogistica([]); 
-        // No tocamos la sesión principal ni apagamos el Sandbox
+        setUsuario(null); setDatosUsuarioActual(null); setAlumnos([]); setTodosLosAlumnos([]); 
+        setHistorialAsistencias([]); setEntregasLogistica([]); 
     };
     
+    // --- BLOQUEO DE ESCRITURA EN MODO SANDBOX ---
     const handleGuardar = async (e) => { 
-        e.preventDefault(); const d = Object.fromEntries(new FormData(e.target)); 
-        if (diaNac && mesNac && anioNac) {
-            const fechaFinal = `${anioNac}-${mesNac}-${diaNac}`;
-            d.fechaNacimiento = fechaFinal; d.edad = calcularEdad(fechaFinal);
-        }
-        try { 
-            const n = await MaestrosService.guardar(d, maestroEdicion?.id, usuario); 
-            if (n && usuario !== 'ADMIN') MaestrosService.notificar(n); 
-            setModalAbierto(false); setMaestroEdicion(null); setDiaNac(''); setMesNac(''); setAnioNac('');
-        } catch (err) { alert("Error"); } 
+        e.preventDefault(); 
+        if (isSandbox) { candadoSandbox("Inscribir/Editar Personal"); setModalAbierto(false); return; }
+        const d = Object.fromEntries(new FormData(e.target)); 
+        if (diaNac && mesNac && anioNac) { const fechaFinal = `${anioNac}-${mesNac}-${diaNac}`; d.fechaNacimiento = fechaFinal; d.edad = calcularEdad(fechaFinal); }
+        try { const n = await MaestrosService.guardar(d, maestroEdicion?.id, usuario); if (n && usuario !== 'ADMIN') MaestrosService.notificar(n); setModalAbierto(false); setMaestroEdicion(null); setDiaNac(''); setMesNac(''); setAnioNac(''); } catch (err) { alert("Error"); } 
     };
 
     const handleGuardarAlumno = async (e) => {
-        e.preventDefault(); const fd = new FormData(e.target); const nombre = fd.get('nombre').trim(); const genero = fd.get('genero'); 
+        e.preventDefault(); 
+        if (isSandbox) { candadoSandbox("Inscribir/Editar Alumno"); setModalAlumno(false); return; }
+        const fd = new FormData(e.target); const nombre = fd.get('nombre').trim(); const genero = fd.get('genero'); 
         if (!nombre || !diaNac || !mesNac || !anioNac || !genero) { alert("Por favor completa todos los campos."); return; }
         const fechaFinal = `${anioNac}-${mesNac}-${diaNac}`; const edad = calcularEdad(fechaFinal);
         const datos = { nombre: nombre, fechaNacimiento: fechaFinal, edad: edad, genero: genero, maestroResponsable: datosUsuarioActual?.nombre, registradoPorId: datosUsuarioActual?.id, campo: datosUsuarioActual?.campo || 'Sin Campo', clase: 'General' };
-        try {
-            if (alumnoEdicion) { await AlumnosService.actualizar(alumnoEdicion.id, datos); alert("Alumno actualizado"); } 
-            else { await AlumnosService.registrar(datos); alert("Registrado exitosamente"); }
-            setModalAlumno(false); setAlumnoEdicion(null); setEdadCalculada(null); setDiaNac(''); setMesNac(''); setAnioNac('');
-        } catch (error) { if (error.message === "DUPLICADO") { alert("⛔ ¡Error! Este alumno ya existe."); } else { alert("Error al guardar alumno"); } }
+        try { if (alumnoEdicion) { await AlumnosService.actualizar(alumnoEdicion.id, datos); alert("Alumno actualizado"); } else { await AlumnosService.registrar(datos); alert("Registrado exitosamente"); } setModalAlumno(false); setAlumnoEdicion(null); setEdadCalculada(null); setDiaNac(''); setMesNac(''); setAnioNac(''); } catch (error) { alert("Error al guardar alumno"); }
     };
 
     const handleAbrirModalAlumno = () => { setAlumnoEdicion(null); setEdadCalculada(null); setDiaNac(''); setMesNac(''); setAnioNac(''); setModalAlumno(true); };
-    const handleEditarAlumno = (a) => {
-        setAlumnoEdicion(a); setEdadCalculada(a.edad); 
-        if (a.fechaNacimiento) { const partes = a.fechaNacimiento.split('-'); if (partes.length === 3) { setAnioNac(partes[0]); setMesNac(partes[1]); setDiaNac(partes[2]); } }
-        setModalAlumno(true);
-    };
+    const handleEditarAlumno = (a) => { setAlumnoEdicion(a); setEdadCalculada(a.edad); if (a.fechaNacimiento) { const partes = a.fechaNacimiento.split('-'); if (partes.length === 3) { setAnioNac(partes[0]); setMesNac(partes[1]); setDiaNac(partes[2]); } } setModalAlumno(true); };
 
     const handleBorrarMaestro = async () => { 
+        if (isSandbox) { candadoSandbox("Eliminar Usuario"); setMaestroABorrar(null); return; }
         if (!maestroABorrar) return; 
-        try { 
-            const nombreUser = maestroABorrar.nombre; 
-            if (maestroABorrar.clase === 'SECRETARIA' || maestroABorrar.clase === 'TESORERO') {
-                await window.db.collection('maestros').doc(maestroABorrar.id).delete();
-                alert(`El acceso de ${nombreUser} ha sido revocado. Todo el dinero y reportes siguen a salvo.`);
-            } else {
-                await MaestrosService.eliminarConAlumnos(maestroABorrar.id, null); 
-                alert(`El usuario ${nombreUser} ha sido eliminado del sistema.`);
-            }
-            setMaestroABorrar(null); 
-        } catch (e) { alert("Error al eliminar usuario."); } 
+        try { const nombreUser = maestroABorrar.nombre; if (maestroABorrar.clase === 'SECRETARIA' || maestroABorrar.clase === 'TESORERO') { await window.db.collection('maestros').doc(maestroABorrar.id).delete(); alert(`El acceso de ${nombreUser} ha sido revocado.`); } else { await MaestrosService.eliminarConAlumnos(maestroABorrar.id, null); alert(`El usuario ${nombreUser} ha sido eliminado.`); } setMaestroABorrar(null); } catch (e) { alert("Error."); } 
     };
 
-    const handleBorrarAlumno = async () => { if (!alumnoBorrar) return; try { await AlumnosService.eliminar(alumnoBorrar.id, alumnoBorrar.campo); setAlumnoBorrar(null); alert("Alumno eliminado y asistencia actualizada correctamente."); } catch (e) { alert("Error al eliminar alumno"); } };
-    const handleBorrarCampo = async () => { if (!campoABorrar) return; try { await AlumnosService.eliminarCampoCompleto(campoABorrar); setCampoABorrar(null); alert("🧹 Limpieza completada."); } catch (e) { alert("Error."); } };
-    const handleResetLecciones = async (campo, proximaLeccion) => { try { await AlumnosService.reiniciarLecciones(campo, proximaLeccion); alert(`✅ Material de ${campo} ajustado. La próxima clase será la lección ${proximaLeccion}.`); } catch (e) { alert("Error al reiniciar material."); } };
+    const handleBorrarAlumno = async () => { 
+        if (isSandbox) { candadoSandbox("Eliminar Alumno"); setAlumnoBorrar(null); return; }
+        if (!alumnoBorrar) return; try { await AlumnosService.eliminar(alumnoBorrar.id, alumnoBorrar.campo); setAlumnoBorrar(null); alert("Alumno eliminado."); } catch (e) { alert("Error."); } 
+    };
+    
+    const handleBorrarCampo = async () => { 
+        if (isSandbox) { candadoSandbox("Limpiar Campo Completo"); setCampoABorrar(null); return; }
+        if (!campoABorrar) return; try { await AlumnosService.eliminarCampoCompleto(campoABorrar); setCampoABorrar(null); alert("🧹 Limpieza completada."); } catch (e) { alert("Error."); } 
+    };
+    
+    const handleResetLecciones = async (campo, proximaLeccion) => { 
+        if (isSandbox) { candadoSandbox("Ajustar Material de Clase"); return; }
+        try { await AlumnosService.reiniciarLecciones(campo, proximaLeccion); alert(`✅ Material ajustado.`); } catch (e) { alert("Error."); } 
+    };
     
     const handleGuardarAsistencia = async (registros, leccion, leccionImpartida, ofrenda) => { 
+        if (isSandbox) { candadoSandbox("Guardar Asistencia y Ofrenda"); return true; }
         const p = registros.filter(r=>r.estado==='Presente').length; const a = registros.filter(r=>r.estado==='Ausente').length; const per = registros.filter(r=>r.estado==='Permiso').length; 
-        try { 
-            await AlumnosService.guardarAsistencia({ fecha: new Date().toLocaleDateString('en-CA'), campo: datosUsuarioActual.campo, clase: 'General', maestro: datosUsuarioActual.nombre, registradoPorId: datosUsuarioActual.id, registros: registros, totales: { presentes: p, ausentes: a, permisos: per }, leccion: leccion, leccionImpartida: leccionImpartida, ofrenda: Number(ofrenda) || 0, timestamp: Date.now() }); 
-            alert("Asistencia y Reporte guardados con éxito"); return true; 
-        } catch (e) { return false; } 
+        try { await AlumnosService.guardarAsistencia({ fecha: new Date().toLocaleDateString('en-CA'), campo: datosUsuarioActual.campo, clase: 'General', maestro: datosUsuarioActual.nombre, registradoPorId: datosUsuarioActual.id, registros: registros, totales: { presentes: p, ausentes: a, permisos: per }, leccion: leccion, leccionImpartida: leccionImpartida, ofrenda: Number(ofrenda) || 0, timestamp: Date.now() }); alert("Asistencia guardada."); return true; } catch (e) { return false; } 
     };
 
     const handleGuardarIngreso = async (monto, descripcion) => {
-        try {
-            const montoNum = parseFloat(monto); if (isNaN(montoNum) || montoNum <= 0) return false;
-            await window.db.collection('ingresos_tesoreria').add({ tipo: 'ingreso', monto: montoNum, descripcion: descripcion.trim(), fecha: new Date().toLocaleDateString('en-CA'), timestamp: Date.now(), registradoPor: datosUsuarioActual.nombre });
-            const docRef = window.db.collection('sistema').doc('tesoreria'); const docSnap = await docRef.get(); let actual = docSnap.exists ? (docSnap.data().total || 0) : 0;
-            await docRef.set({ total: actual + montoNum }, { merge: true }); alert(`✅ Se han agregado $${montoNum.toFixed(2)} al Fondo General.`); return true;
-        } catch (error) { return false; }
+        if (isSandbox) { candadoSandbox(`Sumar Ingreso: $${monto}`); return true; }
+        try { const montoNum = parseFloat(monto); if (isNaN(montoNum) || montoNum <= 0) return false; await window.db.collection('ingresos_tesoreria').add({ tipo: 'ingreso', monto: montoNum, descripcion: descripcion.trim(), fecha: new Date().toLocaleDateString('en-CA'), timestamp: Date.now(), registradoPor: datosUsuarioActual.nombre }); const docRef = window.db.collection('sistema').doc('tesoreria'); const docSnap = await docRef.get(); let actual = docSnap.exists ? (docSnap.data().total || 0) : 0; await docRef.set({ total: actual + montoNum }, { merge: true }); alert(`✅ Se han agregado $${montoNum.toFixed(2)}.`); return true; } catch (error) { return false; }
     };
     const handleGuardarEgreso = async (monto, descripcion) => {
-        try {
-            const montoNum = parseFloat(monto); if (isNaN(montoNum) || montoNum <= 0) return false;
-            const docRef = window.db.collection('sistema').doc('tesoreria'); const docSnap = await docRef.get(); let actual = docSnap.exists ? (docSnap.data().total || 0) : 0;
-            if (montoNum > actual) { alert(`❌ Fondos insuficientes. Solo tienes $${actual.toFixed(2)} en la cuenta general.`); return false; }
-            await window.db.collection('ingresos_tesoreria').add({ tipo: 'egreso', monto: montoNum, descripcion: descripcion.trim(), fecha: new Date().toLocaleDateString('en-CA'), timestamp: Date.now(), registradoPor: datosUsuarioActual.nombre });
-            await docRef.set({ total: actual - montoNum }, { merge: true }); alert(`🔻 Se han retirado $${montoNum.toFixed(2)} del Fondo General correctamente.`); return true;
-        } catch (error) { return false; }
+        if (isSandbox) { candadoSandbox(`Retirar Fondos: $${monto}`); return true; }
+        try { const montoNum = parseFloat(monto); if (isNaN(montoNum) || montoNum <= 0) return false; const docRef = window.db.collection('sistema').doc('tesoreria'); const docSnap = await docRef.get(); let actual = docSnap.exists ? (docSnap.data().total || 0) : 0; if (montoNum > actual) { alert(`❌ Fondos insuficientes.`); return false; } await window.db.collection('ingresos_tesoreria').add({ tipo: 'egreso', monto: montoNum, descripcion: descripcion.trim(), fecha: new Date().toLocaleDateString('en-CA'), timestamp: Date.now(), registradoPor: datosUsuarioActual.nombre }); await docRef.set({ total: actual - montoNum }, { merge: true }); alert(`🔻 Se han retirado $${montoNum.toFixed(2)}.`); return true; } catch (error) { return false; }
     };
 
     const handleGuardarIngresoSecretaria = async (monto, descripcion) => {
-        try {
-            const montoNum = parseFloat(monto); if (isNaN(montoNum) || montoNum <= 0) return false;
-            await window.db.collection('ingresos_secretaria').add({ tipo: 'ingreso', monto: montoNum, descripcion: descripcion.trim(), fecha: new Date().toLocaleDateString('en-CA'), timestamp: Date.now(), registradoPor: datosUsuarioActual.nombre });
-            const docRef = window.db.collection('sistema').doc('finanzas_secretaria'); const docSnap = await docRef.get(); let actual = docSnap.exists ? (docSnap.data().total || 0) : 0;
-            await docRef.set({ total: actual + montoNum }, { merge: true }); alert(`✅ Ingreso registrado en tu Control Cruzado.`); return true;
-        } catch (error) { return false; }
+        if (isSandbox) { candadoSandbox(`Registro Cruzado Ingreso: $${monto}`); return true; }
+        try { const montoNum = parseFloat(monto); if (isNaN(montoNum) || montoNum <= 0) return false; await window.db.collection('ingresos_secretaria').add({ tipo: 'ingreso', monto: montoNum, descripcion: descripcion.trim(), fecha: new Date().toLocaleDateString('en-CA'), timestamp: Date.now(), registradoPor: datosUsuarioActual.nombre }); const docRef = window.db.collection('sistema').doc('finanzas_secretaria'); const docSnap = await docRef.get(); let actual = docSnap.exists ? (docSnap.data().total || 0) : 0; await docRef.set({ total: actual + montoNum }, { merge: true }); alert(`✅ Ingreso registrado.`); return true; } catch (error) { return false; }
     };
     const handleGuardarEgresoSecretaria = async (monto, descripcion) => {
-        try {
-            const montoNum = parseFloat(monto); if (isNaN(montoNum) || montoNum <= 0) return false;
-            const docRef = window.db.collection('sistema').doc('finanzas_secretaria'); const docSnap = await docRef.get(); let actual = docSnap.exists ? (docSnap.data().total || 0) : 0;
-            if (montoNum > actual) { alert(`❌ Fondos insuficientes en tu control interno.`); return false; }
-            await window.db.collection('ingresos_secretaria').add({ tipo: 'egreso', monto: montoNum, descripcion: descripcion.trim(), fecha: new Date().toLocaleDateString('en-CA'), timestamp: Date.now(), registradoPor: datosUsuarioActual.nombre });
-            await docRef.set({ total: actual - montoNum }, { merge: true }); alert(`🔻 Retiro registrado en tu Control Cruzado.`); return true;
-        } catch (error) { return false; }
+        if (isSandbox) { candadoSandbox(`Registro Cruzado Egreso: $${monto}`); return true; }
+        try { const montoNum = parseFloat(monto); if (isNaN(montoNum) || montoNum <= 0) return false; const docRef = window.db.collection('sistema').doc('finanzas_secretaria'); const docSnap = await docRef.get(); let actual = docSnap.exists ? (docSnap.data().total || 0) : 0; if (montoNum > actual) { alert(`❌ Fondos insuficientes.`); return false; } await window.db.collection('ingresos_secretaria').add({ tipo: 'egreso', monto: montoNum, descripcion: descripcion.trim(), fecha: new Date().toLocaleDateString('en-CA'), timestamp: Date.now(), registradoPor: datosUsuarioActual.nombre }); await docRef.set({ total: actual - montoNum }, { merge: true }); alert(`🔻 Retiro registrado.`); return true; } catch (error) { return false; }
     };
 
-    const handleCrearEntrega = async (datos) => { try { await LogisticaService.crear({ ...datos, asignadoPor: 'Director' }); alert("Ruta y víveres asignados correctamente al grupo."); } catch (error) { alert("Error al asignar la ruta."); } };
-    const handleActualizarEntrega = async (id, estado, detalles = null, bloqueos = null) => { try { const payload = { estado: estado }; if (estado === 'Entregado') payload.fechaEntrega = Date.now(); if (detalles) payload.detalles = detalles; if (bloqueos) payload.bloqueos = bloqueos; await window.db.collection('entregas').doc(id).update(payload); } catch (error) { alert("Error actualizando estado."); } };
-    const handleGuardarAvanceEntrega = async (id, detalles, bloqueos) => { try { await window.db.collection('entregas').doc(id).update({ detalles: detalles, bloqueos: bloqueos }); alert("Avance guardado correctamente."); } catch (error) { alert("Error guardando avance."); } };
-    const handleBorrarEntrega = async (id) => { try { await LogisticaService.eliminar(id); } catch (error) { alert("Error al borrar entrega."); } };
-    const handleToggleMantenimiento = () => { MaestrosService.toggleMantenimiento(mantenimiento); };
-    const handleAssignGroup = async (idUsuario, nuevoGrupo) => { try { await window.db.collection('maestros').doc(idUsuario).update({ grupo: nuevoGrupo }); } catch (error) { alert("Error al asignar el grupo al usuario."); } };
-    const handleActualizarInventario = async (cantidadAgregada) => { try { const docRef = window.db.collection('sistema').doc('inventario'); const data = inventarioDatos; await docRef.set({ historicoRecibido: (data.historicoRecibido || 0) + cantidadAgregada, actualRecibido: (data.actualRecibido || 0) + cantidadAgregada }, { merge: true }); alert(`✅ Se agregaron ${cantidadAgregada} paquetes al stock actual y al histórico.`); } catch(e) { alert("Error al guardar el inventario."); } };
-    const handleCerrarJornada = async (rutasParaArchivar) => { try { await window.db.collection('sistema').doc('inventario').set({ actualRecibido: 0 }, { merge: true }); if (rutasParaArchivar && rutasParaArchivar.length > 0) { const batch = window.db.batch(); rutasParaArchivar.forEach(ruta => { const ref = window.db.collection('entregas').doc(ruta.id); batch.update(ref, { archivado: true }); }); await batch.commit(); } alert("🏁 Jornada Finalizada."); } catch (e) { alert("Error."); } };
+    const handleCrearEntrega = async (datos) => { if (isSandbox) { candadoSandbox("Crear Ruta Logística"); return; } try { await LogisticaService.crear({ ...datos, asignadoPor: 'Director' }); alert("Ruta asignada."); } catch (error) { alert("Error."); } };
+    const handleActualizarEntrega = async (id, estado, detalles = null, bloqueos = null) => { if (isSandbox) { candadoSandbox("Finalizar Ruta Logística"); return; } try { const payload = { estado: estado }; if (estado === 'Entregado') payload.fechaEntrega = Date.now(); if (detalles) payload.detalles = detalles; if (bloqueos) payload.bloqueos = bloqueos; await window.db.collection('entregas').doc(id).update(payload); } catch (error) { alert("Error."); } };
+    const handleGuardarAvanceEntrega = async (id, detalles, bloqueos) => { if (isSandbox) { candadoSandbox("Guardar Avance de Entregas"); return; } try { await window.db.collection('entregas').doc(id).update({ detalles: detalles, bloqueos: bloqueos }); alert("Avance guardado."); } catch (error) { alert("Error."); } };
+    const handleBorrarEntrega = async (id) => { if (isSandbox) { candadoSandbox("Borrar Ruta Logística"); return; } try { await LogisticaService.eliminar(id); } catch (error) { alert("Error."); } };
+    const handleToggleMantenimiento = () => { if (isSandbox) { candadoSandbox("Activar/Desactivar Mantenimiento"); return; } MaestrosService.toggleMantenimiento(mantenimiento); };
+    const handleAssignGroup = async (idUsuario, nuevoGrupo) => { if (isSandbox) { candadoSandbox("Asignar Miembro a Grupo"); return; } try { await window.db.collection('maestros').doc(idUsuario).update({ grupo: nuevoGrupo }); } catch (error) { alert("Error."); } };
+    const handleActualizarInventario = async (cantidadAgregada) => { if (isSandbox) { candadoSandbox("Agregar Víveres al Inventario"); return; } try { const docRef = window.db.collection('sistema').doc('inventario'); const data = inventarioDatos; await docRef.set({ historicoRecibido: (data.historicoRecibido || 0) + cantidadAgregada, actualRecibido: (data.actualRecibido || 0) + cantidadAgregada }, { merge: true }); alert(`✅ Agregados al stock.`); } catch(e) { alert("Error."); } };
+    const handleCerrarJornada = async (rutasParaArchivar) => { if (isSandbox) { candadoSandbox("Cerrar Jornada Logística"); return; } try { await window.db.collection('sistema').doc('inventario').set({ actualRecibido: 0 }, { merge: true }); if (rutasParaArchivar && rutasParaArchivar.length > 0) { const batch = window.db.batch(); rutasParaArchivar.forEach(ruta => { const ref = window.db.collection('entregas').doc(ruta.id); batch.update(ref, { archivado: true }); }); await batch.commit(); } alert("🏁 Jornada Finalizada."); } catch (e) { alert("Error."); } };
 
     const hoy = new Date();
     const mesHoy = (hoy.getMonth() + 1).toString().padStart(2, '0');
@@ -325,7 +310,6 @@ function App() {
 
     if (!usuario && !modoSandboxActivo) return <LoginView onLogin={handleLogin} />;
     
-    // --- PANTALLA HACKER CON SCROLL CORREGIDO ---
     if (modoSandboxActivo && !usuario) {
         return (
             <div className="flex flex-col items-center justify-center min-h-[100dvh] bg-slate-900 px-6 py-10 animate-in fade-in duration-500 relative overflow-y-auto overflow-x-hidden">
@@ -337,10 +321,10 @@ function App() {
                 <h1 className="text-3xl font-black text-white mb-2 relative z-10 tracking-wider">MODO SANDBOX</h1>
                 <p className="text-emerald-400/80 mb-8 relative z-10 text-sm">Entorno de Pruebas Seguro</p>
                 
-                <p className="text-slate-400 mb-6 text-xs text-center max-w-xs relative z-10">Selecciona el traje que deseas usar. Los datos que ingreses se guardarán en el campo "🧪 Zona Pruebas".</p>
+                <p className="text-slate-400 mb-6 text-xs text-center max-w-xs relative z-10">Selecciona el traje que deseas usar. Todas las interacciones con la base de datos están bloqueadas.</p>
                 
                 <div className="grid grid-cols-2 gap-4 w-full max-w-sm relative z-10">
-                    {['MAESTRO', 'AUXILIAR', 'LOGISTICA', 'SECRETARIA', 'TESORERO'].map(r => (
+                    {['MAESTRO', 'AUXILIAR', 'LOGISTICA', 'SECRETARIA', 'TESORERO', 'ADMIN'].map(r => (
                         <button key={r} onClick={() => {
                             setUsuario(r);
                             setDatosUsuarioActual({ 
@@ -351,7 +335,7 @@ function App() {
                                 estado: 'Activo',
                                 grupo: 'Grupo 1' 
                             });
-                        }} className="bg-slate-800 text-white p-4 rounded-2xl font-black border border-slate-700 hover:border-emerald-500 hover:text-emerald-400 hover:shadow-[0_0_15px_rgba(16,185,129,0.2)] active:scale-95 transition-all text-xs tracking-widest">
+                        }} className={`p-4 rounded-2xl font-black border transition-all text-xs tracking-widest ${r === 'ADMIN' ? 'bg-indigo-900/50 border-indigo-500 text-indigo-400 hover:shadow-[0_0_15px_rgba(99,102,241,0.3)] col-span-2' : 'bg-slate-800 text-white border-slate-700 hover:border-emerald-500 hover:text-emerald-400 hover:shadow-[0_0_15px_rgba(16,185,129,0.2)] active:scale-95'}`}>
                             {r}
                         </button>
                     ))}
@@ -364,34 +348,33 @@ function App() {
         );
     }
 
-    if (mantenimiento && usuario !== 'ADMIN' && datosUsuarioActual?.id !== 'user_sandbox_secreto') { 
+    if (mantenimiento && usuario !== 'ADMIN' && !isSandbox) { 
         return ( <div className="flex flex-col items-center justify-center min-h-[100dvh] max-w-md mx-auto bg-slate-900 p-8 text-center shadow-2xl animate-in zoom-in-95"><div className="w-32 h-32 bg-rose-500/20 text-rose-500 rounded-full flex items-center justify-center text-6xl mb-8 animate-pulse shadow-[0_0_40px_rgba(244,63,94,0.3)]"><i className="fas fa-tools"></i></div><h1 className="text-3xl font-black text-white mb-4">Sistema en<br/>Mantenimiento</h1><p className="text-slate-400 text-sm leading-relaxed mb-10">El Director está realizando ajustes.</p><button onClick={handleLogout} className="w-full py-4 bg-slate-800 hover:bg-slate-700 text-white font-black rounded-2xl transition-colors">Cerrar Sesión</button></div> ); 
     }
 
     return (
         <div className="flex flex-col min-h-[100dvh] max-w-md mx-auto bg-white shadow-2xl relative">
-            <header className={`sticky top-0 backdrop-blur-md p-5 flex justify-between items-center border-b z-40 ${datosUsuarioActual?.id === 'user_sandbox_secreto' ? 'bg-slate-900/95 border-emerald-900/50' : 'bg-white/95 border-slate-100'}`}>
+            <header className={`sticky top-0 backdrop-blur-md p-5 flex justify-between items-center border-b z-40 ${isSandbox ? 'bg-slate-900/95 border-emerald-900/50' : 'bg-white/95 border-slate-100'}`}>
                 <div>
-                    <p className={`text-[10px] font-black uppercase tracking-widest ${datosUsuarioActual?.id === 'user_sandbox_secreto' ? 'text-emerald-400' : 'text-indigo-500'}`}>
-                        {datosUsuarioActual?.id === 'user_sandbox_secreto' ? 'MODO SANDBOX' : 'Gestión Ministerial'}
+                    <p className={`text-[10px] font-black uppercase tracking-widest ${isSandbox ? 'text-emerald-400 animate-pulse' : 'text-indigo-500'}`}>
+                        {isSandbox ? 'MODO DE SOLO LECTURA' : 'Gestión Ministerial'}
                     </p>
-                    <h1 className={`text-xl font-black ${datosUsuarioActual?.id === 'user_sandbox_secreto' ? 'text-white' : 'text-slate-800'}`}>
+                    <h1 className={`text-xl font-black ${isSandbox ? 'text-white' : 'text-slate-800'}`}>
                         {usuario === 'ADMIN' ? 'Director' : `${usuario.charAt(0).toUpperCase() + usuario.slice(1).toLowerCase()}: ${datosUsuarioActual?.nombre?.split(' ')[0] || ''}`}
                     </h1>
                     {usuario !== 'ADMIN' && datosUsuarioActual && (
-                        <p className={`text-[10px] font-bold mt-1 ${datosUsuarioActual?.id === 'user_sandbox_secreto' ? 'text-emerald-500/70' : 'text-slate-500'}`}>
+                        <p className={`text-[10px] font-bold mt-1 ${isSandbox ? 'text-emerald-500/70' : 'text-slate-500'}`}>
                             Campo: <span className="uppercase">{datosUsuarioActual.campo || datosUsuarioActual.grupo || 'Global'}</span>
                         </p>
                     )}
                 </div>
                 
-                {/* --- NUEVO BOTÓN DINÁMICO: SALIR AL MENÚ DE DISFRACES SI ESTAMOS EN SANDBOX --- */}
                 <button 
-                    onClick={datosUsuarioActual?.id === 'user_sandbox_secreto' ? handleVolverSandbox : handleLogout} 
-                    className={`w-10 h-10 flex items-center justify-center rounded-xl transition-all ${datosUsuarioActual?.id === 'user_sandbox_secreto' ? 'bg-slate-800 text-emerald-500 hover:bg-emerald-500/20 hover:text-emerald-400' : 'bg-slate-50 text-slate-400 hover:text-rose-500'}`}
-                    title={datosUsuarioActual?.id === 'user_sandbox_secreto' ? 'Cambiar Traje' : 'Cerrar Sesión'}
+                    onClick={isSandbox ? handleVolverSandbox : handleLogout} 
+                    className={`w-10 h-10 flex items-center justify-center rounded-xl transition-all ${isSandbox ? 'bg-slate-800 text-emerald-500 hover:bg-emerald-500/20 hover:text-emerald-400' : 'bg-slate-50 text-slate-400 hover:text-rose-500'}`}
+                    title={isSandbox ? 'Cambiar Traje' : 'Cerrar Sesión'}
                 >
-                    <i className={`fas ${datosUsuarioActual?.id === 'user_sandbox_secreto' ? 'fa-exchange-alt' : 'fa-sign-out-alt'}`}></i>
+                    <i className={`fas ${isSandbox ? 'fa-exchange-alt' : 'fa-sign-out-alt'}`}></i>
                 </button>
             </header>
 
@@ -420,7 +403,7 @@ function App() {
                 </div>
             )}
             
-            <main className={`flex-1 p-5 pb-28 ${datosUsuarioActual?.id === 'user_sandbox_secreto' ? 'bg-slate-900/50' : 'bg-slate-50/50'}`}>
+            <main className={`flex-1 p-5 pb-28 ${isSandbox ? 'bg-slate-900/50' : 'bg-slate-50/50'}`}>
                 <DashboardView 
                     maestros={maestros} alumnos={alumnos} todosLosAlumnos={todosLosAlumnos} 
                     asistenciaHoy={asistenciaHoy} datosGlobalesAsistencia={datosGlobalesAsistencia} 
