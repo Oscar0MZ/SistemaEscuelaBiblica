@@ -62,7 +62,7 @@ function MaestroDashboard({
 
     const dtHoyObj = new Date();
     const diaSemana = dtHoyObj.getDay();
-    const esFinDeSemana = diaSemana === 0 || diaSemana === 6; // 0=Dom, 6=Sab
+    const esFinDeSemana = diaSemana === 0 || diaSemana === 6; 
     const dtHoyStr = dtHoyObj.toLocaleDateString('en-CA');
 
     let regOtroDiaFinde = null;
@@ -79,7 +79,6 @@ function MaestroDashboard({
     const esDeOtroDia = asistenciaTomada && asistenciaMostrar.fecha !== dtHoyStr;
     const soyElAutor = asistenciaTomada && asistenciaMostrar.registradoPorId === datosUsuarioActual.id;
     
-    // Bloqueo duro: solo si ya enviaron la asistencia oficial del fin de semana
     const estaBloqueada = asistenciaTomada && (!soyElAutor || esDeOtroDia);
 
     React.useEffect(() => {
@@ -106,6 +105,7 @@ function MaestroDashboard({
         if (exito) setVistaActual('inicio');
     };
 
+    // --- CORRECCIÓN DE CÁLCULO DE PRÓXIMO CUMPLEAÑOS ---
     const mesesNombres = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
     
     const agruparCumpleanos = () => {
@@ -115,19 +115,31 @@ function MaestroDashboard({
             ninos: []
         }));
         
-        const anioActual = new Date().getFullYear();
+        const hoy = new Date();
+        const anioActual = hoy.getFullYear();
+        const mesActual = hoy.getMonth(); // 0 a 11
+        const diaActual = hoy.getDate();
 
         alumnos.forEach(a => {
             if (a.fechaNacimiento) {
                 const partes = a.fechaNacimiento.split('-');
                 if (partes.length === 3) {
                     const anioNac = parseInt(partes[0], 10);
-                    const mIndex = parseInt(partes[1], 10) - 1;
-                    if(mIndex >= 0 && mIndex < 12) {
-                        grupos[mIndex].ninos.push({
+                    const mesNacIndex = parseInt(partes[1], 10) - 1;
+                    const diaNac = parseInt(partes[2], 10);
+                    
+                    if(mesNacIndex >= 0 && mesNacIndex < 12) {
+                        let proximoAnioCumple = anioActual;
+                        
+                        // Si el mes ya pasó, o si es el mismo mes pero el día ya pasó, su próximo cumpleaños es el año siguiente
+                        if (mesNacIndex < mesActual || (mesNacIndex === mesActual && diaNac < diaActual)) {
+                            proximoAnioCumple++;
+                        }
+                        
+                        grupos[mesNacIndex].ninos.push({
                             ...a,
-                            diaNac: parseInt(partes[2], 10),
-                            edadACumplir: anioActual - anioNac
+                            diaNac: diaNac,
+                            edadACumplir: proximoAnioCumple - anioNac // Calcula la edad exacta que cumplirá en esa próxima fecha
                         });
                     }
                 }
@@ -241,7 +253,6 @@ function MaestroDashboard({
                 </div>
             );
         } else {
-            // --- NUEVA LÓGICA: SE MUESTRA LA LISTA PERO SE BLOQUEA EN GRIS SI FALTA MATERIAL O ESTÁ FUERA DE HORARIO ---
             const bloqueoHorario = !esFinDeSemana;
             const bloqueoMaterial = !ultimoReg;
             const formBloqueado = bloqueoHorario || bloqueoMaterial;
@@ -252,7 +263,6 @@ function MaestroDashboard({
                     
                     <div className="flex-1 bg-white rounded-t-[40px] shadow-lg border-t border-slate-100 p-6 overflow-hidden flex flex-col relative">
                         
-                        {/* BANNERS INFORMATIVOS DE BLOQUEO */}
                         {bloqueoHorario && (
                             <div className="bg-slate-50 p-3 rounded-xl border border-slate-200 mb-4 flex items-center shadow-sm shrink-0">
                                 <i className="fas fa-calendar-times text-slate-400 text-xl mr-3"></i>
@@ -266,7 +276,6 @@ function MaestroDashboard({
                             </div>
                         )}
 
-                        {/* LISTA DE ASISTENCIA (SE PONE EN GRIS SI ESTÁ BLOQUEADO) */}
                         <div className={`flex flex-col flex-1 overflow-hidden transition-all duration-300 ${formBloqueado ? 'opacity-50 grayscale pointer-events-none' : ''}`}>
                             <div className="bg-emerald-50 p-4 rounded-2xl border border-emerald-100 mb-4 flex-shrink-0 flex items-center justify-between shadow-sm">
                                 <div>
