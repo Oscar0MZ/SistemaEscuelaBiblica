@@ -42,7 +42,6 @@ function App() {
 
     const calcularEdad = (f) => { if (!f) return null; const h = new Date(); const c = new Date(f); let e = h.getFullYear() - c.getFullYear(); if (h.getMonth() < c.getMonth() || (h.getMonth()===c.getMonth() && h.getDate()<c.getDate())) e--; return e; };
 
-    // --- LÓGICA DE SEGURIDAD: CANDADO SOLO LECTURA ---
     const isSandbox = datosUsuarioActual?.id === 'user_sandbox_secreto';
     const candadoSandbox = (accion) => {
         alert(`🔒 MODO DESARROLLADOR\n\nAcción simulada: [${accion}]\n\nLos datos reales están protegidos y no se han modificado en la base de datos.`);
@@ -64,7 +63,7 @@ function App() {
 
     useEffect(() => {
         if (usuario && usuario !== 'ADMIN' && datosUsuarioActual?.id) {
-            if (isSandbox) return; // Evitar que el sistema expulse al usuario de prueba
+            if (isSandbox) return; 
 
             const unsubscribe = MaestrosService.vigilarUsuario(datosUsuarioActual.id, (u) => {
                 if (!u) { 
@@ -129,15 +128,12 @@ function App() {
             if(LogisticaService) unsubs.push(LogisticaService.suscribirTodas(setEntregasLogistica)); 
         } else if (datosUsuarioActual && datosUsuarioActual.campo) {
             if (isSandbox) {
-                // INYECCIÓN DE DATOS FALSOS PARA PODER PROBAR LA VISTA DE MAESTRO
                 setAlumnos([
                     { id: 'fake1', nombre: '👧 Anita Prueba', edad: 10, genero: 'F', campo: '🧪 Zona Pruebas', fechaNacimiento: '2016-05-10' },
                     { id: 'fake2', nombre: '👦 Juanito Prueba', edad: 8, genero: 'M', campo: '🧪 Zona Pruebas', fechaNacimiento: '2018-08-20' },
                     { id: 'fake3', nombre: '👦 Pedrito Code', edad: 12, genero: 'M', campo: '🧪 Zona Pruebas', fechaNacimiento: '2014-01-15' }
                 ]);
                 setAsistenciaHoy(null);
-                
-                // Le damos una lección pasada ficticia para que no bloquee la interfaz
                 const d = new Date(); d.setDate(d.getDate() - 7);
                 setHistorialAsistencias([{ 
                     fecha: d.toLocaleDateString('en-CA'), maestro: '🧪 Admin Pruebas', campo: '🧪 Zona Pruebas',
@@ -157,14 +153,17 @@ function App() {
     }, [diaNac, mesNac, anioNac]);
 
     const handleLogin = async (rol, clave, nombre, campo, fechaNacimiento, edad) => {
+        
+        // --- AQUÍ ESTÁ LA NUEVA CLAVE SEGURA DEL MODO DESARROLLADOR ---
         if (rol === 'PRUEBA') {
-            if (clave === '9999') {
+            if (clave === '@Dev2026') {
                 setModoSandboxActivo(true);
                 return { exito: true };
             } else {
                 return { exito: false, mensaje: "PIN de seguridad incorrecto." };
             }
         }
+
         if (mantenimiento && rol !== 'ADMIN') return { exito: false, mensaje: "El sistema está en Mantenimiento." };
         if (!AuthService.verificar(rol, clave)) return { exito: false, mensaje: "Clave incorrecta." };
         if (rol === 'ADMIN') { setUsuario(rol); AuthService.guardarSesion(rol, null); return { exito: true }; }
@@ -193,7 +192,6 @@ function App() {
         setHistorialAsistencias([]); setEntregasLogistica([]); 
     };
     
-    // --- BLOQUEO DE ESCRITURA EN MODO SANDBOX ---
     const handleGuardar = async (e) => { 
         e.preventDefault(); 
         if (isSandbox) { candadoSandbox("Inscribir/Editar Personal"); setModalAbierto(false); return; }
