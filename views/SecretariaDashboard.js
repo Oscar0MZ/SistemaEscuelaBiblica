@@ -1,363 +1,436 @@
 const { useState } = React;
 
-function SecretariaDashboard({
-    todosLosAlumnos, datosGlobalesAsistencia, historialAsistencias, maestros,
-    fondoTotal, fondoSecretariaTotal, historialSecretaria, 
-    onGuardarIngresoSecretaria, onGuardarEgresoSecretaria
+function MaestroDashboard({
+    alumnos = [], asistenciaHoy, historialAsistencias, usuario, datosUsuarioActual,
+    onOpenAlumnoModal, onEditAlumno, onDeleteAlumno, onSaveAsistencia
 }) {
     const [vistaActual, setVistaActual] = useState('inicio'); 
-    const [campoExpandido, setCampoExpandido] = useState(null); 
     
-    // Estados para Control Cruzado (Auditoría)
-    const [tipoTransaccion, setTipoTransaccion] = useState('ingreso'); 
-    const [monto, setMonto] = useState('');
-    const [descripcion, setDescripcion] = useState('');
-    const [cargando, setLoading] = useState(false);
-    const [mesExpandidoSec, setMesExpandidoSec] = useState(null);
+    const [subVistaGestion, setSubVistaGestion] = useState('directorio'); 
+    const [mesCumpleExpandido, setMesCumpleExpandido] = useState(null);
 
-    // Estados para Reportes (Filtración de Campos)
-    const [fechaDesde, setFechaDesde] = useState('');
-    const [fechaHasta, setFechaHasta] = useState('');
-    const [filtroCampo, setFiltroCampo] = useState('TODOS');
-    const [mesRepExpandido, setMesRepExpandido] = useState(null); // NUEVO ESTADO PARA ACORDEÓN DE REPORTES
+    const [listaAsistencia, setListaAsistencia] = useState({});
+    const [subVistaReporte, setSubVistaReporte] = useState('ranking');
+    const [fechaInicioRanking, setFechaInicioRanking] = useState('');
+    const [fechaFinRanking, setFechaFinRanking] = useState('');
+    const [leccionImpartida, setLeccionImpartida] = useState(true);
+    const [ofrenda, setOfrenda] = useState(''); 
+    const [edadMin, setEdadMin] = useState('');
+    const [edadMax, setEdadMax] = useState('');
 
     const historialVisible = historialAsistencias.filter(h => !h.esReset);
-    const todasAsistencias = datosGlobalesAsistencia?.registros || [];
 
     const formatoFecha = (f) => {
         if (!f) return '';
         const p = f.split('-');
-        if (p.length !== 3) return f;
         return `${p[2]}/${p[1]}/${p[0]}`; 
     };
 
-    const textoFechas = datosGlobalesAsistencia?.rango ? `${formatoFecha(datosGlobalesAsistencia.rango.inicio).substring(0,5)} - ${formatoFecha(datosGlobalesAsistencia.rango.fin).substring(0,5)}` : 'Calculando...';
-    const camposActivos = [...new Set([...maestros.filter(m => m.clase !== 'LOGISTICA' && m.campo).map(m => m.campo), ...todosLosAlumnos.map(a => a.campo), ...historialVisible.map(h => h.campo)].filter(Boolean))].sort();
-
-    // 1. Cálculos de la Pestaña INICIO
-    let tp = 0, ta = 0, tperm = 0, totalOfrendaSemana = 0; 
-    todasAsistencias.forEach(r => { 
-        if(r.totales){ tp+=r.totales.presentes; ta+=r.totales.ausentes; tperm+=r.totales.permisos; } 
-        if(r.ofrenda) totalOfrendaSemana += Number(r.ofrenda);
-    });
-
-    // 2. Lógica de la Pestaña AUDITORÍA
-    const handleSubmitAuditoria = async (e) => {
-        e.preventDefault();
-        setLoading(true);
-        let exito = false;
-        if (tipoTransaccion === 'ingreso') exito = await onGuardarIngresoSecretaria(monto, descripcion);
-        else exito = await onGuardarEgresoSecretaria(monto, descripcion);
-
-        if (exito) {
-            setMonto(''); setDescripcion('');
-            const hoy = new Date().toLocaleDateString('en-CA').substring(0, 7);
-            setMesExpandidoSec(hoy);
-        }
-        setLoading(false);
+    const calcProgreso = (lec) => {
+        const l = parseInt(lec);
+        if (isNaN(l) || l === 0) return { parte: 1, leccion: 0, porc: 0 };
+        if (l <= 25) return { parte: 1, leccion: l, porc: Math.round((l/25)*100) };
+        if (l <= 54) return { parte: 2, leccion: l - 25, porc: Math.round(((l-25)/29)*100) };
+        return { parte: 'Extra', leccion: l, porc: 100 };
     };
 
-    const historialPorMesSec = {};
-    historialSecretaria.forEach(mov => {
-        const mesKey = mov.fecha ? mov.fecha.substring(0, 7) : 'Desconocido';
-        if (!historialPorMesSec[mesKey]) historialPorMesSec[mesKey] = { ingresos: 0, egresos: 0, movimientos: [] };
-        if (mov.tipo === 'egreso') historialPorMesSec[mesKey].egresos += Number(mov.monto);
-        else historialPorMesSec[mesKey].ingresos += Number(mov.monto);
-        historialPorMesSec[mesKey].movimientos.push(mov);
-    });
-    const mesesOrdenadosSec = Object.keys(historialPorMesSec).sort((a,b) => b.localeCompare(a));
-
-    const nombreMes = (mesKey) => {
-        if (mesKey === 'Desconocido') return 'Fecha Desconocida';
-        const [y, m] = mesKey.split('-');
-        const meses = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
-        return `${meses[parseInt(m, 10) - 1]} ${y}`;
-    };
-
-    const diferencia = fondoTotal - fondoSecretariaTotal;
-
-    // 3. Lógica de la Pestaña REPORTES
-    const registrosFiltrados = historialVisible.filter(h => {
-        if (fechaDesde && h.fecha < fechaDesde) return false;
-        if (fechaHasta && h.fecha > fechaHasta) return false;
-        if (filtroCampo !== 'TODOS' && h.campo !== filtroCampo) return false;
-        return true;
-    });
-
-    let ofrendaPeriodo = 0, presentesPeriodo = 0, ausentesPeriodo = 0, permisosPeriodo = 0;
+    const todosLosRegistros = [...historialAsistencias];
+    if (asistenciaHoy && !todosLosRegistros.some(r => r.timestamp === asistenciaHoy.timestamp)) {
+        todosLosRegistros.push(asistenciaHoy);
+    }
     
-    // --- NUEVO: AGRUPAR REPORTES GLOBALES POR MES ---
-    const reportesPorMes = {}; 
+    const historialOrdenado = todosLosRegistros.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
+    const ultimoReg = historialOrdenado.find(h => h.leccion !== undefined);
 
-    registrosFiltrados.forEach(h => {
-        const ofr = Number(h.ofrenda || 0);
-        const p = h.totales?.presentes || 0;
-        const a = h.totales?.ausentes || 0;
-        const per = h.totales?.permisos || 0;
+    let leccionAsignada = 0;
+    let leccionProgreso = 0;
 
-        ofrendaPeriodo += ofr; presentesPeriodo += p; ausentesPeriodo += a; permisosPeriodo += per;
-
-        if (filtroCampo === 'TODOS') {
-            const mesKey = h.fecha ? h.fecha.substring(0, 7) : 'Desconocido';
-            if (!reportesPorMes[mesKey]) {
-                reportesPorMes[mesKey] = { totalOfrenda: 0, campos: {} };
-            }
-            reportesPorMes[mesKey].totalOfrenda += ofr;
-
-            if (!reportesPorMes[mesKey].campos[h.campo]) {
-                reportesPorMes[mesKey].campos[h.campo] = { ofrenda: 0, clases: 0 };
-            }
-            reportesPorMes[mesKey].campos[h.campo].ofrenda += ofr;
-            reportesPorMes[mesKey].campos[h.campo].clases += 1;
+    if (ultimoReg) {
+        if (ultimoReg.esReset) {
+            leccionAsignada = parseInt(ultimoReg.leccion);
+            leccionProgreso = parseInt(ultimoReg.leccion);
+        } else {
+            leccionProgreso = parseInt(ultimoReg.leccion);
+            leccionAsignada = ultimoReg.leccionImpartida ? parseInt(ultimoReg.leccion) + 1 : parseInt(ultimoReg.leccion);
         }
-    });
+    }
 
-    const mesesReporteOrdenados = Object.keys(reportesPorMes).sort((a,b) => b.localeCompare(a));
+    if (asistenciaHoy && asistenciaHoy.leccion) {
+        leccionAsignada = parseInt(asistenciaHoy.leccion);
+        leccionProgreso = parseInt(asistenciaHoy.leccion);
+    }
 
-    const NavButton = ({ id, icon, label }) => (
-        <button onClick={() => setVistaActual(id)} className={`flex flex-col items-center justify-center w-[75px] h-14 rounded-2xl transition-all ${vistaActual === id ? 'text-pink-600 bg-pink-50 font-black' : 'text-slate-400 hover:text-slate-600 font-bold'}`}>
+    // --- NUEVA LÓGICA: RESTRICCIÓN DE FIN DE SEMANA Y BLOQUEO CRUZADO ---
+    const dtHoyObj = new Date();
+    const diaSemana = dtHoyObj.getDay();
+    const esFinDeSemana = diaSemana === 0 || diaSemana === 6; // 0=Dom, 6=Sab
+    const dtHoyStr = dtHoyObj.toLocaleDateString('en-CA');
+
+    let regOtroDiaFinde = null;
+    if (esFinDeSemana) {
+        const d = new Date(dtHoyObj);
+        if (diaSemana === 6) d.setDate(d.getDate() + 1); // Si es Sábado, buscamos si hay del Domingo
+        else if (diaSemana === 0) d.setDate(d.getDate() - 1); // Si es Domingo, buscamos si hay del Sábado
+        const otroDiaStr = d.toLocaleDateString('en-CA');
+        regOtroDiaFinde = todosLosRegistros.find(r => !r.esReset && r.fecha === otroDiaStr);
+    }
+
+    const asistenciaMostrar = asistenciaHoy || regOtroDiaFinde;
+    const asistenciaTomada = !!asistenciaMostrar;
+    const esDeOtroDia = asistenciaTomada && asistenciaMostrar.fecha !== dtHoyStr;
+    const soyElAutor = asistenciaTomada && asistenciaMostrar.registradoPorId === datosUsuarioActual.id;
+    
+    // Si ya tomaron asistencia (hoy o el otro día del finde) y no somos el autor, o si es de otro día: BLOQUEAR
+    const estaBloqueada = asistenciaTomada && (!soyElAutor || esDeOtroDia);
+
+    React.useEffect(() => {
+        if (vistaActual === 'asistencia' && alumnos.length > 0) {
+            const inicial = {};
+            if (asistenciaHoy && asistenciaHoy.registros && asistenciaHoy.timestamp >= (ultimoReg ? ultimoReg.timestamp : 0)) {
+                asistenciaHoy.registros.forEach(r => inicial[r.idAlumno] = r.estado);
+                setLeccionImpartida(asistenciaHoy.leccionImpartida !== false);
+                setOfrenda(asistenciaHoy.ofrenda || ''); 
+            } else {
+                alumnos.forEach(a => inicial[a.id] = 'Presente');
+                setLeccionImpartida(true);
+                setOfrenda('');
+            }
+            setListaAsistencia(inicial);
+        }
+    }, [vistaActual, alumnos, asistenciaHoy]); 
+
+    const guardarLista = async () => {
+        if (alumnos.length === 0) { alert("Debes registrar alumnos primero."); return; }
+        if (!ultimoReg) { alert("Por favor, espera a que el Director asigne la lección inicial."); return; }
+        const registros = alumnos.map(a => ({ idAlumno: a.id, nombre: a.nombre, estado: listaAsistencia[a.id] || 'Ausente' }));
+        const exito = await onSaveAsistencia(registros, leccionAsignada, leccionImpartida, ofrenda);
+        if (exito) setVistaActual('inicio');
+    };
+
+    const mesesNombres = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
+    
+    const agruparCumpleanos = () => {
+        const grupos = Array.from({length: 12}, (_, i) => ({
+            mesNum: (i + 1).toString().padStart(2, '0'),
+            nombreMes: mesesNombres[i],
+            ninos: []
+        }));
+        
+        const anioActual = new Date().getFullYear();
+
+        alumnos.forEach(a => {
+            if (a.fechaNacimiento) {
+                const partes = a.fechaNacimiento.split('-');
+                if (partes.length === 3) {
+                    const anioNac = parseInt(partes[0], 10);
+                    const mIndex = parseInt(partes[1], 10) - 1;
+                    if(mIndex >= 0 && mIndex < 12) {
+                        grupos[mIndex].ninos.push({
+                            ...a,
+                            diaNac: parseInt(partes[2], 10),
+                            edadACumplir: anioActual - anioNac
+                        });
+                    }
+                }
+            }
+        });
+        
+        grupos.forEach(g => g.ninos.sort((a, b) => a.diaNac - b.diaNac));
+        return grupos;
+    };
+    const cumpleanosAgrupados = agruparCumpleanos();
+
+    const NavButton = ({ id, icon, label, width = 'w-[70px]' }) => (
+        <button onClick={() => setVistaActual(id)} className={`flex flex-col items-center justify-center ${width} h-14 rounded-2xl transition-all ${vistaActual === id ? 'text-indigo-600 bg-indigo-50 font-black' : 'text-slate-400 hover:text-slate-600 font-bold'}`}>
             <i className={`fas ${icon} text-xl mb-1 ${vistaActual === id ? 'animate-bounce' : ''}`}></i><span className="text-[9px] tracking-wide">{label}</span>
         </button>
     );
+    
+    const progInicio = calcProgreso(leccionProgreso);
 
-    let contenido;
+    const historialRankingFiltrado = historialVisible.filter(ha => {
+        if (!fechaInicioRanking && !fechaFinRanking) return true;
+        const f = ha.fecha;
+        if (fechaInicioRanking && f < fechaInicioRanking) return false;
+        if (fechaFinRanking && f > fechaFinRanking) return false;
+        return true;
+    });
+
+    const alumnosConRanking = alumnos.map(a => {
+        let asistenciasLogradas = 0;
+        historialRankingFiltrado.forEach(ha => {
+            const registroAlumno = ha.registros?.find(r => r.idAlumno === a.id);
+            if (registroAlumno && registroAlumno.estado === 'Presente') asistenciasLogradas++;
+        });
+        return { ...a, asistenciasLogradas };
+    });
+
+    const rankingOrdenado = [...alumnosConRanking].sort((a,b) => b.asistenciasLogradas - a.asistenciasLogradas);
+    const alumnosFiltrados = alumnos.filter(a => {
+        if (edadMin !== '' && a.edad < parseInt(edadMin)) return false;
+        if (edadMax !== '' && a.edad > parseInt(edadMax)) return false;
+        return true;
+    });
+
+    let contenidoMaestro;
 
     if (vistaActual === 'inicio') {
-        contenido = (
-            <div className="space-y-4 animate-in fade-in duration-300 pt-2 pb-24">
-                <div className="bg-emerald-500 p-6 rounded-[32px] text-white shadow-xl shadow-emerald-200 flex justify-between items-center relative overflow-hidden mx-1 mt-2">
-                    <div className="absolute top-0 right-0 w-32 h-32 bg-white opacity-10 rounded-bl-[100px] pointer-events-none"></div>
-                    <div className="relative z-10">
-                        <p className="text-xs font-bold uppercase opacity-90 tracking-widest mb-1">Ofrenda Total (Semana)</p>
-                        <p className="text-5xl font-black tracking-tighter">${totalOfrendaSemana.toFixed(2)}</p>
-                    </div>
-                    <div className="w-14 h-14 bg-white/20 rounded-2xl flex items-center justify-center text-3xl backdrop-blur-sm relative z-10">
-                        <i className="fas fa-hand-holding-usd"></i>
-                    </div>
-                </div>
-
-                <div className="bg-white rounded-[32px] border border-slate-100 p-6 shadow-sm mx-1">
-                    <div className="flex justify-between items-center mb-4">
-                        <div>
-                            <h3 className="font-bold text-slate-700 text-sm flex items-center"><i className="fas fa-globe text-pink-500 mr-2"></i> Asistencia Global</h3>
-                            <p className="text-[10px] text-slate-400 pl-6">Todos los campos</p>
-                        </div>
-                        <span className="text-[10px] bg-slate-100 text-slate-500 font-bold px-3 py-1 rounded-lg border border-slate-200">{textoFechas}</span>
-                    </div>
-                    <div className="flex justify-around text-center divide-x divide-slate-50">
-                        <div className="px-2"><p className="text-3xl font-black text-emerald-500">{tp}</p><p className="text-[9px] font-bold text-slate-400 uppercase tracking-wide mt-1">Presentes</p></div>
-                        <div className="px-2"><p className="text-3xl font-black text-rose-500">{ta}</p><p className="text-[9px] font-bold text-slate-400 uppercase tracking-wide mt-1">Ausentes</p></div>
-                        <div className="px-2"><p className="text-3xl font-black text-amber-500">{tperm}</p><p className="text-[9px] font-bold text-slate-400 uppercase tracking-wide mt-1">Permisos</p></div>
-                    </div>
-                </div>
-            </div>
-        );
-    }
-
-    if (vistaActual === 'auditoria') {
-        contenido = (
-            <div className="space-y-4 animate-in slide-in-from-right duration-300 pt-2 pb-24">
-                <div className="px-2 mb-2">
-                    <h2 className="text-2xl font-black text-slate-800">Control Cruzado</h2>
-                    <p className="text-slate-400 text-xs mt-1">Compara tu registro interno vs Tesorería</p>
-                </div>
-
-                <div className="bg-slate-800 p-6 rounded-[32px] text-white shadow-xl mx-1 relative overflow-hidden">
-                    <div className="absolute top-0 right-0 w-24 h-24 bg-white opacity-5 rounded-bl-[100px] pointer-events-none"></div>
-                    <div className="grid grid-cols-2 gap-4 relative z-10">
-                        <div className="border-r border-slate-700">
-                            <p className="text-[9px] text-slate-400 uppercase font-bold tracking-widest mb-1">Mi Control (Secretaría)</p>
-                            <p className="text-2xl font-black text-pink-400">${Number(fondoSecretariaTotal || 0).toFixed(2)}</p>
-                        </div>
-                        <div className="pl-2">
-                            <p className="text-[9px] text-slate-400 uppercase font-bold tracking-widest mb-1">Reporte Tesorería</p>
-                            <p className="text-2xl font-black text-sky-400">${Number(fondoTotal || 0).toFixed(2)}</p>
-                        </div>
-                    </div>
-                    
-                    <div className={`mt-5 p-4 rounded-2xl flex items-center justify-between border ${diferencia === 0 ? 'bg-emerald-500/20 border-emerald-500/30 text-emerald-400' : 'bg-rose-500/20 border-rose-500/30 text-rose-400'}`}>
-                        <div>
-                            <p className="text-[10px] font-bold uppercase tracking-widest">Estado de Cuentas</p>
-                            <p className="text-sm font-black">{diferencia === 0 ? 'Cuadre Perfecto' : 'Descuadre Detectado'}</p>
-                        </div>
-                        {diferencia !== 0 && (
-                            <div className="text-right">
-                                <p className="text-xl font-black">
-                                    {diferencia > 0 ? '+' : '-'}${Math.abs(diferencia).toFixed(2)}
-                                </p>
+        contenidoMaestro = (
+            <div className="flex flex-col h-full space-y-6 pt-2 animate-in fade-in duration-300">
+                <div className={`w-full p-6 rounded-[32px] text-left relative overflow-hidden group shadow-lg ${estaBloqueada ? 'bg-slate-50 border border-slate-200' : asistenciaTomada ? 'bg-white border border-slate-100' : !esFinDeSemana ? 'bg-slate-200 text-slate-500 shadow-none' : 'bg-rose-500 text-white shadow-rose-200'}`}>
+                    {asistenciaTomada ? (
+                        <>
+                            <div className="flex justify-between items-center mb-6">
+                                <h3 className={`font-bold text-sm flex items-center ${estaBloqueada ? 'text-slate-500' : 'text-slate-700'}`}>
+                                    <i className={`fas ${estaBloqueada ? 'fa-lock' : 'fa-clipboard-check'} mr-2 text-lg ${estaBloqueada ? 'text-slate-400' : 'text-emerald-500'}`}></i> 
+                                    {estaBloqueada ? 'Asistencia (Lectura)' : 'Asistencia Completada'}
+                                </h3>
+                                {estaBloqueada ? (
+                                    <span className="text-[9px] bg-slate-200 text-slate-500 px-2 py-1 rounded-lg font-bold uppercase tracking-widest">{esDeOtroDia ? 'Reporte Fin de Semana' : 'Bloqueada'}</span>
+                                ) : (
+                                    <span className="text-[10px] bg-emerald-100 text-emerald-700 px-2 py-1 rounded-lg font-bold">TUYA</span>
+                                )}
                             </div>
-                        )}
-                    </div>
-                    {diferencia !== 0 && (
-                        <p className="text-[9px] text-slate-400 mt-2 text-center italic">
-                            {diferencia > 0 ? "Tesorería reporta MÁS fondos de los que tú has registrado." : "Tesorería reporta MENOS fondos de los que tú has registrado."}
-                        </p>
-                    )}
-                </div>
-
-                <div className="bg-white p-5 rounded-[24px] border border-slate-100 shadow-sm mx-1 mt-4">
-                    <h3 className="font-bold text-slate-700 text-sm mb-4">Añadir a mi Control Interno</h3>
-                    <div className="flex bg-slate-100 p-1 rounded-2xl mb-4">
-                        <button onClick={() => setTipoTransaccion('ingreso')} className={`flex-1 py-2 rounded-xl font-bold text-xs transition-all shadow-sm ${tipoTransaccion === 'ingreso' ? 'bg-white text-emerald-600 border border-slate-200' : 'text-slate-400 hover:text-slate-600'}`}>
-                            + Ingreso
-                        </button>
-                        <button onClick={() => setTipoTransaccion('egreso')} className={`flex-1 py-2 rounded-xl font-bold text-xs transition-all shadow-sm ${tipoTransaccion === 'egreso' ? 'bg-white text-rose-600 border border-slate-200' : 'text-slate-400 hover:text-slate-600'}`}>
-                            - Retiro
-                        </button>
-                    </div>
-
-                    <form onSubmit={handleSubmitAuditoria} className="space-y-3">
-                        <div className="flex space-x-2">
-                            <div className="w-1/3 relative">
-                                <span className={`absolute left-3 top-3 font-black text-sm ${tipoTransaccion === 'ingreso' ? 'text-emerald-400' : 'text-rose-400'}`}>$</span>
-                                <input type="number" step="0.01" min="0.01" required value={monto} onChange={(e) => setMonto(e.target.value)} placeholder="0.00" className="w-full py-3 pl-7 pr-2 bg-slate-50 rounded-xl outline-none border border-slate-100 text-sm font-black text-slate-700" />
+                            <div className="flex justify-around text-center mb-6">
+                                <div><p className={`text-3xl font-black ${estaBloqueada ? 'text-slate-500' : 'text-emerald-500'}`}>{asistenciaMostrar.totales.presentes}</p><p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">Presentes</p></div>
+                                <div><p className={`text-3xl font-black ${estaBloqueada ? 'text-slate-500' : 'text-rose-500'}`}>{asistenciaMostrar.totales.ausentes}</p><p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">Ausentes</p></div>
+                                <div><p className={`text-3xl font-black ${estaBloqueada ? 'text-slate-500' : 'text-amber-500'}`}>{asistenciaMostrar.totales.permisos}</p><p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">Permisos</p></div>
                             </div>
-                            <div className="w-2/3">
-                                <input type="text" required value={descripcion} onChange={(e) => setDescripcion(e.target.value)} placeholder="Concepto..." className="w-full py-3 px-3 bg-slate-50 rounded-xl outline-none border border-slate-100 text-xs font-bold text-slate-700" />
+                            <div className={`pt-4 border-t ${estaBloqueada ? 'border-slate-200' : 'border-slate-50'}`}>
+                                <div className="flex justify-between text-[10px] font-bold text-slate-400 mb-2"><span>{!ultimoReg ? 'Material: Sin asignar' : `Material: Parte ${progInicio.parte} • Lección ${progInicio.leccion}`}</span><span className="text-emerald-500"><i className="fas fa-coins mr-1"></i>${Number(asistenciaMostrar.ofrenda||0).toFixed(2)}</span></div>
+                                <div className="w-full bg-slate-100 rounded-full h-1.5 overflow-hidden"><div className="bg-indigo-400 h-1.5 rounded-full" style={{width: `${progInicio.porc}%`}}></div></div>
                             </div>
-                        </div>
-                        <button type="submit" disabled={cargando} className={`w-full py-3 rounded-xl font-black text-white shadow-md transition-all active:scale-95 ${cargando ? 'bg-slate-400' : 'bg-slate-800 hover:bg-slate-700'}`}>
-                            {cargando ? 'Guardando...' : 'Guardar en mi registro'}
-                        </button>
-                    </form>
-                </div>
-
-                <h3 className="font-bold text-slate-700 text-sm mt-6 px-2 border-b border-slate-100 pb-2">Mi Libro Mayor</h3>
-                <div className="space-y-3 px-1">
-                    {mesesOrdenadosSec.length === 0 ? (
-                        <div className="text-center p-6 bg-slate-50 rounded-2xl mt-2 border border-slate-100">
-                            <p className="text-xs font-bold text-slate-400">Aún no has registrado movimientos.</p>
-                        </div>
+                        </>
                     ) : (
-                        mesesOrdenadosSec.map(mesKey => {
-                            const data = historialPorMesSec[mesKey];
-                            const isExpanded = mesExpandidoSec === mesKey;
-
-                            return (
-                                <div key={mesKey} className="bg-white rounded-[24px] border border-slate-100 shadow-sm overflow-hidden transition-all duration-300">
-                                    <button onClick={() => setMesExpandidoSec(isExpanded ? null : mesKey)} className="w-full p-4 flex justify-between items-center bg-white hover:bg-slate-50 transition-colors">
-                                        <div className="text-left">
-                                            <span className="font-bold text-slate-700 text-sm uppercase">{nombreMes(mesKey)}</span>
-                                            <p className="text-[9px] text-slate-400 mt-1 font-bold">{data.movimientos.length} movimientos</p>
-                                        </div>
-                                        <div className="flex items-center space-x-3">
-                                            <div className="text-right hidden sm:block">
-                                                <p className="text-[10px] font-bold text-emerald-500">+${data.ingresos.toFixed(2)}</p>
-                                                <p className="text-[10px] font-bold text-rose-500">-${data.egresos.toFixed(2)}</p>
-                                            </div>
-                                            <div className={`w-8 h-8 flex items-center justify-center rounded-xl transition-colors shadow-sm ${isExpanded ? 'bg-pink-500 text-white' : 'bg-slate-50 text-slate-400'}`}>
-                                                <i className={`fas fa-chevron-down transition-transform duration-300 ${isExpanded ? 'rotate-180' : ''}`}></i>
-                                            </div>
-                                        </div>
-                                    </button>
-
-                                    {isExpanded && (
-                                        <div className="p-4 pt-0 border-t border-slate-100 bg-slate-50 animate-in slide-in-from-top-2 duration-200">
-                                            <div className="space-y-2 max-h-[300px] overflow-y-auto pr-1 mt-4">
-                                                {data.movimientos.map(mov => {
-                                                    const esIngreso = mov.tipo !== 'egreso';
-                                                    const fechaObj = new Date(mov.timestamp);
-                                                    const hora = fechaObj.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
-                                                    return (
-                                                        <div key={mov.id} className="bg-white p-3 rounded-xl border border-slate-100 flex justify-between items-center shadow-sm relative overflow-hidden">
-                                                            <div className={`absolute left-0 top-0 bottom-0 w-1 ${esIngreso ? 'bg-emerald-400' : 'bg-rose-400'}`}></div>
-                                                            <div className="pl-2 w-2/3 pr-2">
-                                                                <p className="font-bold text-slate-700 text-xs truncate">{mov.descripcion}</p>
-                                                                <p className="text-[9px] text-slate-400 font-bold uppercase mt-0.5">{formatoFecha(mov.fecha)} a las {hora}</p>
-                                                            </div>
-                                                            <div className="text-right w-1/3">
-                                                                <span className={`text-xs font-black px-2 py-1 rounded-lg ${esIngreso ? 'bg-emerald-50 text-emerald-600' : 'bg-rose-50 text-rose-600'}`}>
-                                                                    {esIngreso ? '+' : '-'}${Number(mov.monto).toFixed(2)}
-                                                                </span>
-                                                            </div>
-                                                        </div>
-                                                    )
-                                                })}
-                                            </div>
-                                        </div>
-                                    )}
+                        <>
+                            <div className="absolute top-0 right-0 w-32 h-32 bg-white opacity-10 rounded-bl-[100px] pointer-events-none"></div>
+                            <div className="flex items-center space-x-4 relative z-10">
+                                <div className={`w-16 h-16 rounded-2xl flex items-center justify-center text-3xl backdrop-blur-sm ${!esFinDeSemana ? 'bg-slate-300 text-slate-400' : 'bg-white/20 animate-pulse'}`}>
+                                    <i className={`fas ${!esFinDeSemana ? 'fa-calendar-times' : 'fa-clipboard-list'}`}></i>
                                 </div>
-                            );
-                        })
+                                <div>
+                                    <h3 className="font-bold text-xl">{!esFinDeSemana ? 'Día Inhábil' : 'Tomar Asistencia'}</h3>
+                                    <p className={`text-xs ${!esFinDeSemana ? 'text-slate-500 font-bold' : 'text-rose-100'}`}>{!esFinDeSemana ? 'Disponible Sábado y Domingo' : 'Aún no registras la clase de hoy'}</p>
+                                </div>
+                            </div>
+                        </>
                     )}
                 </div>
+                <div className="w-full bg-indigo-600 p-6 rounded-[32px] text-white shadow-xl shadow-indigo-200 flex justify-between items-center relative overflow-hidden"><div className="absolute top-0 right-0 w-32 h-32 bg-white opacity-10 rounded-bl-[100px] pointer-events-none"></div><div className="relative z-10"><p className="text-xs font-bold uppercase opacity-70 tracking-widest">Niños Totales</p><p className="text-5xl font-black tracking-tighter mt-1">{alumnos.length}</p></div><div className="w-14 h-14 bg-white/20 rounded-2xl flex items-center justify-center text-3xl backdrop-blur-sm relative z-10"><i className="fas fa-users"></i></div></div>
             </div>
         );
     }
 
-    if (vistaActual === 'campos') {
-        contenido = (
-            <div className="space-y-4 animate-in slide-in-from-right duration-300 pt-2 pb-24">
-                <div className="px-2 mb-4">
-                    <h2 className="text-2xl font-black text-slate-800">Monitoreo en Vivo</h2>
-                    <p className="text-slate-400 text-xs mt-1">Revisa el estado actual de cada campo</p>
+    if (vistaActual === 'asistencia') { 
+        if (!esFinDeSemana) {
+            contenidoMaestro = (
+                <div className="flex flex-col h-full pt-4 animate-in slide-in-from-right duration-300">
+                    <div className="px-2 mb-4"><div><h2 className="text-2xl font-black text-slate-800">Pasar Lista</h2></div></div>
+                    <div className="flex-1 bg-white rounded-t-[40px] shadow-lg border-t border-slate-100 p-8 flex flex-col items-center justify-center text-center">
+                        <div className="w-24 h-24 bg-slate-100 text-slate-400 rounded-full flex items-center justify-center text-5xl mb-6 shadow-inner"><i className="fas fa-calendar-times"></i></div>
+                        <h3 className="text-xl font-black text-slate-700 mb-2">Fuera de Horario</h3>
+                        <p className="text-slate-500 text-sm leading-relaxed mb-8">El registro de asistencia solo está habilitado los días <b>Sábados y Domingos</b>.</p>
+                    </div>
+                </div>
+            );
+        } else if (alumnos.length === 0) {
+            contenidoMaestro = (
+                <div className="flex flex-col h-full pt-4 animate-in slide-in-from-right duration-300">
+                    <div className="px-2 mb-4"><div><h2 className="text-2xl font-black text-slate-800">Pasar Lista</h2></div></div>
+                    <div className="flex-1 bg-white rounded-t-[40px] shadow-lg border-t border-slate-100 p-8 flex flex-col items-center justify-center text-center"><div className="w-24 h-24 bg-rose-50 text-rose-300 rounded-full flex items-center justify-center text-5xl mb-6 shadow-sm animate-pulse"><i className="fas fa-user-slash"></i></div><h3 className="text-xl font-black text-slate-700 mb-2">Salón Vacío</h3><p className="text-slate-500 text-sm leading-relaxed mb-8">Debes registrar al menos un alumno en tu campo antes de poder impartir una lección y tomar la asistencia.</p><button onClick={() => setVistaActual('gestion')} className="px-8 py-4 bg-indigo-600 text-white font-black rounded-2xl shadow-xl shadow-indigo-200 active:scale-95 transition-all"><i className="fas fa-plus mr-2"></i>Ir a Registrar</button></div>
+                </div>
+            );
+        } else if (estaBloqueada) {
+            contenidoMaestro = (
+                <div className="flex flex-col items-center justify-center h-full text-center p-8 animate-in fade-in">
+                    <div className="w-24 h-24 bg-slate-100 text-slate-400 rounded-full flex items-center justify-center text-5xl mb-6 shadow-inner"><i className="fas fa-lock"></i></div>
+                    <h3 className="text-2xl font-black text-slate-700 mb-2">{esDeOtroDia ? 'Clase Completada' : 'Acceso Bloqueado'}</h3>
+                    <p className="text-slate-500 text-sm leading-relaxed">
+                        {esDeOtroDia 
+                            ? <>Ya enviaste el reporte de asistencia de este fin de semana el día <b className="text-slate-600">{formatoFecha(asistenciaMostrar.fecha)}</b>.</>
+                            : <>La asistencia de hoy ya fue registrada por <b>{asistenciaMostrar?.maestro}</b>.</>}
+                    </p>
+                </div>
+            );
+        } else if (!ultimoReg) {
+            contenidoMaestro = (
+                <div className="flex flex-col h-full pt-4 animate-in slide-in-from-right duration-300">
+                    <div className="px-2 mb-4"><div><h2 className="text-2xl font-black text-slate-800">Pasar Lista</h2></div></div>
+                    <div className="flex-1 bg-white rounded-t-[40px] shadow-lg border-t border-slate-100 p-8 flex flex-col items-center justify-center text-center">
+                        <div className="w-24 h-24 bg-amber-50 text-amber-500 rounded-full flex items-center justify-center text-5xl mb-6 shadow-sm animate-bounce"><i className="fas fa-lock"></i></div>
+                        <h3 className="text-xl font-black text-slate-700 mb-2">Material no asignado</h3>
+                        <p className="text-slate-500 text-sm leading-relaxed mb-8">Por favor, comunícate con el Director e infórmale en qué <b>lección exacta</b> vas a iniciar hoy.<br/><br/>Una vez que él la asigne en su panel, esta pantalla se desbloqueará automáticamente y podrás pasar lista.</p>
+                    </div>
+                </div>
+            );
+        } else {
+            contenidoMaestro = (
+                <div className="flex flex-col h-full pt-4 animate-in slide-in-from-right duration-300">
+                    <div className="flex items-center space-x-4 mb-4 px-2"><div><h2 className="text-2xl font-black text-slate-800">Pasar Lista</h2><p className="text-slate-400 text-xs">{new Date().toLocaleDateString()}</p></div></div>
+                    
+                    <div className="flex-1 bg-white rounded-t-[40px] shadow-lg border-t border-slate-100 p-6 overflow-hidden flex flex-col relative">
+                        
+                        <div className="bg-emerald-50 p-4 rounded-2xl border border-emerald-100 mb-4 flex-shrink-0 flex items-center justify-between shadow-sm">
+                            <div>
+                                <h3 className="text-xs font-bold text-emerald-800 uppercase tracking-widest"><i className="fas fa-hand-holding-usd mr-2"></i>Ofrenda</h3>
+                                <p className="text-[9px] text-emerald-600 mt-1 font-bold">Total recolectado ($)</p>
+                            </div>
+                            <div className="relative w-1/3">
+                                <span className="absolute left-3 top-3 text-emerald-600 font-black">$</span>
+                                <input type="number" step="0.01" min="0" value={ofrenda} onChange={(e)=>setOfrenda(e.target.value)} placeholder="0.00" className="w-full py-3 pl-7 pr-3 bg-white rounded-xl text-emerald-700 font-black outline-none border border-emerald-200 focus:ring-2 focus:ring-emerald-300 text-right shadow-sm" />
+                            </div>
+                        </div>
+
+                        <div className="bg-indigo-50 p-4 rounded-2xl border border-indigo-100 mb-4 flex-shrink-0">
+                            <h3 className="text-xs font-bold text-indigo-800 uppercase tracking-widest mb-3 flex items-center"><i className="fas fa-book mr-2"></i> Material de Clase</h3>
+                            <div className="flex space-x-4 items-center">
+                                <div className="w-1/3 relative">
+                                    <label className="text-[10px] font-bold text-indigo-400 uppercase ml-1 block mb-1">Lección N°</label>
+                                    <input type="number" className="w-full p-3 bg-slate-200 rounded-xl outline-none border border-slate-300 text-center font-black text-slate-500 text-xl shadow-inner cursor-not-allowed opacity-80" value={leccionAsignada} readOnly disabled />
+                                    <div className="absolute top-1 right-1 bg-slate-300 rounded-full w-5 h-5 flex items-center justify-center shadow-sm"><i className="fas fa-lock text-slate-500 text-[9px]"></i></div>
+                                    <p className="text-[8px] text-slate-400 text-center mt-1 leading-tight font-bold uppercase tracking-widest">Automático</p>
+                                </div>
+                                <div className="w-2/3">
+                                    <label className="text-[10px] font-bold text-indigo-400 uppercase ml-1 block mb-1">¿Se impartió hoy?</label>
+                                    <div className="flex space-x-2">
+                                        <button onClick={() => setLeccionImpartida(true)} className={`flex-1 py-3 rounded-xl font-bold text-xs transition-colors ${leccionImpartida ? 'bg-emerald-500 text-white shadow-md' : 'bg-white border border-indigo-100 text-indigo-400 hover:bg-indigo-100'}`}>Sí ✅</button>
+                                        <button onClick={() => setLeccionImpartida(false)} className={`flex-1 py-3 rounded-xl font-bold text-xs transition-colors ${!leccionImpartida ? 'bg-rose-500 text-white shadow-md' : 'bg-white border border-indigo-100 text-indigo-400 hover:bg-indigo-100'}`}>No ❌</button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="overflow-y-auto space-y-4 pb-28 pr-2">
+                            {alumnos.map(a => (
+                                <div key={a.id} className="flex flex-col p-4 bg-slate-50 rounded-2xl border border-slate-100 shadow-sm">
+                                    <div className="flex items-center space-x-3 mb-3">
+                                        <div className="w-10 h-10 bg-indigo-50 text-indigo-600 rounded-xl flex items-center justify-center text-sm font-bold shrink-0">{a.nombre.charAt(0)}</div>
+                                        <p className="font-bold text-slate-700 text-sm leading-tight">{a.nombre}</p>
+                                    </div>
+                                    <div className="grid grid-cols-3 gap-2">
+                                        <button onClick={() => setListaAsistencia({...listaAsistencia, [a.id]: 'Presente'})} className={`py-2 rounded-xl text-[11px] font-bold uppercase transition-all ${listaAsistencia[a.id] === 'Presente' ? 'bg-emerald-500 text-white shadow-md' : 'bg-white border border-slate-200 text-slate-400 hover:bg-slate-100'}`}>Presente</button>
+                                        <button onClick={() => setListaAsistencia({...listaAsistencia, [a.id]: 'Ausente'})} className={`py-2 rounded-xl text-[11px] font-bold uppercase transition-all ${listaAsistencia[a.id] === 'Ausente' ? 'bg-rose-500 text-white shadow-md' : 'bg-white border border-slate-200 text-slate-400 hover:bg-slate-100'}`}>Ausente</button>
+                                        <button onClick={() => setListaAsistencia({...listaAsistencia, [a.id]: 'Permiso'})} className={`py-2 rounded-xl text-[11px] font-bold uppercase transition-all ${listaAsistencia[a.id] === 'Permiso' ? 'bg-amber-400 text-white shadow-md' : 'bg-white border border-slate-200 text-slate-400 hover:bg-slate-100'}`}>Permiso</button>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+
+                        <div className="absolute bottom-6 left-6 right-6">
+                            <button onClick={guardarLista} className="w-full bg-indigo-600 p-4 rounded-2xl text-white font-black shadow-xl active:scale-95 transition-all text-lg">Guardar Asistencia</button>
+                        </div>
+                    </div>
+                </div>
+            ); 
+        }
+    }
+
+    if (vistaActual === 'gestion') {
+        contenidoMaestro = (
+            <div className="flex flex-col h-full pt-4 animate-in slide-in-from-right duration-300">
+                <div className="px-2 mb-4"><h2 className="text-2xl font-black text-slate-800">Alumnos</h2><p className="text-slate-400 text-xs">Directorio y Cumpleaños</p></div>
+                
+                {/* SUB-PESTAÑAS DIRECTORIO VS CUMPLEAÑOS */}
+                <div className="flex px-2 space-x-2 mb-4">
+                    <button onClick={() => setSubVistaGestion('directorio')} className={`flex-1 py-2 rounded-xl text-xs font-bold transition-all ${subVistaGestion === 'directorio' ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-50 text-slate-400'}`}>
+                        <i className="fas fa-address-book mr-2"></i>Directorio
+                    </button>
+                    <button onClick={() => setSubVistaGestion('cumpleanos')} className={`flex-1 py-2 rounded-xl text-xs font-bold transition-all ${subVistaGestion === 'cumpleanos' ? 'bg-orange-100 text-orange-700' : 'bg-slate-50 text-slate-400'}`}>
+                        <i className="fas fa-birthday-cake mr-2"></i>Cumpleaños
+                    </button>
                 </div>
                 
-                <div className="space-y-3 px-1">
-                    {camposActivos.length === 0 ? (
-                        <div className="text-center p-8 bg-slate-50 rounded-[32px] mt-4 border-2 border-dashed border-slate-200">
-                            <i className="fas fa-seedling text-3xl text-slate-300 mb-3"></i>
-                            <p className="text-sm font-bold text-slate-500">No hay campos activos aún</p>
-                        </div>
-                    ) : (
-                        camposActivos.map(campo => {
-                            const registrosCampoTodo = historialVisible.filter(h => h.campo === campo);
-                            const registrosOrdenados = registrosCampoTodo.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
-                            const isExpanded = campoExpandido === campo;
+                <div className="flex-1 bg-white rounded-t-[40px] shadow-[0_-10px_40px_rgba(0,0,0,0.05)] border-t border-slate-100 p-6 overflow-hidden flex flex-col">
+                    
+                    {subVistaGestion === 'directorio' && (
+                        <div className="animate-in fade-in h-full flex flex-col">
+                            <button onClick={onOpenAlumnoModal} className="w-full bg-emerald-500 p-4 rounded-2xl shadow-lg shadow-emerald-200 active:scale-95 transition-all text-white flex items-center justify-center mb-6 shrink-0">
+                                <i className="fas fa-user-plus mr-2 text-lg"></i><span className="font-bold">Inscribir Nuevo Niño</span>
+                            </button>
                             
-                            const hoyStr = new Date().toLocaleDateString('en-CA');
-                            const registroHoy = registrosOrdenados.find(r => r.fecha === hoyStr);
-                            const pasaronListaHoy = !!registroHoy;
-
-                            return (
-                                <div key={campo} className="bg-white p-5 rounded-[24px] border border-slate-100 shadow-sm overflow-hidden transition-all duration-300">
-                                    <div className="flex justify-between items-center">
-                                        <div className="w-1/2">
-                                            <span className="font-black text-slate-700 text-lg truncate block">{campo}</span>
-                                            {pasaronListaHoy ? (
-                                                <p className="text-[10px] text-emerald-500 mt-1 font-bold tracking-wide uppercase flex items-center"><i className="fas fa-check-circle mr-1"></i> Lista Enviada</p>
-                                            ) : (
-                                                <p className="text-[10px] text-amber-500 mt-1 font-bold tracking-wide uppercase flex items-center animate-pulse"><i className="fas fa-clock mr-1"></i> Pendiente</p>
-                                            )}
-                                        </div>
-                                        <div className="flex items-center space-x-3 w-1/2 justify-end">
-                                            {pasaronListaHoy && (
-                                                <span className="bg-emerald-50 text-emerald-600 font-black text-sm px-3 py-1.5 rounded-xl border border-emerald-100 shadow-sm">
-                                                    ${Number(registroHoy.ofrenda||0).toFixed(2)}
-                                                </span>
-                                            )}
-                                            <button onClick={() => setCampoExpandido(isExpanded ? null : campo)} className={`w-10 h-10 flex items-center justify-center rounded-xl transition-colors shadow-sm ${isExpanded ? 'bg-pink-500 text-white' : 'bg-slate-50 text-slate-400 hover:bg-slate-100'}`}><i className={`fas fa-chevron-down transition-transform duration-300 ${isExpanded ? 'rotate-180' : ''}`}></i></button>
-                                        </div>
-                                    </div>
-
-                                    {isExpanded && (
-                                        <div className="mt-4 pt-4 border-t border-slate-100 animate-in slide-in-from-top-2 duration-200">
-                                            <p className="text-[10px] font-black text-slate-400 mb-3 uppercase tracking-widest flex items-center"><i className="fas fa-history mr-2 text-pink-400"></i> Historial del Campo ({registrosOrdenados.length})</p>
-                                            <div className="space-y-2 max-h-[250px] overflow-y-auto pr-1">
-                                                {registrosOrdenados.length === 0 ? <p className="text-xs text-slate-400 italic text-center py-4 bg-slate-50 rounded-xl">Nadie ha pasado asistencia aquí.</p> : 
-                                                registrosOrdenados.map((h, i) => (
-                                                    <div key={i} className="bg-slate-50 p-3 rounded-xl border border-slate-100 flex justify-between items-center shadow-sm">
-                                                        <div>
-                                                            <p className="font-black text-slate-700 text-xs">{formatoFecha(h.fecha)}</p>
-                                                            <p className="text-[9px] text-slate-500 uppercase mt-0.5 truncate max-w-[120px]"><i className="fas fa-user-edit mr-1 text-slate-400"></i>{h.maestro}</p>
-                                                            {h.leccion !== undefined && (<p className={`text-[9px] font-bold mt-1 ${h.leccionImpartida ? 'text-indigo-500' : 'text-rose-500'}`}>Lec. {h.leccion} {h.leccionImpartida ? '✅' : '❌'}</p>)}
-                                                        </div>
-                                                        <div className="flex flex-col items-end space-y-1.5 text-[10px] font-bold">
-                                                            <span className="text-emerald-600 font-black">${Number(h.ofrenda||0).toFixed(2)}</span>
-                                                            <div className="flex space-x-1">
-                                                                <span className="bg-emerald-100 text-emerald-700 px-1.5 py-1 rounded-md">P: {h.totales?.presentes || 0}</span>
-                                                                <span className="bg-rose-100 text-rose-700 px-1.5 py-1 rounded-md">A: {h.totales?.ausentes || 0}</span>
-                                                                <span className="bg-amber-100 text-amber-700 px-1.5 py-1 rounded-md">Pe: {h.totales?.permisos || 0}</span>
-                                                            </div>
-                                                        </div>
-                                                    </div>
-                                                ))}
+                            <div className="overflow-y-auto space-y-4 pb-24 pr-2 flex-1">
+                                {alumnos.length === 0 ? <p className="text-center text-slate-400 text-sm italic mt-8">No hay alumnos inscritos.</p> : 
+                                alumnos.map(nino => (
+                                    <div key={nino.id} className="flex flex-col p-4 bg-slate-50 rounded-3xl border border-slate-100 shadow-sm">
+                                        <div className="flex items-center space-x-3 mb-3">
+                                            <div className={`w-10 h-10 rounded-xl flex items-center justify-center text-sm font-black shrink-0 shadow-sm ${nino.genero === 'M' ? 'bg-sky-100 text-sky-600' : nino.genero === 'F' ? 'bg-pink-100 text-pink-600' : 'bg-white text-slate-400 border border-slate-200'}`}>
+                                                {nino.nombre.charAt(0)}
+                                            </div>
+                                            <div className="flex-1">
+                                                <p className="font-black text-slate-700 text-sm leading-tight">{nino.nombre}</p>
                                             </div>
                                         </div>
-                                    )}
-                                </div>
-                            );
-                        })
+                                        
+                                        <div className="flex justify-between items-center bg-white p-2 pl-3 rounded-2xl border border-slate-100 shadow-sm">
+                                            <p className="text-[11px] text-slate-500 font-bold tracking-wide">
+                                                <i className="fas fa-birthday-cake mr-1.5 text-rose-300"></i>{nino.edad} Años 
+                                                <span className="mx-2 text-slate-200">|</span> 
+                                                <span className={nino.genero === 'M' ? 'text-sky-500' : 'text-pink-500'}>{nino.genero === 'M' ? 'Niño' : nino.genero === 'F' ? 'Niña' : '-'}</span>
+                                            </p>
+                                            <div className="flex space-x-1.5">
+                                                <button onClick={() => onEditAlumno(nino)} className="w-8 h-8 flex items-center justify-center bg-indigo-50 text-indigo-500 hover:bg-indigo-100 rounded-xl transition-colors shadow-sm"><i className="fas fa-edit text-xs"></i></button>
+                                                <button onClick={() => onDeleteAlumno(nino)} className="w-8 h-8 flex items-center justify-center bg-rose-50 text-rose-500 hover:bg-rose-100 rounded-xl transition-colors shadow-sm"><i className="fas fa-trash text-xs"></i></button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    )}
+
+                    {subVistaGestion === 'cumpleanos' && (
+                        <div className="animate-in fade-in h-full flex flex-col">
+                            <p className="text-xs text-slate-500 mb-4 text-center leading-relaxed">
+                                Aquí puedes ver todos los cumpleañeros de tu clase organizados por mes para que planifiques las celebraciones.
+                            </p>
+                            <div className="overflow-y-auto space-y-3 pb-24 pr-1">
+                                {cumpleanosAgrupados.map(grupo => {
+                                    const isExp = mesCumpleExpandido === grupo.mesNum;
+                                    const tieneNinos = grupo.ninos.length > 0;
+                                    
+                                    return (
+                                        <div key={grupo.mesNum} className="bg-white rounded-[24px] border border-slate-100 shadow-sm overflow-hidden transition-all duration-300">
+                                            <button onClick={() => setMesCumpleExpandido(isExp ? null : grupo.mesNum)} className="w-full p-4 flex justify-between items-center bg-white hover:bg-slate-50 transition-colors">
+                                                <div className="flex items-center space-x-3">
+                                                    <div className={`w-8 h-8 rounded-xl flex items-center justify-center font-black text-xs shadow-sm ${tieneNinos ? 'bg-orange-100 text-orange-600' : 'bg-slate-50 text-slate-300'}`}>
+                                                        {grupo.ninos.length}
+                                                    </div>
+                                                    <span className={`font-black text-sm uppercase tracking-wide ${tieneNinos ? 'text-slate-700' : 'text-slate-400'}`}>{grupo.nombreMes}</span>
+                                                </div>
+                                                <i className={`fas fa-chevron-down text-slate-300 transition-transform duration-300 ${isExp ? 'rotate-180' : ''}`}></i>
+                                            </button>
+                                            
+                                            {isExp && (
+                                                <div className="p-4 pt-0 border-t border-slate-100 bg-slate-50 animate-in slide-in-from-top-2 duration-200">
+                                                    {grupo.ninos.length === 0 ? (
+                                                        <p className="text-xs text-slate-400 italic text-center mt-3 mb-2">Nadie cumple años este mes.</p>
+                                                    ) : (
+                                                        <div className="space-y-2 mt-3">
+                                                            {grupo.ninos.map(nino => (
+                                                                <div key={nino.id} className="bg-white p-3 rounded-xl border border-slate-100 flex justify-between items-center shadow-sm">
+                                                                    <div className="flex items-center space-x-3">
+                                                                        <div className="w-8 h-8 bg-orange-50 text-orange-500 rounded-xl flex items-center justify-center font-black text-xs border border-orange-100">
+                                                                            {nino.diaNac}
+                                                                        </div>
+                                                                        <div>
+                                                                            <p className="font-bold text-slate-700 text-xs">{nino.nombre}</p>
+                                                                            <p className="text-[9px] text-slate-400 font-bold uppercase mt-0.5">
+                                                                                <i className="fas fa-gift mr-1 text-orange-300"></i>
+                                                                                Cumplirá <span className="text-orange-500">{nino.edadACumplir || '?'}</span> años
+                                                                            </p>
+                                                                        </div>
+                                                                    </div>
+                                                                </div>
+                                                            ))}
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            )}
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        </div>
                     )}
                 </div>
             </div>
@@ -365,120 +438,58 @@ function SecretariaDashboard({
     }
 
     if (vistaActual === 'reportes') {
-        contenido = (
-            <div className="space-y-4 animate-in slide-in-from-right duration-300 pt-2 pb-24">
-                <div className="px-2 mb-2">
-                    <h2 className="text-2xl font-black text-slate-800">Reportes de Campos</h2>
-                    <p className="text-slate-400 text-xs mt-1">Filtra asistencia y ofrendas históricas</p>
-                </div>
-                
-                {/* CAJA DE FILTROS */}
-                <div className="bg-white p-4 rounded-[24px] mx-1 border border-slate-100 shadow-sm space-y-3">
-                    <div className="flex space-x-3">
-                        <div className="w-1/2">
-                            <label className="text-[9px] font-bold text-slate-400 uppercase tracking-widest ml-1">Desde la fecha</label>
-                            <input type="date" className="w-full p-3 mt-1 bg-slate-50 rounded-xl outline-none text-xs font-bold text-slate-700 border border-slate-100 focus:border-pink-400 focus:ring-1 focus:ring-pink-100 transition-all" value={fechaDesde} onChange={e=>setFechaDesde(e.target.value)} />
-                        </div>
-                        <div className="w-1/2">
-                            <label className="text-[9px] font-bold text-slate-400 uppercase tracking-widest ml-1">Hasta la fecha</label>
-                            <input type="date" className="w-full p-3 mt-1 bg-slate-50 rounded-xl outline-none text-xs font-bold text-slate-700 border border-slate-100 focus:border-pink-400 focus:ring-1 focus:ring-pink-100 transition-all" value={fechaHasta} onChange={e=>setFechaHasta(e.target.value)} />
-                        </div>
-                    </div>
-                    <div>
-                        <label className="text-[9px] font-bold text-slate-400 uppercase tracking-widest ml-1">Filtrar por Campo</label>
-                        <select className="w-full p-3 mt-1 bg-slate-50 rounded-xl outline-none text-xs font-bold text-slate-700 border border-slate-100 focus:border-pink-400 focus:ring-1 focus:ring-pink-100 transition-all" value={filtroCampo} onChange={e=>setFiltroCampo(e.target.value)}>
-                            <option value="TODOS">Todos los campos (Global)</option>
-                            {camposActivos.map(c => <option key={c} value={c}>{c}</option>)}
-                        </select>
-                    </div>
-                </div>
-
-                {/* RESULTADO DEL FILTRO */}
-                <div className="bg-slate-800 p-5 rounded-[24px] text-white shadow-xl mx-1 flex justify-between items-center relative overflow-hidden">
-                    <div className="absolute top-0 right-0 w-24 h-24 bg-white opacity-5 rounded-bl-[100px] pointer-events-none"></div>
-                    <div className="relative z-10">
-                        <p className="text-[10px] font-bold uppercase opacity-70 tracking-widest mb-1">Recaudación del Período</p>
-                        <p className="text-4xl font-black tracking-tighter text-emerald-400">${ofrendaPeriodo.toFixed(2)}</p>
-                    </div>
-                    <div className="text-right relative z-10">
-                        <p className="text-[10px] font-bold uppercase opacity-70 tracking-widest mb-1">Asistencia</p>
-                        <p className="text-sm font-black"><span className="text-emerald-400">P: {presentesPeriodo}</span> | <span className="text-rose-400">A: {ausentesPeriodo}</span></p>
-                    </div>
-                </div>
-
-                <h3 className="font-bold text-slate-700 text-sm mt-6 px-2 border-b border-slate-100 pb-2">
-                    {filtroCampo === 'TODOS' ? 'Aportes por Mes y Campo' : `Historial de Clases: ${filtroCampo}`}
-                </h3>
-                <div className="space-y-3 px-1">
-                    {registrosFiltrados.length === 0 ? (
-                        <div className="text-center p-8 bg-slate-50 rounded-3xl mt-2 border border-slate-100">
-                            <i className="fas fa-search text-3xl text-slate-300 mb-3"></i>
-                            <p className="text-sm font-bold text-slate-500">No hay registros en estas fechas</p>
-                        </div>
-                    ) : filtroCampo === 'TODOS' ? (
-                        // ACORDEÓN POR MESES PARA VISTA GLOBAL
-                        mesesReporteOrdenados.map(mesKey => {
-                            const dataMes = reportesPorMes[mesKey];
-                            const isExpanded = mesRepExpandido === mesKey;
-                            const camposDelMes = Object.keys(dataMes.campos).sort((a,b) => dataMes.campos[b].ofrenda - dataMes.campos[a].ofrenda);
-
-                            return (
-                                <div key={mesKey} className="bg-white rounded-[24px] border border-slate-100 shadow-sm overflow-hidden transition-all duration-300">
-                                    <button onClick={() => setMesRepExpandido(isExpanded ? null : mesKey)} className="w-full p-4 flex justify-between items-center bg-white hover:bg-slate-50 transition-colors">
-                                        <div className="text-left">
-                                            <span className="font-bold text-slate-700 text-sm uppercase">{nombreMes(mesKey)}</span>
-                                            <p className="text-[9px] text-slate-400 mt-1 font-bold">{camposDelMes.length} campos reportaron</p>
+        contenidoMaestro = (
+            <div className="flex flex-col h-full pt-4 animate-in slide-in-from-right duration-300">
+                <div className="px-2 mb-4"><h2 className="text-2xl font-black text-slate-800">Reportes</h2><p className="text-slate-400 text-xs">Análisis y estadísticas de tu clase</p></div>
+                <div className="flex px-2 space-x-2 mb-4"><button onClick={() => setSubVistaReporte('ranking')} className={`flex-1 py-2 rounded-xl text-xs font-bold transition-all ${subVistaReporte === 'ranking' ? 'bg-amber-100 text-amber-700' : 'bg-slate-50 text-slate-400'}`}><i className="fas fa-trophy mr-2"></i>Ranking</button><button onClick={() => setSubVistaReporte('historial')} className={`flex-1 py-2 rounded-xl text-xs font-bold transition-all ${subVistaReporte === 'historial' ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-50 text-slate-400'}`}><i className="fas fa-history mr-2"></i>Clases</button><button onClick={() => setSubVistaReporte('filtro')} className={`flex-1 py-2 rounded-xl text-xs font-bold transition-all ${subVistaReporte === 'filtro' ? 'bg-sky-100 text-sky-700' : 'bg-slate-50 text-slate-400'}`}><i className="fas fa-filter mr-2"></i>Edades</button></div>
+                <div className="flex-1 bg-white rounded-t-[40px] shadow-[0_-10px_40px_rgba(0,0,0,0.05)] border-t border-slate-100 p-6 overflow-hidden flex flex-col">
+                    {subVistaReporte === 'ranking' && (
+                        <>
+                            <h3 className="text-sm font-bold text-slate-700 mb-3 px-2 flex items-center justify-between">Top Asistencia<span className="text-[9px] bg-amber-50 text-amber-600 px-2 py-1 rounded-lg uppercase tracking-widest">{historialRankingFiltrado.length} clases</span></h3>
+                            <div className="bg-amber-50 p-3 rounded-2xl mb-4 border border-amber-100 flex space-x-3"><div className="w-1/2"><label className="text-[9px] font-bold text-amber-700 uppercase ml-1">Desde</label><input type="date" className="w-full p-2 mt-1 bg-white rounded-xl outline-none text-xs font-bold text-slate-600 border border-amber-100" value={fechaInicioRanking} onChange={e=>setFechaInicioRanking(e.target.value)} /></div><div className="w-1/2"><label className="text-[9px] font-bold text-amber-700 uppercase ml-1">Hasta</label><input type="date" className="w-full p-2 mt-1 bg-white rounded-xl outline-none text-xs font-bold text-slate-600 border border-amber-100" value={fechaFinRanking} onChange={e=>setFechaFinRanking(e.target.value)} /></div></div>
+                            <div className="overflow-y-auto space-y-3 pb-24 pr-2">
+                                {rankingOrdenado.map((nino, index) => (
+                                    <div key={nino.id} className="flex items-center justify-between p-4 bg-slate-50 rounded-2xl border border-slate-100">
+                                        <div className="flex items-center space-x-4 flex-1 pr-2">
+                                            <div className={`w-8 h-8 shrink-0 rounded-full flex items-center justify-center text-xs font-black ${index === 0 ? 'bg-amber-100 text-amber-600' : index === 1 ? 'bg-slate-200 text-slate-600' : index === 2 ? 'bg-orange-100 text-orange-800' : 'bg-white text-slate-300 border border-slate-200'}`}>#{index + 1}</div>
+                                            <p className="font-bold text-slate-700 text-sm leading-tight">{nino.nombre}</p>
                                         </div>
-                                        <div className="flex items-center space-x-3">
-                                            <span className="text-emerald-500 font-black text-sm">${dataMes.totalOfrenda.toFixed(2)}</span>
-                                            <div className={`w-8 h-8 flex items-center justify-center rounded-xl transition-colors shadow-sm ${isExpanded ? 'bg-pink-500 text-white' : 'bg-slate-50 text-slate-400'}`}>
-                                                <i className={`fas fa-chevron-down transition-transform duration-300 ${isExpanded ? 'rotate-180' : ''}`}></i>
-                                            </div>
-                                        </div>
-                                    </button>
-
-                                    {isExpanded && (
-                                        <div className="p-4 pt-0 border-t border-slate-100 bg-slate-50 animate-in slide-in-from-top-2 duration-200">
-                                            <div className="space-y-2 mt-4 max-h-[300px] overflow-y-auto pr-1">
-                                                {camposDelMes.map((campo, index) => {
-                                                    const cData = dataMes.campos[campo];
-                                                    return (
-                                                        <div key={campo} className="bg-white p-3 rounded-xl border border-slate-100 shadow-sm flex justify-between items-center">
-                                                            <div className="flex items-center space-x-3 flex-1">
-                                                                <div className={`w-6 h-6 shrink-0 rounded-full flex items-center justify-center text-[10px] font-black ${index === 0 ? 'bg-amber-100 text-amber-600' : index === 1 ? 'bg-slate-200 text-slate-600' : index === 2 ? 'bg-orange-100 text-orange-800' : 'bg-slate-50 text-slate-400 border border-slate-100'}`}>#{index + 1}</div>
-                                                                <div>
-                                                                    <p className="font-bold text-slate-700 text-xs">{campo}</p>
-                                                                    <p className="text-[8px] text-slate-400 font-bold uppercase mt-0.5">{cData.clases} domingos</p>
-                                                                </div>
-                                                            </div>
-                                                            <div className="text-right">
-                                                                <p className="font-black text-emerald-600 text-sm">${cData.ofrenda.toFixed(2)}</p>
-                                                            </div>
-                                                        </div>
-                                                    )
-                                                })}
-                                            </div>
-                                        </div>
-                                    )}
-                                </div>
-                            )
-                        })
-                    ) : (
-                        registrosFiltrados.sort((a,b) => new Date(b.fecha) - new Date(a.fecha)).map((h, i) => (
-                            <div key={i} className="bg-white p-4 rounded-2xl border border-slate-100 shadow-sm flex justify-between items-center">
-                                <div>
-                                    <p className="font-black text-slate-700 text-xs">{formatoFecha(h.fecha)}</p>
-                                    <p className="text-[9px] text-slate-400 font-bold uppercase mt-0.5">Lec. {h.leccion || '-'} • Por: {h.maestro.split(' ')[0]}</p>
-                                </div>
-                                <div className="text-right">
-                                    <p className="font-black text-emerald-600 text-base">${Number(h.ofrenda||0).toFixed(2)}</p>
-                                    <div className="flex space-x-1.5 mt-1 text-[9px] font-bold justify-end">
-                                        <span className="bg-emerald-50 text-emerald-600 px-1.5 py-0.5 rounded">P: {h.totales?.presentes||0}</span>
-                                        <span className="bg-rose-50 text-rose-600 px-1.5 py-0.5 rounded">A: {h.totales?.ausentes||0}</span>
+                                        <span className="bg-emerald-50 shrink-0 text-emerald-600 font-black text-xs px-3 py-1.5 rounded-lg border border-emerald-100"><i className="fas fa-star mr-1"></i>{nino.asistenciasLogradas} Clases</span>
                                     </div>
-                                </div>
+                                ))}
                             </div>
-                        ))
+                        </>
+                    )}
+                    {subVistaReporte === 'historial' && (
+                        <>
+                            <h3 className="text-sm font-bold text-slate-700 mb-4 px-2">Días Anteriores (Solo Lectura)</h3>
+                            <div className="overflow-y-auto space-y-3 pb-24 pr-2">
+                                {historialVisible.length === 0 ? <p className="text-center text-slate-400 text-sm italic mt-8">Sin registros previos.</p> : 
+                                historialVisible.map((h, i) => (
+                                    <div key={i} className="bg-slate-50 p-4 rounded-2xl border border-slate-100 flex justify-between items-center">
+                                        <div><p className="font-bold text-slate-700 text-sm">{formatoFecha(h.fecha)}</p><p className="text-[9px] text-slate-400 uppercase mt-1">Por: {h.maestro}</p>{h.leccion && (<p className={`text-[9px] font-bold mt-1 ${h.leccionImpartida ? 'text-indigo-500' : 'text-rose-500'}`}><i className="fas fa-book-open mr-1"></i>Lección {h.leccion} {h.leccionImpartida ? '✅' : '❌'}</p>)}</div>
+                                        <div className="flex flex-col space-y-1 items-end">
+                                            <span className="text-[10px] font-black text-emerald-600 mb-1">${Number(h.ofrenda||0).toFixed(2)}</span>
+                                            <div className="flex space-x-1 text-[10px] font-bold"><span className="bg-emerald-100 text-emerald-700 px-1.5 py-1 rounded">P: {h.totales?.presentes||0}</span><span className="bg-rose-100 text-rose-700 px-1.5 py-1 rounded">A: {h.totales?.ausentes||0}</span></div>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        </>
+                    )}
+                    {subVistaReporte === 'filtro' && (
+                        <>
+                            <div className="flex space-x-4 mb-5"><div className="w-1/2"><label className="text-[10px] font-bold text-sky-600 uppercase ml-2">Edad Mínima</label><input type="number" placeholder="Ej: 0" className="w-full p-4 mt-1 bg-sky-50 rounded-2xl outline-none border border-sky-100 focus:ring-2 focus:ring-sky-300 text-xl font-black text-slate-700 text-center" value={edadMin} onChange={e=>setEdadMin(e.target.value)} /></div><div className="w-1/2"><label className="text-[10px] font-bold text-sky-600 uppercase ml-2">Edad Máxima</label><input type="number" placeholder="Ej: 5" className="w-full p-4 mt-1 bg-sky-50 rounded-2xl outline-none border border-sky-100 focus:ring-2 focus:ring-sky-300 text-xl font-black text-slate-700 text-center" value={edadMax} onChange={e=>setEdadMax(e.target.value)} /></div></div>
+                            {(edadMin !== '' || edadMax !== '') && (<div className="flex justify-around items-center bg-sky-600 p-4 rounded-2xl shadow-sm mb-4"><div className="text-center"><p className="text-3xl font-black text-white">{alumnosFiltrados.length}</p><p className="text-[9px] font-bold text-sky-200 uppercase tracking-widest">Total</p></div><div className="text-center"><p className="text-2xl font-black text-white">{alumnosFiltrados.filter(a=>a.genero==='M').length}</p><p className="text-[9px] font-bold text-sky-200 uppercase tracking-widest">Niños</p></div><div className="text-center"><p className="text-2xl font-black text-white">{alumnosFiltrados.filter(a=>a.genero==='F').length}</p><p className="text-[9px] font-bold text-sky-200 uppercase tracking-widest">Niñas</p></div></div>)}
+                            <div className="overflow-y-auto space-y-3 pb-24 pr-2">
+                                {alumnosFiltrados.map(nino => (
+                                    <div key={nino.id} className="flex items-center space-x-3 p-3 bg-slate-50 rounded-xl border border-slate-100">
+                                        <div className={`w-8 h-8 shrink-0 rounded-xl flex items-center justify-center text-xs font-bold shadow-sm ${nino.genero === 'M' ? 'bg-sky-50 text-sky-600' : 'bg-pink-50 text-pink-600'}`}>{nino.nombre.charAt(0)}</div>
+                                        <div><p className="font-bold text-slate-700 text-xs leading-tight">{nino.nombre}</p><p className="text-[9px] text-slate-400 font-bold tracking-wide mt-0.5">{nino.edad} Años</p></div>
+                                    </div>
+                                ))}
+                            </div>
+                        </>
                     )}
                 </div>
             </div>
@@ -487,15 +498,15 @@ function SecretariaDashboard({
 
     return (
         <>
-            {contenido}
+            {contenidoMaestro}
             <div className="fixed bottom-0 left-0 right-0 max-w-md mx-auto bg-white/90 backdrop-blur-md border-t border-slate-100 flex justify-around items-center p-2 z-50 pb-safe shadow-[0_-10px_40px_rgba(0,0,0,0.05)]">
-                <NavButton id="inicio" icon="fa-chart-pie" label="Resumen" />
-                <NavButton id="campos" icon="fa-map-marked-alt" label="Monitoreo" />
-                <NavButton id="auditoria" icon="fa-balance-scale" label="Auditoría" />
-                <NavButton id="reportes" icon="fa-filter" label="Reportes" />
+                <NavButton id="inicio" icon="fa-home" label="Resumen" width="w-[70px]" />
+                <NavButton id="asistencia" icon="fa-clipboard-check" label="Lista" width="w-[70px]" />
+                <NavButton id="gestion" icon="fa-users" label="Alumnos" width="w-[70px]" />
+                <NavButton id="reportes" icon="fa-chart-bar" label="Reportes" width="w-[70px]" />
             </div>
         </>
     );
 }
 
-window.SecretariaDashboard = SecretariaDashboard;
+window.MaestroDashboard = MaestroDashboard;
