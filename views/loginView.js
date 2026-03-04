@@ -23,7 +23,6 @@ function LoginView({ onLogin }) {
         if (datosGuardados) {
             try {
                 const parsed = JSON.parse(datosGuardados);
-                // Evitar recordar el modo prueba por seguridad
                 if (parsed.rol && parsed.rol !== 'PRUEBA') {
                     setRol(parsed.rol);
                     setEsRecordado(true); 
@@ -56,7 +55,6 @@ function LoginView({ onLogin }) {
         setError('');
         setLoading(true);
         
-        // El modo PRUEBA y ADMIN no necesitan campo, ni nombre, ni fecha
         if (rol !== 'ADMIN' && rol !== 'PRUEBA' && rol !== 'LOGISTICA' && rol !== 'SECRETARIA' && rol !== 'TESORERO' && !campo) {
             setError('Debes seleccionar un campo.');
             setLoading(false); return;
@@ -72,7 +70,6 @@ function LoginView({ onLogin }) {
             setLoading(false); return;
         }
 
-        // NO guardar en memoria si es el Modo Prueba
         if (rol !== 'PRUEBA') {
             const datosAGuardar = {
                 rol: rol, nombre: nombre, campo: campo, diaNac: diaNac, mesNac: mesNac, anioNac: anioNac, recordarClave: recordarClave
@@ -198,7 +195,7 @@ function LoginView({ onLogin }) {
                     {rol && (
                         <div className="animate-in fade-in slide-in-from-top-2">
                             <label className={`text-[10px] font-bold uppercase tracking-widest ml-2 mb-1 block ${esModoPrueba ? 'text-slate-500' : 'text-slate-400'}`}>
-                                {esModoPrueba ? 'PIN Secreto (9999)' : 'Contraseña de Acceso'}
+                                {esModoPrueba ? 'PIN Secreto' : 'Contraseña de Acceso'}
                             </label>
                             <input type="password" placeholder="****" className={`w-full p-4 rounded-2xl outline-none border font-black tracking-widest transition-colors ${esModoPrueba ? 'bg-slate-800 border-slate-700 text-emerald-400 focus:border-emerald-500 text-center text-xl' : 'bg-slate-50 border-slate-100 focus:border-indigo-400 text-slate-700'}`} value={clave} onChange={(e) => setClave(e.target.value)} required />
                             
