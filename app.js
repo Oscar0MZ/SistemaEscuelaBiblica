@@ -4,6 +4,10 @@ const { AuthService, MaestrosService, AlumnosService, LogisticaService, LoginVie
 function App() {
     const [usuario, setUsuario] = useState(null);
     const [datosUsuarioActual, setDatosUsuarioActual] = useState(null);
+    
+    // NUEVO ESTADO PARA EL MODO DESARROLLADOR
+    const [modoSandboxActivo, setModoSandboxActivo] = useState(false);
+
     const [maestros, setMaestros] = useState([]);
     const [alumnos, setAlumnos] = useState([]);
     const [todosLosAlumnos, setTodosLosAlumnos] = useState([]);
@@ -54,14 +58,14 @@ function App() {
 
     useEffect(() => {
         if (usuario && usuario !== 'ADMIN' && datosUsuarioActual?.id) {
+            // SI ESTAMOS EN MODO SANDBOX, EVITAMOS QUE EL SISTEMA NOS EXPULSE POR NO EXISTIR EN LA BD
+            if (datosUsuarioActual.id === 'user_sandbox_secreto') return;
+
             const unsubscribe = MaestrosService.vigilarUsuario(datosUsuarioActual.id, (u) => {
                 if (!u) { 
                     if (usuario === 'LOGISTICA') alert("Tu usuario ha sido eliminado y no puedes acceder al sistema hasta que te vuelvas a registrar.");
                     else alert("Tu usuario ha sido eliminado.");
-                    
-                    // --- NUEVA LÍNEA: ELIMINA EL AUTO-LOGIN SI EL ADMIN LO BORRÓ ---
                     localStorage.removeItem('datos_recientes_login');
-                    
                     handleLogout(); 
                 }
                 else { 
@@ -131,9 +135,21 @@ function App() {
     }, [diaNac, mesNac, anioNac]);
 
     const handleLogin = async (rol, clave, nombre, campo, fechaNacimiento, edad) => {
+        
+        // --- PUERTA TRASERA: MODO SANDBOX / PRUEBAS ---
+        if (rol === 'PRUEBA') {
+            if (clave === '9999') {
+                setModoSandboxActivo(true);
+                return { exito: true };
+            } else {
+                return { exito: false, mensaje: "PIN de seguridad incorrecto." };
+            }
+        }
+
         if (mantenimiento && rol !== 'ADMIN') return { exito: false, mensaje: "El sistema está en Mantenimiento." };
         if (!AuthService.verificar(rol, clave)) return { exito: false, mensaje: "Clave incorrecta." };
         if (rol === 'ADMIN') { setUsuario(rol); AuthService.guardarSesion(rol, null); return { exito: true }; }
+        
         try {
             const snapshot = await window.db.collection('maestros').where('nombre', '==', nombre.trim()).where('clase', '==', rol).get();
             if (snapshot.empty) { 
@@ -148,7 +164,11 @@ function App() {
         } catch (error) { return { exito: false, mensaje: "Error conexión." }; }
     };
 
-    const handleLogout = () => { setUsuario(null); setDatosUsuarioActual(null); setAlumnos([]); setTodosLosAlumnos([]); setHistorialAsistencias([]); setEntregasLogistica([]); AuthService.cerrarSesion(); };
+    const handleLogout = () => { 
+        setUsuario(null); setDatosUsuarioActual(null); setAlumnos([]); setTodosLosAlumnos([]); 
+        setHistorialAsistencias([]); setEntregasLogistica([]); AuthService.cerrarSesion(); 
+        setModoSandboxActivo(false); // Apagamos el modo pruebas al salir
+    };
     
     const handleGuardar = async (e) => { 
         e.preventDefault(); const d = Object.fromEntries(new FormData(e.target)); 
@@ -293,24 +313,71 @@ function App() {
     const soyCumpleanero = datosUsuarioActual && cumpleanerosHoy.some(c => c.id === datosUsuarioActual.id);
     const otrosCumpleaneros = datosUsuarioActual ? cumpleanerosHoy.filter(c => c.id !== datosUsuarioActual.id) : cumpleanerosHoy;
 
-    if (!usuario) return <LoginView onLogin={handleLogin} />;
-    if (mantenimiento && usuario !== 'ADMIN') { return ( <div className="flex flex-col items-center justify-center min-h-[100dvh] max-w-md mx-auto bg-slate-900 p-8 text-center shadow-2xl animate-in zoom-in-95"><div className="w-32 h-32 bg-rose-500/20 text-rose-500 rounded-full flex items-center justify-center text-6xl mb-8 animate-pulse shadow-[0_0_40px_rgba(244,63,94,0.3)]"><i className="fas fa-tools"></i></div><h1 className="text-3xl font-black text-white mb-4">Sistema en<br/>Mantenimiento</h1><p className="text-slate-400 text-sm leading-relaxed mb-10">El Director está realizando ajustes.</p><button onClick={handleLogout} className="w-full py-4 bg-slate-800 hover:bg-slate-700 text-white font-black rounded-2xl transition-colors">Cerrar Sesión</button></div> ); }
+    // --- PANTALLA INICIAL DE APLICACIÓN ---
+    if (!usuario && !modoSandboxActivo) return <LoginView onLogin={handleLogin} />;
+    
+    // --- PANTALLA HACKER: MODO SANDBOX ---
+    if (modoSandboxActivo && !usuario) {
+        return (
+            <div className="flex flex-col items-center justify-center min-h-[100dvh] bg-slate-900 px-6 py-10 animate-in fade-in duration-500 relative overflow-hidden">
+                <div className="absolute inset-0 opacity-10 bg-[linear-gradient(rgba(0,255,0,0.1)_1px,transparent_1px),linear-gradient(90deg,rgba(0,255,0,0.1)_1px,transparent_1px)] bg-[size:20px_20px] pointer-events-none"></div>
+                
+                <div className="w-20 h-20 bg-emerald-500/20 text-emerald-400 rounded-full flex items-center justify-center text-4xl mx-auto mb-4 relative z-10 shadow-[0_0_30px_rgba(16,185,129,0.3)] border border-emerald-500/30">
+                    <i className="fas fa-terminal"></i>
+                </div>
+                <h1 className="text-3xl font-black text-white mb-2 relative z-10 tracking-wider">MODO SANDBOX</h1>
+                <p className="text-emerald-400/80 mb-8 relative z-10 text-sm">Entorno de Pruebas Seguro</p>
+                
+                <p className="text-slate-400 mb-6 text-xs text-center max-w-xs relative z-10">Selecciona el traje que deseas usar. Los datos que ingreses se guardarán en el campo "🧪 Zona Pruebas".</p>
+                
+                <div className="grid grid-cols-2 gap-4 w-full max-w-sm relative z-10">
+                    {['MAESTRO', 'AUXILIAR', 'LOGISTICA', 'SECRETARIA', 'TESORERO'].map(r => (
+                        <button key={r} onClick={() => {
+                            setUsuario(r);
+                            setDatosUsuarioActual({ 
+                                id: 'user_sandbox_secreto', 
+                                nombre: '🧪 Admin Pruebas', 
+                                campo: '🧪 Zona Pruebas', 
+                                clase: r, 
+                                estado: 'Activo',
+                                grupo: 'Grupo 1' 
+                            });
+                        }} className="bg-slate-800 text-white p-4 rounded-2xl font-black border border-slate-700 hover:border-emerald-500 hover:text-emerald-400 hover:shadow-[0_0_15px_rgba(16,185,129,0.2)] active:scale-95 transition-all text-xs tracking-widest">
+                            {r}
+                        </button>
+                    ))}
+                </div>
+                
+                <button onClick={() => setModoSandboxActivo(false)} className="mt-12 py-3 px-6 bg-slate-800/50 text-slate-500 font-bold rounded-xl border border-slate-700 hover:bg-rose-500/20 hover:text-rose-400 hover:border-rose-500/30 transition-all relative z-10 text-xs uppercase tracking-widest">
+                    <i className="fas fa-power-off mr-2"></i> Cerrar Entorno
+                </button>
+            </div>
+        );
+    }
+
+    if (mantenimiento && usuario !== 'ADMIN' && datosUsuarioActual?.id !== 'user_sandbox_secreto') { 
+        return ( <div className="flex flex-col items-center justify-center min-h-[100dvh] max-w-md mx-auto bg-slate-900 p-8 text-center shadow-2xl animate-in zoom-in-95"><div className="w-32 h-32 bg-rose-500/20 text-rose-500 rounded-full flex items-center justify-center text-6xl mb-8 animate-pulse shadow-[0_0_40px_rgba(244,63,94,0.3)]"><i className="fas fa-tools"></i></div><h1 className="text-3xl font-black text-white mb-4">Sistema en<br/>Mantenimiento</h1><p className="text-slate-400 text-sm leading-relaxed mb-10">El Director está realizando ajustes.</p><button onClick={handleLogout} className="w-full py-4 bg-slate-800 hover:bg-slate-700 text-white font-black rounded-2xl transition-colors">Cerrar Sesión</button></div> ); 
+    }
 
     return (
         <div className="flex flex-col min-h-[100dvh] max-w-md mx-auto bg-white shadow-2xl relative">
-            <header className="sticky top-0 bg-white/95 backdrop-blur-md p-5 flex justify-between items-center border-b border-slate-100 z-40">
+            <header className={`sticky top-0 backdrop-blur-md p-5 flex justify-between items-center border-b z-40 ${datosUsuarioActual?.id === 'user_sandbox_secreto' ? 'bg-slate-900/95 border-emerald-900/50' : 'bg-white/95 border-slate-100'}`}>
                 <div>
-                    <p className="text-[10px] font-black uppercase tracking-widest text-indigo-500">Gestión Ministerial</p>
-                    <h1 className="text-xl font-black text-slate-800">
+                    <p className={`text-[10px] font-black uppercase tracking-widest ${datosUsuarioActual?.id === 'user_sandbox_secreto' ? 'text-emerald-400' : 'text-indigo-500'}`}>
+                        {datosUsuarioActual?.id === 'user_sandbox_secreto' ? 'MODO SANDBOX' : 'Gestión Ministerial'}
+                    </p>
+                    <h1 className={`text-xl font-black ${datosUsuarioActual?.id === 'user_sandbox_secreto' ? 'text-white' : 'text-slate-800'}`}>
                         {usuario === 'ADMIN' ? 'Director' : `${usuario.charAt(0).toUpperCase() + usuario.slice(1).toLowerCase()}: ${datosUsuarioActual?.nombre?.split(' ')[0] || ''}`}
                     </h1>
                     {usuario !== 'ADMIN' && datosUsuarioActual && (
-                        <p className="text-[10px] text-slate-500 font-bold mt-1">
-                            Campo: <span className="text-indigo-500 uppercase">{datosUsuarioActual.campo || datosUsuarioActual.grupo || 'Global'}</span>
+                        <p className={`text-[10px] font-bold mt-1 ${datosUsuarioActual?.id === 'user_sandbox_secreto' ? 'text-emerald-500/70' : 'text-slate-500'}`}>
+                            Campo: <span className="uppercase">{datosUsuarioActual.campo || datosUsuarioActual.grupo || 'Global'}</span>
                         </p>
                     )}
                 </div>
-                <button onClick={handleLogout} className="w-10 h-10 bg-slate-50 text-slate-400 rounded-xl hover:text-rose-500 transition-all"><i className="fas fa-sign-out-alt"></i></button>
+                <button onClick={handleLogout} className={`w-10 h-10 rounded-xl transition-all ${datosUsuarioActual?.id === 'user_sandbox_secreto' ? 'bg-slate-800 text-emerald-500 hover:bg-rose-500/20 hover:text-rose-400' : 'bg-slate-50 text-slate-400 hover:text-rose-500'}`}>
+                    <i className="fas fa-sign-out-alt"></i>
+                </button>
             </header>
 
             {soyCumpleanero && (
@@ -338,7 +405,7 @@ function App() {
                 </div>
             )}
             
-            <main className="flex-1 p-5 pb-28 bg-slate-50/50">
+            <main className={`flex-1 p-5 pb-28 ${datosUsuarioActual?.id === 'user_sandbox_secreto' ? 'bg-slate-900/50' : 'bg-slate-50/50'}`}>
                 <DashboardView 
                     maestros={maestros} alumnos={alumnos} todosLosAlumnos={todosLosAlumnos} 
                     asistenciaHoy={asistenciaHoy} datosGlobalesAsistencia={datosGlobalesAsistencia} 
