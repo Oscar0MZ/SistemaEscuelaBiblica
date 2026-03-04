@@ -6,8 +6,7 @@ function MaestroDashboard({
 }) {
     const [vistaActual, setVistaActual] = useState('inicio'); 
     
-    // Estados para la pestaña de Alumnos
-    const [subVistaGestion, setSubVistaGestion] = useState('directorio'); // 'directorio' o 'cumpleanos'
+    const [subVistaGestion, setSubVistaGestion] = useState('directorio'); 
     const [mesCumpleExpandido, setMesCumpleExpandido] = useState(null);
 
     const [listaAsistencia, setListaAsistencia] = useState({});
@@ -61,6 +60,28 @@ function MaestroDashboard({
         leccionProgreso = parseInt(asistenciaHoy.leccion);
     }
 
+    const dtHoyObj = new Date();
+    const diaSemana = dtHoyObj.getDay();
+    const esFinDeSemana = diaSemana === 0 || diaSemana === 6; // 0=Dom, 6=Sab
+    const dtHoyStr = dtHoyObj.toLocaleDateString('en-CA');
+
+    let regOtroDiaFinde = null;
+    if (esFinDeSemana) {
+        const d = new Date(dtHoyObj);
+        if (diaSemana === 6) d.setDate(d.getDate() + 1);
+        else if (diaSemana === 0) d.setDate(d.getDate() - 1);
+        const otroDiaStr = d.toLocaleDateString('en-CA');
+        regOtroDiaFinde = todosLosRegistros.find(r => !r.esReset && r.fecha === otroDiaStr);
+    }
+
+    const asistenciaMostrar = asistenciaHoy || regOtroDiaFinde;
+    const asistenciaTomada = !!asistenciaMostrar;
+    const esDeOtroDia = asistenciaTomada && asistenciaMostrar.fecha !== dtHoyStr;
+    const soyElAutor = asistenciaTomada && asistenciaMostrar.registradoPorId === datosUsuarioActual.id;
+    
+    // Bloqueo duro: solo si ya enviaron la asistencia oficial del fin de semana
+    const estaBloqueada = asistenciaTomada && (!soyElAutor || esDeOtroDia);
+
     React.useEffect(() => {
         if (vistaActual === 'asistencia' && alumnos.length > 0) {
             const inicial = {};
@@ -85,7 +106,6 @@ function MaestroDashboard({
         if (exito) setVistaActual('inicio');
     };
 
-    // --- LÓGICA PARA AGRUPAR CUMPLEAÑOS CORREGIDA ---
     const mesesNombres = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
     
     const agruparCumpleanos = () => {
@@ -107,7 +127,7 @@ function MaestroDashboard({
                         grupos[mIndex].ninos.push({
                             ...a,
                             diaNac: parseInt(partes[2], 10),
-                            edadACumplir: anioActual - anioNac // <-- ESTA ERA LA LÍNEA DEL ERROR (SIN ESPACIO AHORA)
+                            edadACumplir: anioActual - anioNac
                         });
                     }
                 }
@@ -124,10 +144,6 @@ function MaestroDashboard({
             <i className={`fas ${icon} text-xl mb-1 ${vistaActual === id ? 'animate-bounce' : ''}`}></i><span className="text-[9px] tracking-wide">{label}</span>
         </button>
     );
-
-    const asistenciaTomada = asistenciaHoy !== null;
-    const soyElAutor = asistenciaHoy && asistenciaHoy.registradoPorId === datosUsuarioActual.id;
-    const estaBloqueada = asistenciaTomada && !soyElAutor;
     
     const progInicio = calcProgreso(leccionProgreso);
 
@@ -160,17 +176,44 @@ function MaestroDashboard({
     if (vistaActual === 'inicio') {
         contenidoMaestro = (
             <div className="flex flex-col h-full space-y-6 pt-2 animate-in fade-in duration-300">
-                <div className={`w-full p-6 rounded-[32px] text-left relative overflow-hidden group shadow-lg ${estaBloqueada ? 'bg-slate-50 border border-slate-200' : asistenciaTomada ? 'bg-white border border-slate-100' : 'bg-rose-500 text-white shadow-rose-200'}`}>
+                <div className={`w-full p-6 rounded-[32px] text-left relative overflow-hidden group shadow-lg ${estaBloqueada ? 'bg-slate-50 border border-slate-200' : asistenciaTomada ? 'bg-white border border-slate-100' : !esFinDeSemana ? 'bg-slate-200 text-slate-500 shadow-none' : 'bg-rose-500 text-white shadow-rose-200'}`}>
                     {asistenciaTomada ? (
                         <>
-                            <div className="flex justify-between items-center mb-6"><h3 className={`font-bold text-sm flex items-center ${estaBloqueada ? 'text-slate-500' : 'text-slate-700'}`}><i className={`fas ${estaBloqueada ? 'fa-lock' : 'fa-clipboard-check'} mr-2 text-lg ${estaBloqueada ? 'text-slate-400' : 'text-emerald-500'}`}></i> {estaBloqueada ? 'Asistencia (Lectura)' : 'Asistencia Completada'}</h3>{estaBloqueada ? (<span className="text-[9px] bg-slate-200 text-slate-500 px-2 py-1 rounded-lg font-bold uppercase">Bloqueada</span>) : (<span className="text-[10px] bg-emerald-100 text-emerald-700 px-2 py-1 rounded-lg font-bold">TUYA</span>)}</div>
-                            <div className="flex justify-around text-center mb-6"><div><p className={`text-3xl font-black ${estaBloqueada ? 'text-slate-500' : 'text-emerald-500'}`}>{asistenciaHoy.totales.presentes}</p><p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">Presentes</p></div><div><p className={`text-3xl font-black ${estaBloqueada ? 'text-slate-500' : 'text-rose-500'}`}>{asistenciaHoy.totales.ausentes}</p><p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">Ausentes</p></div><div><p className={`text-3xl font-black ${estaBloqueada ? 'text-slate-500' : 'text-amber-500'}`}>{asistenciaHoy.totales.permisos}</p><p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">Permisos</p></div></div>
+                            <div className="flex justify-between items-center mb-6">
+                                <h3 className={`font-bold text-sm flex items-center ${estaBloqueada ? 'text-slate-500' : 'text-slate-700'}`}>
+                                    <i className={`fas ${estaBloqueada ? 'fa-lock' : 'fa-clipboard-check'} mr-2 text-lg ${estaBloqueada ? 'text-slate-400' : 'text-emerald-500'}`}></i> 
+                                    {estaBloqueada ? 'Asistencia (Lectura)' : 'Asistencia Completada'}
+                                </h3>
+                                {estaBloqueada ? (
+                                    <span className="text-[9px] bg-slate-200 text-slate-500 px-2 py-1 rounded-lg font-bold uppercase tracking-widest">{esDeOtroDia ? 'Reporte Fin de Semana' : 'Bloqueada'}</span>
+                                ) : (
+                                    <span className="text-[10px] bg-emerald-100 text-emerald-700 px-2 py-1 rounded-lg font-bold">TUYA</span>
+                                )}
+                            </div>
+                            <div className="flex justify-around text-center mb-6">
+                                <div><p className={`text-3xl font-black ${estaBloqueada ? 'text-slate-500' : 'text-emerald-500'}`}>{asistenciaMostrar.totales.presentes}</p><p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">Presentes</p></div>
+                                <div><p className={`text-3xl font-black ${estaBloqueada ? 'text-slate-500' : 'text-rose-500'}`}>{asistenciaMostrar.totales.ausentes}</p><p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">Ausentes</p></div>
+                                <div><p className={`text-3xl font-black ${estaBloqueada ? 'text-slate-500' : 'text-amber-500'}`}>{asistenciaMostrar.totales.permisos}</p><p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">Permisos</p></div>
+                            </div>
                             <div className={`pt-4 border-t ${estaBloqueada ? 'border-slate-200' : 'border-slate-50'}`}>
-                                <div className="flex justify-between text-[10px] font-bold text-slate-400 mb-2"><span>{!ultimoReg ? 'Material: Sin asignar' : `Material: Parte ${progInicio.parte} • Lección ${progInicio.leccion}`}</span><span className="text-emerald-500"><i className="fas fa-coins mr-1"></i>${Number(asistenciaHoy.ofrenda||0).toFixed(2)}</span></div>
+                                <div className="flex justify-between text-[10px] font-bold text-slate-400 mb-2"><span>{!ultimoReg ? 'Material: Sin asignar' : `Material: Parte ${progInicio.parte} • Lección ${progInicio.leccion}`}</span><span className="text-emerald-500"><i className="fas fa-coins mr-1"></i>${Number(asistenciaMostrar.ofrenda||0).toFixed(2)}</span></div>
                                 <div className="w-full bg-slate-100 rounded-full h-1.5 overflow-hidden"><div className="bg-indigo-400 h-1.5 rounded-full" style={{width: `${progInicio.porc}%`}}></div></div>
                             </div>
                         </>
-                    ) : (<><div className="absolute top-0 right-0 w-32 h-32 bg-white opacity-10 rounded-bl-[100px] pointer-events-none"></div><div className="flex items-center space-x-4 relative z-10"><div className="w-16 h-16 bg-white/20 rounded-2xl flex items-center justify-center text-3xl backdrop-blur-sm animate-pulse"><i className="fas fa-clipboard-list"></i></div><div><h3 className="font-bold text-xl">Tomar Asistencia</h3><p className="text-rose-100 text-xs">Aún no registras el día de hoy</p></div></div></>)}
+                    ) : (
+                        <>
+                            <div className="absolute top-0 right-0 w-32 h-32 bg-white opacity-10 rounded-bl-[100px] pointer-events-none"></div>
+                            <div className="flex items-center space-x-4 relative z-10">
+                                <div className={`w-16 h-16 rounded-2xl flex items-center justify-center text-3xl backdrop-blur-sm ${!esFinDeSemana ? 'bg-slate-300 text-slate-400' : 'bg-white/20 animate-pulse'}`}>
+                                    <i className={`fas ${!esFinDeSemana ? 'fa-calendar-times' : 'fa-clipboard-list'}`}></i>
+                                </div>
+                                <div>
+                                    <h3 className="font-bold text-xl">{!esFinDeSemana ? 'Día Inhábil' : 'Tomar Asistencia'}</h3>
+                                    <p className={`text-xs ${!esFinDeSemana ? 'text-slate-500 font-bold' : 'text-rose-100'}`}>{!esFinDeSemana ? 'Disponible Sábado y Domingo' : 'Aún no registras la clase de hoy'}</p>
+                                </div>
+                            </div>
+                        </>
+                    )}
                 </div>
                 <div className="w-full bg-indigo-600 p-6 rounded-[32px] text-white shadow-xl shadow-indigo-200 flex justify-between items-center relative overflow-hidden"><div className="absolute top-0 right-0 w-32 h-32 bg-white opacity-10 rounded-bl-[100px] pointer-events-none"></div><div className="relative z-10"><p className="text-xs font-bold uppercase opacity-70 tracking-widest">Niños Totales</p><p className="text-5xl font-black tracking-tighter mt-1">{alumnos.length}</p></div><div className="w-14 h-14 bg-white/20 rounded-2xl flex items-center justify-center text-3xl backdrop-blur-sm relative z-10"><i className="fas fa-users"></i></div></div>
             </div>
@@ -186,73 +229,100 @@ function MaestroDashboard({
                 </div>
             );
         } else if (estaBloqueada) {
-            contenidoMaestro = <div className="flex flex-col items-center justify-center h-full text-center p-8 animate-in fade-in"><div className="w-24 h-24 bg-slate-100 text-slate-400 rounded-full flex items-center justify-center text-5xl mb-6 shadow-inner"><i className="fas fa-lock"></i></div><h3 className="text-2xl font-black text-slate-700 mb-2">Acceso Bloqueado</h3><p className="text-slate-500 text-sm leading-relaxed">La asistencia de hoy ya fue registrada por <b>{asistenciaHoy?.maestro}</b>.</p></div>;
-        } else if (!ultimoReg) {
             contenidoMaestro = (
-                <div className="flex flex-col h-full pt-4 animate-in slide-in-from-right duration-300">
-                    <div className="px-2 mb-4"><div><h2 className="text-2xl font-black text-slate-800">Pasar Lista</h2></div></div>
-                    <div className="flex-1 bg-white rounded-t-[40px] shadow-lg border-t border-slate-100 p-8 flex flex-col items-center justify-center text-center">
-                        <div className="w-24 h-24 bg-amber-50 text-amber-500 rounded-full flex items-center justify-center text-5xl mb-6 shadow-sm animate-bounce"><i className="fas fa-lock"></i></div>
-                        <h3 className="text-xl font-black text-slate-700 mb-2">Material no asignado</h3>
-                        <p className="text-slate-500 text-sm leading-relaxed mb-8">Por favor, comunícate con el Director e infórmale en qué <b>lección exacta</b> vas a iniciar hoy.<br/><br/>Una vez que él la asigne en su panel, esta pantalla se desbloqueará automáticamente y podrás pasar lista.</p>
-                    </div>
+                <div className="flex flex-col items-center justify-center h-full text-center p-8 animate-in fade-in">
+                    <div className="w-24 h-24 bg-slate-100 text-slate-400 rounded-full flex items-center justify-center text-5xl mb-6 shadow-inner"><i className="fas fa-lock"></i></div>
+                    <h3 className="text-2xl font-black text-slate-700 mb-2">{esDeOtroDia ? 'Clase Completada' : 'Acceso Bloqueado'}</h3>
+                    <p className="text-slate-500 text-sm leading-relaxed">
+                        {esDeOtroDia 
+                            ? <>Ya enviaste el reporte de asistencia de este fin de semana el día <b className="text-slate-600">{formatoFecha(asistenciaMostrar.fecha)}</b>.</>
+                            : <>La asistencia de hoy ya fue registrada por <b>{asistenciaMostrar?.maestro}</b>.</>}
+                    </p>
                 </div>
             );
         } else {
+            // --- NUEVA LÓGICA: SE MUESTRA LA LISTA PERO SE BLOQUEA EN GRIS SI FALTA MATERIAL O ESTÁ FUERA DE HORARIO ---
+            const bloqueoHorario = !esFinDeSemana;
+            const bloqueoMaterial = !ultimoReg;
+            const formBloqueado = bloqueoHorario || bloqueoMaterial;
+
             contenidoMaestro = (
                 <div className="flex flex-col h-full pt-4 animate-in slide-in-from-right duration-300">
                     <div className="flex items-center space-x-4 mb-4 px-2"><div><h2 className="text-2xl font-black text-slate-800">Pasar Lista</h2><p className="text-slate-400 text-xs">{new Date().toLocaleDateString()}</p></div></div>
                     
                     <div className="flex-1 bg-white rounded-t-[40px] shadow-lg border-t border-slate-100 p-6 overflow-hidden flex flex-col relative">
                         
-                        <div className="bg-emerald-50 p-4 rounded-2xl border border-emerald-100 mb-4 flex-shrink-0 flex items-center justify-between shadow-sm">
-                            <div>
-                                <h3 className="text-xs font-bold text-emerald-800 uppercase tracking-widest"><i className="fas fa-hand-holding-usd mr-2"></i>Ofrenda</h3>
-                                <p className="text-[9px] text-emerald-600 mt-1 font-bold">Total recolectado ($)</p>
+                        {/* BANNERS INFORMATIVOS DE BLOQUEO */}
+                        {bloqueoHorario && (
+                            <div className="bg-slate-50 p-3 rounded-xl border border-slate-200 mb-4 flex items-center shadow-sm shrink-0">
+                                <i className="fas fa-calendar-times text-slate-400 text-xl mr-3"></i>
+                                <p className="text-[10px] font-bold text-slate-500 leading-tight">Fuera de horario. El registro de asistencia solo está habilitado los días <b>sábado y domingo</b>.</p>
                             </div>
-                            <div className="relative w-1/3">
-                                <span className="absolute left-3 top-3 text-emerald-600 font-black">$</span>
-                                <input type="number" step="0.01" min="0" value={ofrenda} onChange={(e)=>setOfrenda(e.target.value)} placeholder="0.00" className="w-full py-3 pl-7 pr-3 bg-white rounded-xl text-emerald-700 font-black outline-none border border-emerald-200 focus:ring-2 focus:ring-emerald-300 text-right shadow-sm" />
+                        )}
+                        {bloqueoMaterial && (
+                            <div className="bg-amber-50 p-3 rounded-xl border border-amber-200 mb-4 flex items-center shadow-sm shrink-0">
+                                <i className="fas fa-book text-amber-500 text-xl mr-3"></i>
+                                <p className="text-[10px] font-bold text-amber-700 leading-tight">Esperando que el Administrador te <b>asigne el material</b> de la lección para poder iniciar.</p>
                             </div>
-                        </div>
+                        )}
 
-                        <div className="bg-indigo-50 p-4 rounded-2xl border border-indigo-100 mb-4 flex-shrink-0">
-                            <h3 className="text-xs font-bold text-indigo-800 uppercase tracking-widest mb-3 flex items-center"><i className="fas fa-book mr-2"></i> Material de Clase</h3>
-                            <div className="flex space-x-4 items-center">
-                                <div className="w-1/3 relative">
-                                    <label className="text-[10px] font-bold text-indigo-400 uppercase ml-1 block mb-1">Lección N°</label>
-                                    <input type="number" className="w-full p-3 bg-slate-200 rounded-xl outline-none border border-slate-300 text-center font-black text-slate-500 text-xl shadow-inner cursor-not-allowed opacity-80" value={leccionAsignada} readOnly disabled />
-                                    <div className="absolute top-1 right-1 bg-slate-300 rounded-full w-5 h-5 flex items-center justify-center shadow-sm"><i className="fas fa-lock text-slate-500 text-[9px]"></i></div>
-                                    <p className="text-[8px] text-slate-400 text-center mt-1 leading-tight font-bold uppercase tracking-widest">Automático</p>
+                        {/* LISTA DE ASISTENCIA (SE PONE EN GRIS SI ESTÁ BLOQUEADO) */}
+                        <div className={`flex flex-col flex-1 overflow-hidden transition-all duration-300 ${formBloqueado ? 'opacity-50 grayscale pointer-events-none' : ''}`}>
+                            <div className="bg-emerald-50 p-4 rounded-2xl border border-emerald-100 mb-4 flex-shrink-0 flex items-center justify-between shadow-sm">
+                                <div>
+                                    <h3 className="text-xs font-bold text-emerald-800 uppercase tracking-widest"><i className="fas fa-hand-holding-usd mr-2"></i>Ofrenda</h3>
+                                    <p className="text-[9px] text-emerald-600 mt-1 font-bold">Total recolectado ($)</p>
                                 </div>
-                                <div className="w-2/3">
-                                    <label className="text-[10px] font-bold text-indigo-400 uppercase ml-1 block mb-1">¿Se impartió hoy?</label>
-                                    <div className="flex space-x-2">
-                                        <button onClick={() => setLeccionImpartida(true)} className={`flex-1 py-3 rounded-xl font-bold text-xs transition-colors ${leccionImpartida ? 'bg-emerald-500 text-white shadow-md' : 'bg-white border border-indigo-100 text-indigo-400 hover:bg-indigo-100'}`}>Sí ✅</button>
-                                        <button onClick={() => setLeccionImpartida(false)} className={`flex-1 py-3 rounded-xl font-bold text-xs transition-colors ${!leccionImpartida ? 'bg-rose-500 text-white shadow-md' : 'bg-white border border-indigo-100 text-indigo-400 hover:bg-indigo-100'}`}>No ❌</button>
+                                <div className="relative w-1/3">
+                                    <span className="absolute left-3 top-3 text-emerald-600 font-black">$</span>
+                                    <input type="number" step="0.01" min="0" value={ofrenda} onChange={(e)=>setOfrenda(e.target.value)} placeholder="0.00" className="w-full py-3 pl-7 pr-3 bg-white rounded-xl text-emerald-700 font-black outline-none border border-emerald-200 focus:ring-2 focus:ring-emerald-300 text-right shadow-sm" />
+                                </div>
+                            </div>
+
+                            <div className="bg-indigo-50 p-4 rounded-2xl border border-indigo-100 mb-4 flex-shrink-0">
+                                <h3 className="text-xs font-bold text-indigo-800 uppercase tracking-widest mb-3 flex items-center"><i className="fas fa-book mr-2"></i> Material de Clase</h3>
+                                <div className="flex space-x-4 items-center">
+                                    <div className="w-1/3 relative">
+                                        <label className="text-[10px] font-bold text-indigo-400 uppercase ml-1 block mb-1">Lección N°</label>
+                                        <input type="number" className="w-full p-3 bg-slate-200 rounded-xl outline-none border border-slate-300 text-center font-black text-slate-500 text-xl shadow-inner cursor-not-allowed opacity-80" value={leccionAsignada} readOnly disabled />
+                                        <div className="absolute top-1 right-1 bg-slate-300 rounded-full w-5 h-5 flex items-center justify-center shadow-sm"><i className="fas fa-lock text-slate-500 text-[9px]"></i></div>
+                                        <p className="text-[8px] text-slate-400 text-center mt-1 leading-tight font-bold uppercase tracking-widest">Automático</p>
+                                    </div>
+                                    <div className="w-2/3">
+                                        <label className="text-[10px] font-bold text-indigo-400 uppercase ml-1 block mb-1">¿Se impartió hoy?</label>
+                                        <div className="flex space-x-2">
+                                            <button onClick={() => setLeccionImpartida(true)} className={`flex-1 py-3 rounded-xl font-bold text-xs transition-colors ${leccionImpartida ? 'bg-emerald-500 text-white shadow-md' : 'bg-white border border-indigo-100 text-indigo-400 hover:bg-indigo-100'}`}>Sí ✅</button>
+                                            <button onClick={() => setLeccionImpartida(false)} className={`flex-1 py-3 rounded-xl font-bold text-xs transition-colors ${!leccionImpartida ? 'bg-rose-500 text-white shadow-md' : 'bg-white border border-indigo-100 text-indigo-400 hover:bg-indigo-100'}`}>No ❌</button>
+                                        </div>
                                     </div>
                                 </div>
                             </div>
+
+                            <div className="overflow-y-auto space-y-4 pb-28 pr-2">
+                                {alumnos.map(a => (
+                                    <div key={a.id} className="flex flex-col p-4 bg-slate-50 rounded-2xl border border-slate-100 shadow-sm">
+                                        <div className="flex items-center space-x-3 mb-3">
+                                            <div className="w-10 h-10 bg-indigo-50 text-indigo-600 rounded-xl flex items-center justify-center text-sm font-bold shrink-0">{a.nombre.charAt(0)}</div>
+                                            <p className="font-bold text-slate-700 text-sm leading-tight">{a.nombre}</p>
+                                        </div>
+                                        <div className="grid grid-cols-3 gap-2">
+                                            <button onClick={() => setListaAsistencia({...listaAsistencia, [a.id]: 'Presente'})} className={`py-2 rounded-xl text-[11px] font-bold uppercase transition-all ${listaAsistencia[a.id] === 'Presente' ? 'bg-emerald-500 text-white shadow-md' : 'bg-white border border-slate-200 text-slate-400 hover:bg-slate-100'}`}>Presente</button>
+                                            <button onClick={() => setListaAsistencia({...listaAsistencia, [a.id]: 'Ausente'})} className={`py-2 rounded-xl text-[11px] font-bold uppercase transition-all ${listaAsistencia[a.id] === 'Ausente' ? 'bg-rose-500 text-white shadow-md' : 'bg-white border border-slate-200 text-slate-400 hover:bg-slate-100'}`}>Ausente</button>
+                                            <button onClick={() => setListaAsistencia({...listaAsistencia, [a.id]: 'Permiso'})} className={`py-2 rounded-xl text-[11px] font-bold uppercase transition-all ${listaAsistencia[a.id] === 'Permiso' ? 'bg-amber-400 text-white shadow-md' : 'bg-white border border-slate-200 text-slate-400 hover:bg-slate-100'}`}>Permiso</button>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
                         </div>
 
-                        <div className="overflow-y-auto space-y-4 pb-28 pr-2">
-                            {alumnos.map(a => (
-                                <div key={a.id} className="flex flex-col p-4 bg-slate-50 rounded-2xl border border-slate-100 shadow-sm">
-                                    <div className="flex items-center space-x-3 mb-3">
-                                        <div className="w-10 h-10 bg-indigo-50 text-indigo-600 rounded-xl flex items-center justify-center text-sm font-bold shrink-0">{a.nombre.charAt(0)}</div>
-                                        <p className="font-bold text-slate-700 text-sm leading-tight">{a.nombre}</p>
-                                    </div>
-                                    <div className="grid grid-cols-3 gap-2">
-                                        <button onClick={() => setListaAsistencia({...listaAsistencia, [a.id]: 'Presente'})} className={`py-2 rounded-xl text-[11px] font-bold uppercase transition-all ${listaAsistencia[a.id] === 'Presente' ? 'bg-emerald-500 text-white shadow-md' : 'bg-white border border-slate-200 text-slate-400 hover:bg-slate-100'}`}>Presente</button>
-                                        <button onClick={() => setListaAsistencia({...listaAsistencia, [a.id]: 'Ausente'})} className={`py-2 rounded-xl text-[11px] font-bold uppercase transition-all ${listaAsistencia[a.id] === 'Ausente' ? 'bg-rose-500 text-white shadow-md' : 'bg-white border border-slate-200 text-slate-400 hover:bg-slate-100'}`}>Ausente</button>
-                                        <button onClick={() => setListaAsistencia({...listaAsistencia, [a.id]: 'Permiso'})} className={`py-2 rounded-xl text-[11px] font-bold uppercase transition-all ${listaAsistencia[a.id] === 'Permiso' ? 'bg-amber-400 text-white shadow-md' : 'bg-white border border-slate-200 text-slate-400 hover:bg-slate-100'}`}>Permiso</button>
-                                    </div>
-                                </div>
-                            ))}
-                        </div>
-
-                        <div className="absolute bottom-6 left-6 right-6">
-                            <button onClick={guardarLista} className="w-full bg-indigo-600 p-4 rounded-2xl text-white font-black shadow-xl active:scale-95 transition-all text-lg">Guardar Asistencia</button>
+                        <div className="absolute bottom-6 left-6 right-6 z-20">
+                            <button 
+                                onClick={guardarLista} 
+                                disabled={formBloqueado}
+                                className={`w-full p-4 rounded-2xl font-black shadow-xl transition-all text-lg ${formBloqueado ? 'bg-slate-300 text-slate-500 shadow-none' : 'bg-indigo-600 text-white active:scale-95'}`}
+                            >
+                                {formBloqueado ? 'Acceso Restringido' : 'Guardar Asistencia'}
+                            </button>
                         </div>
                     </div>
                 </div>
@@ -265,7 +335,6 @@ function MaestroDashboard({
             <div className="flex flex-col h-full pt-4 animate-in slide-in-from-right duration-300">
                 <div className="px-2 mb-4"><h2 className="text-2xl font-black text-slate-800">Alumnos</h2><p className="text-slate-400 text-xs">Directorio y Cumpleaños</p></div>
                 
-                {/* SUB-PESTAÑAS DIRECTORIO VS CUMPLEAÑOS */}
                 <div className="flex px-2 space-x-2 mb-4">
                     <button onClick={() => setSubVistaGestion('directorio')} className={`flex-1 py-2 rounded-xl text-xs font-bold transition-all ${subVistaGestion === 'directorio' ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-50 text-slate-400'}`}>
                         <i className="fas fa-address-book mr-2"></i>Directorio
