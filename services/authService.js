@@ -1,7 +1,7 @@
 // services/authService.js
 
 const CLAVES = {
-    ADMIN: "1234",
+    ADMIN: "@Admin2026",
     MAESTRO: "2222",
     AUXILIAR: "3333",
     LOGISTICA: "4444",
