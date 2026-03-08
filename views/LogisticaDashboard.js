@@ -169,7 +169,6 @@ function LogisticaDashboard({ datosUsuarioActual, entregasLogistica, onActualiza
                                             <h3 className="font-black text-slate-600 text-base mb-1 mt-1"><i className="fas fa-check-double text-slate-500 mr-2"></i>Ruta Finalizada</h3>
                                             <p className="text-xs font-bold text-slate-500 mb-4 pl-7">Total asignado: {ultimaRutaCompletada.cantidad} Paquetes</p>
                                             <div className="space-y-2">
-                                                {/* Mostrar todos los campos reales más los extras que se hayan guardado */}
                                                 {Object.entries(ultimaRutaCompletada.detalles || {}).map(([c, cant]) => (
                                                     <div key={c} className="flex flex-col bg-white/50 p-2 px-3 rounded-xl border border-slate-200">
                                                         <div className="flex justify-between items-center">
@@ -192,7 +191,6 @@ function LogisticaDashboard({ datosUsuarioActual, entregasLogistica, onActualiza
                             entregasPendientes.map(e => {
                                 const camposDeRuta = e.campos || [e.campo];
                                 
-                                // Calculamos total ingresado tomando en cuenta los campos adicionales si ya tienen datos
                                 const totalIngresado = [...camposDeRuta, '📦 Víveres Equipo Logística', '🏆 Recompensas Campos'].reduce((sum, c) => {
                                     return sum + (Number(cantidadesDetalle[e.id]?.[c]) || Number(e.detalles?.[c]) || 0);
                                 }, 0);
@@ -252,42 +250,34 @@ function LogisticaDashboard({ datosUsuarioActual, entregasLogistica, onActualiza
                                             <div className="pt-2 mt-4 border-t-2 border-dashed border-slate-200">
                                                 <p className="text-[9px] font-black text-indigo-400 uppercase tracking-widest pl-1 mb-2 mt-2"><i className="fas fa-clipboard-list mr-1"></i> Control Interno:</p>
                                                 
-                                                {/* 1. CAMPO OBLIGATORIO: LOGÍSTICA */}
-                                                <div className={`flex flex-col bg-indigo-50/30 p-3 rounded-xl border border-indigo-100 shadow-sm mb-3`}>
-                                                    <div className="flex justify-between items-center">
-                                                        <span className="text-xs font-bold text-indigo-800 w-1/2 truncate">📦 Víveres Equipo Logística</span>
-                                                        <div className="w-1/2 flex justify-end">
-                                                            <input 
-                                                                type="number" 
-                                                                placeholder="Obligatorio" 
-                                                                className="w-20 p-2 rounded-lg text-xs font-black text-center outline-none bg-white border border-indigo-200 text-indigo-600 focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100"
-                                                                value={cantidadesDetalle[e.id]?.['📦 Víveres Equipo Logística'] !== undefined ? cantidadesDetalle[e.id]?.['📦 Víveres Equipo Logística'] : (e.detalles?.['📦 Víveres Equipo Logística'] || '')}
-                                                                onChange={(ev) => handleCantidadChange(e.id, '📦 Víveres Equipo Logística', ev.target.value)}
-                                                            />
-                                                        </div>
-                                                    </div>
+                                                {/* 1. CAMPO OBLIGATORIO: LOGÍSTICA (DISEÑO VERTICAL) */}
+                                                <div className={`flex flex-col bg-indigo-50/30 p-4 rounded-xl border border-indigo-100 shadow-sm mb-3`}>
+                                                    <label className="text-xs font-bold text-indigo-800 mb-2">📦 Víveres Equipo Logística</label>
+                                                    <input 
+                                                        type="number" 
+                                                        placeholder="Cantidad (Obligatorio)" 
+                                                        className="w-full p-3 rounded-xl text-sm font-black text-center outline-none bg-white border border-indigo-200 text-indigo-600 focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 transition-all shadow-sm"
+                                                        value={cantidadesDetalle[e.id]?.['📦 Víveres Equipo Logística'] !== undefined ? cantidadesDetalle[e.id]?.['📦 Víveres Equipo Logística'] : (e.detalles?.['📦 Víveres Equipo Logística'] || '')}
+                                                        onChange={(ev) => handleCantidadChange(e.id, '📦 Víveres Equipo Logística', ev.target.value)}
+                                                    />
                                                 </div>
 
-                                                {/* 2. CAMPO OPCIONAL: RECOMPENSAS */}
-                                                <div className={`flex flex-col bg-amber-50/30 p-3 rounded-xl border border-amber-100 shadow-sm`}>
-                                                    <div className="flex justify-between items-center mb-2">
-                                                        <span className="text-xs font-bold text-amber-800 w-1/2 truncate">🏆 Recompensas Campos</span>
-                                                        <div className="w-1/2 flex justify-end">
-                                                            <input 
-                                                                type="number" 
-                                                                placeholder="Opcional" 
-                                                                className="w-16 p-2 rounded-lg text-xs font-black text-center outline-none bg-white border border-amber-200 text-amber-600 focus:border-amber-400 focus:ring-2 focus:ring-amber-100"
-                                                                value={cantidadesDetalle[e.id]?.['🏆 Recompensas Campos'] !== undefined ? cantidadesDetalle[e.id]?.['🏆 Recompensas Campos'] : (e.detalles?.['🏆 Recompensas Campos'] || '')}
-                                                                onChange={(ev) => handleCantidadChange(e.id, '🏆 Recompensas Campos', ev.target.value)}
-                                                            />
-                                                        </div>
-                                                    </div>
+                                                {/* 2. CAMPO OPCIONAL: RECOMPENSAS (DISEÑO VERTICAL) */}
+                                                <div className={`flex flex-col bg-amber-50/30 p-4 rounded-xl border border-amber-100 shadow-sm`}>
+                                                    <label className="text-xs font-bold text-amber-800 mb-2">🏆 Recompensas Campos</label>
+                                                    <input 
+                                                        type="number" 
+                                                        placeholder="Cantidad (Opcional)" 
+                                                        className="w-full p-3 rounded-xl text-sm font-black text-center outline-none bg-white border border-amber-200 text-amber-600 focus:border-amber-400 focus:ring-2 focus:ring-amber-100 transition-all shadow-sm"
+                                                        value={cantidadesDetalle[e.id]?.['🏆 Recompensas Campos'] !== undefined ? cantidadesDetalle[e.id]?.['🏆 Recompensas Campos'] : (e.detalles?.['🏆 Recompensas Campos'] || '')}
+                                                        onChange={(ev) => handleCantidadChange(e.id, '🏆 Recompensas Campos', ev.target.value)}
+                                                    />
                                                     
-                                                    {/* SELECTOR DE MOTIVO DE RECOMPENSA (Solo aparece si ingresan un número mayor a 0) */}
+                                                    {/* SELECTOR DE MOTIVO DE RECOMPENSA */}
                                                     {(Number(cantidadesDetalle[e.id]?.['🏆 Recompensas Campos']) > 0 || Number(e.detalles?.['🏆 Recompensas Campos']) > 0) && (
-                                                        <div className="w-full mt-1 animate-in fade-in">
+                                                        <div className="w-full mt-3 animate-in fade-in">
                                                             <select 
-                                                                className="w-full p-2 bg-white border border-amber-200 rounded-lg text-[10px] font-bold text-slate-600 outline-none"
+                                                                className="w-full p-3 bg-white border border-amber-200 rounded-xl text-xs font-bold text-slate-600 outline-none focus:ring-2 focus:ring-amber-100 shadow-sm transition-all"
                                                                 value={comentariosRecompensas[e.id] || ''}
                                                                 onChange={(ev) => handleComentarioChange(e.id, ev.target.value)}
                                                             >
