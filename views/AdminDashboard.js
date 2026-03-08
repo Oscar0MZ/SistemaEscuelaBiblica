@@ -5,12 +5,16 @@ function AdminDashboard({
     mantenimiento, onToggleMantenimiento, onApprove, onDelete, onToggleModal, 
     onDeleteCampo, onResetLecciones, onCrearEntrega, onBorrarEntrega, onAssignGroup,
     inventarioDatos, onActualizarInventario, onCerrarJornada,
-    fondoTotal, fondoSecretariaTotal, onEdit
+    fondoTotal, fondoSecretariaTotal, onEdit, historialIngresos, historialSecretaria
 }) {
     const [busqueda, setBusqueda] = useState('');
     const [vistaActual, setVistaActual] = useState('inicio'); 
     
-    const [expandirFiltroAdmin, setExpandirFiltroAdmin] = useState(false);
+    // --- NUEVOS ESTADOS PARA SUB-VISTAS DEL PANEL DIRECTOR ---
+    const [subVistaInicio, setSubVistaInicio] = useState(null); 
+    const [tabAuditoria, setTabAuditoria] = useState('tesoreria'); 
+    const [fechaOfrendaExp, setFechaOfrendaExp] = useState(null);
+
     const [campoExpandido, setCampoExpandido] = useState(null); 
     const [campoResetUI, setCampoResetUI] = useState(null); 
     const [rolExpandido, setRolExpandido] = useState(null); 
@@ -31,7 +35,16 @@ function AdminDashboard({
         if (p.length !== 3) return f;
         return `${p[2]}/${p[1]}/${p[0]}`; 
     };
-    const textoFechas = datosGlobalesAsistencia?.rango ? `${formatoFecha(datosGlobalesAsistencia.rango.inicio).substring(0,5)} - ${formatoFecha(datosGlobalesAsistencia.rango.fin).substring(0,5)}` : 'Calculando...';
+
+    const formatFechaDia = (f) => {
+        if (!f) return '';
+        const d = new Date(f + 'T12:00:00'); 
+        const dias = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
+        const meses = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
+        return `${dias[d.getDay()]}, ${d.getDate()} ${meses[d.getMonth()]} ${d.getFullYear()}`;
+    };
+
+    const textoFechas = datosGlobalesAsistencia?.rango ? `${formatoFecha(datosGlobalesAsistencia.rango.inicio).substring(0,5)} al ${formatoFecha(datosGlobalesAsistencia.rango.fin).substring(0,5)}` : 'Calculando...';
 
     const calcProgreso = (lec) => {
         const l = parseInt(lec);
@@ -42,8 +55,18 @@ function AdminDashboard({
     };
 
     const NavButton = ({ id, icon, label, width = 'w-[75px]' }) => (
-        <button onClick={() => setVistaActual(id)} className={`flex flex-col items-center justify-center ${width} h-14 rounded-2xl transition-all ${vistaActual === id ? 'text-indigo-600 bg-indigo-50 font-black' : 'text-slate-400 hover:text-slate-600 font-bold'}`}>
+        <button onClick={() => {setVistaActual(id); setSubVistaInicio(null);}} className={`flex flex-col items-center justify-center ${width} h-14 rounded-2xl transition-all ${vistaActual === id ? 'text-indigo-600 bg-indigo-50 font-black' : 'text-slate-400 hover:text-slate-600 font-bold'}`}>
             <i className={`fas ${icon} text-xl mb-1 ${vistaActual === id ? 'animate-bounce' : ''}`}></i><span className="text-[9px] tracking-wide">{label}</span>
+        </button>
+    );
+
+    const ActionCard = ({ title, desc, icon, color, onClick }) => (
+        <button onClick={onClick} className={`bg-white p-5 rounded-3xl border border-slate-100 shadow-sm flex flex-col items-start text-left active:scale-95 transition-all group`}>
+            <div className={`w-12 h-12 rounded-2xl flex items-center justify-center text-xl mb-3 ${color === 'emerald' ? 'bg-emerald-50 text-emerald-500 group-hover:bg-emerald-500 group-hover:text-white' : color === 'amber' ? 'bg-amber-50 text-amber-500 group-hover:bg-amber-500 group-hover:text-white' : color === 'sky' ? 'bg-sky-50 text-sky-500 group-hover:bg-sky-500 group-hover:text-white' : 'bg-indigo-50 text-indigo-500 group-hover:bg-indigo-500 group-hover:text-white'} transition-colors`}>
+                <i className={`fas ${icon}`}></i>
+            </div>
+            <h4 className="font-black text-slate-800 text-sm leading-tight">{title}</h4>
+            <p className="text-[10px] text-slate-400 font-bold mt-1">{desc}</p>
         </button>
     );
 
@@ -65,112 +88,269 @@ function AdminDashboard({
     const camposActivos = [...new Set([...maestros.filter(m => m.clase !== 'LOGISTICA' && m.campo).map(m => m.campo), ...todosLosAlumnos.map(a => a.campo), ...historialVisible.map(h => h.campo)].filter(Boolean))].sort();
     const camposFijos = ["La Isla", "Las Delicias", "El Amatal", "El Manguito", "Buenos Aires", "Corozal #1", "El Porvenir", "El Caulote", "Corozal #2", "Valle Encantado", "La Playa"];
 
-    const toggleCampoRuta = (c) => {
-        if(camposRuta.includes(c)) setCamposRuta(camposRuta.filter(x => x !== c));
-        else setCamposRuta([...camposRuta, c]);
-    };
+    // CÁLCULOS FINANCIEROS Y DE ASISTENCIA
+    let tp = 0, ta = 0, tperm = 0; 
+    let totalOfrendaSemana = 0;
+    todasAsistencias.forEach(r => { 
+        if(r.totales){ tp+=r.totales.presentes; ta+=r.totales.ausentes; tperm+=r.totales.permisos; } 
+        totalOfrendaSemana += (Number(r.ofrenda) || 0);
+    });
+    
+    const diferenciaFinanzas = (fondoTotal || 0) - (fondoSecretariaTotal || 0);
 
-    const submitMision = (e) => {
-        e.preventDefault();
-        if(camposRuta.length === 0) { alert("⚠️ Debes seleccionar al menos un campo para armar la ruta."); return; }
-        const fd = new FormData(e.target);
-        onCrearEntrega({ campos: camposRuta, cantidad: parseInt(fd.get('cantidad')), grupo: fd.get('grupo') });
-        setCamposRuta([]); 
-        e.target.reset();
-    };
+    const ofrendasPorFecha = {};
+    historialVisible.forEach(h => {
+        if (!ofrendasPorFecha[h.fecha]) ofrendasPorFecha[h.fecha] = { total: 0, detalles: [] };
+        ofrendasPorFecha[h.fecha].total += (Number(h.ofrenda) || 0);
+        ofrendasPorFecha[h.fecha].detalles.push(h);
+    });
+    const fechasOfrendas = Object.keys(ofrendasPorFecha).sort((a,b) => new Date(b) - new Date(a));
 
     let contenidoAdmin;
 
     if (vistaActual === 'inicio') {
-        let tp = 0, ta = 0, tperm = 0; todasAsistencias.forEach(r => { if(r.totales){ tp+=r.totales.presentes; ta+=r.totales.ausentes; tperm+=r.totales.permisos; } });
         
-        const diferenciaFinanzas = (fondoTotal || 0) - (fondoSecretariaTotal || 0);
-
-        contenidoAdmin = (
-            <div className="space-y-6 animate-in fade-in duration-300 pt-2">
-                <div className={`p-5 rounded-3xl border shadow-sm transition-colors duration-500 flex justify-between items-center ${mantenimiento ? 'bg-rose-50 border-rose-200' : 'bg-white border-slate-100'}`}>
-                    <div><h3 className={`font-black flex items-center ${mantenimiento ? 'text-rose-600' : 'text-slate-700'}`}><i className={`fas fa-tools mr-2 ${mantenimiento ? 'text-rose-500 animate-pulse' : 'text-slate-400'}`}></i> Mantenimiento</h3><p className="text-[10px] text-slate-500 mt-1 leading-tight">{mantenimiento ? 'App bloqueada. Nadie puede entrar.' : 'Sistema activo. Maestros operando.'}</p></div>
-                    <button onClick={onToggleMantenimiento} className={`w-14 h-8 rounded-full relative transition-colors duration-300 shadow-inner ${mantenimiento ? 'bg-rose-500' : 'bg-slate-200'}`}><div className={`w-6 h-6 bg-white rounded-full absolute top-1 shadow-sm transition-all duration-300 ${mantenimiento ? 'right-1' : 'left-1'}`}></div></button>
-                </div>
-
-                {pendientes.length > 0 && (<div className="bg-amber-50 border border-amber-100 p-5 rounded-[32px]"><h3 className="text-amber-800 font-bold text-sm mb-3"><i className="fas fa-user-clock mr-2"></i> Solicitudes ({pendientes.length})</h3><div className="space-y-3">{pendientes.map(p => (<div key={p.id} className="bg-white p-4 rounded-2xl shadow-sm flex justify-between items-center border border-amber-100"><div><p className="font-bold text-slate-700 text-sm">{p.nombre}</p><span className="text-[10px] text-slate-400 font-bold uppercase">{p.clase} - {p.campo}</span></div><div className="flex space-x-2"><button onClick={() => onApprove(p.id)} className="w-9 h-9 bg-emerald-500 text-white rounded-xl"><i className="fas fa-check"></i></button><button onClick={() => onDelete(p)} className="w-9 h-9 bg-rose-100 text-rose-500 rounded-xl"><i className="fas fa-times"></i></button></div></div>))}</div></div>)}
-                
-                <div className="bg-slate-800 rounded-[32px] border border-slate-700 p-6 shadow-xl relative overflow-hidden mx-1">
-                    <div className="absolute top-0 right-0 w-32 h-32 bg-white opacity-5 rounded-bl-[100px] pointer-events-none"></div>
-                    <div className="flex justify-between items-center mb-4 relative z-10">
+        if (subVistaInicio === null) {
+            contenidoAdmin = (
+                <div className="space-y-4 animate-in fade-in duration-300 pt-2 px-1 pb-24">
+                    <div className="flex justify-between items-center mb-2 px-1">
                         <div>
-                            <h3 className="font-bold text-white text-sm flex items-center"><i className="fas fa-balance-scale text-sky-400 mr-2"></i> Auditoría Financiera</h3>
-                            <p className="text-[10px] text-slate-400 pl-6">Supervisión en vivo</p>
+                            <h2 className="text-2xl font-black text-slate-800">Centro de Control</h2>
+                            <p className="text-slate-400 text-xs mt-1">Supervisión general del ministerio</p>
                         </div>
-                        <span className={`text-[9px] font-bold px-3 py-1 rounded-lg border ${diferenciaFinanzas === 0 ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30' : 'bg-rose-500/20 text-rose-400 border-rose-500/30'}`}>
-                            {diferenciaFinanzas === 0 ? 'CUADRADO' : 'DESCUADRE'}
-                        </span>
+                        <button onClick={onToggleMantenimiento} className={`flex items-center px-3 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${mantenimiento ? 'bg-rose-500 text-white shadow-lg shadow-rose-200 animate-pulse' : 'bg-slate-100 text-slate-400 hover:bg-slate-200'}`}>
+                            <i className={`fas fa-tools mr-1.5`}></i> {mantenimiento ? 'En Pausa' : 'Activo'}
+                        </button>
                     </div>
-                    
-                    <div className="grid grid-cols-2 gap-4 relative z-10 mb-4">
-                        <div className="bg-slate-900/50 p-4 rounded-2xl border border-slate-700/50 text-center">
-                            <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mb-1">Caja Tesorería</p>
-                            <p className="text-xl font-black text-sky-400">${Number(fondoTotal || 0).toFixed(2)}</p>
-                        </div>
-                        <div className="bg-slate-900/50 p-4 rounded-2xl border border-slate-700/50 text-center">
-                            <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mb-1">Reg. Secretaría</p>
-                            <p className="text-xl font-black text-pink-400">${Number(fondoSecretariaTotal || 0).toFixed(2)}</p>
-                        </div>
-                    </div>
-                    {diferenciaFinanzas !== 0 && (
-                        <p className="text-[10px] text-rose-400 bg-rose-500/10 p-2 rounded-xl text-center border border-rose-500/20 relative z-10">
-                            <i className="fas fa-exclamation-triangle mr-1"></i> Descuadre detectado de ${Math.abs(diferenciaFinanzas).toFixed(2)}
-                        </p>
-                    )}
-                </div>
 
-                <div className="bg-white rounded-[32px] border border-slate-100 p-6 shadow-sm mx-1"><div className="flex justify-between items-center mb-4"><div><h3 className="font-bold text-slate-700 text-sm flex items-center"><i className="fas fa-clipboard-check text-emerald-500 mr-2"></i> Asistencia Global</h3><p className="text-[10px] text-slate-400 pl-6">Acumulado Semanal</p></div><span className="text-[10px] bg-slate-100 text-slate-500 font-bold px-3 py-1 rounded-lg border border-slate-200">{textoFechas}</span></div><div className="flex justify-around text-center divide-x divide-slate-50"><div className="px-2"><p className="text-3xl font-black text-emerald-500">{tp}</p><p className="text-[9px] font-bold text-slate-400 uppercase tracking-wide mt-1">Presentes</p></div><div className="px-2"><p className="text-3xl font-black text-rose-500">{ta}</p><p className="text-[9px] font-bold text-slate-400 uppercase tracking-wide mt-1">Ausentes</p></div><div className="px-2"><p className="text-3xl font-black text-amber-500">{tperm}</p><p className="text-[9px] font-bold text-slate-400 uppercase tracking-wide mt-1">Permisos</p></div></div></div>
-                
-                <div className="bg-white rounded-[32px] border border-slate-100 shadow-sm overflow-hidden transition-all duration-300 mx-1">
-                    <button onClick={() => setExpandirFiltroAdmin(!expandirFiltroAdmin)} className="w-full flex items-center justify-between p-6 bg-white hover:bg-slate-50 transition-colors">
-                        <div className="flex items-center"><div className="w-10 h-10 bg-sky-50 text-sky-500 rounded-xl flex items-center justify-center mr-3"><i className="fas fa-filter"></i></div><div className="text-left"><h3 className="font-bold text-slate-700 text-sm">Filtro Demográfico</h3><p className="text-[10px] text-slate-400">Analizar edades globales</p></div></div>
-                        <i className={`fas fa-chevron-down text-slate-300 transition-transform duration-300 ${expandirFiltroAdmin ? 'rotate-180' : ''}`}></i>
-                    </button>
-                    {expandirFiltroAdmin && (
-                        <div className="p-6 pt-0 animate-in slide-in-from-top-2 duration-200 border-t border-slate-50">
-                            <div className="flex space-x-3 mb-4 mt-4"><div className="w-1/2"><label className="text-[9px] font-bold text-slate-400 uppercase ml-1">Mínima (Años)</label><input type="number" className="w-full p-3 mt-1 bg-slate-50 rounded-xl outline-none border border-slate-100" value={edadMin} onChange={e=>setEdadMin(e.target.value)} /></div><div className="w-1/2"><label className="text-[9px] font-bold text-slate-400 uppercase ml-1">Máxima (Años)</label><input type="number" className="w-full p-3 mt-1 bg-slate-50 rounded-xl outline-none border border-slate-100" value={edadMax} onChange={e=>setEdadMax(e.target.value)} /></div></div>
-                            {(edadMin !== '' || edadMax !== '') && (() => {
-                                const filtrados = todosLosAlumnos.filter(a => { if (edadMin !== '' && a.edad < parseInt(edadMin)) return false; if (edadMax !== '' && a.edad > parseInt(edadMax)) return false; return true; });
-                                const m = filtrados.filter(a => a.genero === 'M').length; const f = filtrados.filter(a => a.genero === 'F').length;
-                                return (
-                                    <div className="flex justify-around items-center bg-sky-50 p-4 rounded-2xl mb-4"><div className="text-center"><p className="text-2xl font-black text-sky-600">{filtrados.length}</p><p className="text-[9px] font-bold text-sky-500 uppercase">Total</p></div><div className="text-center"><p className="text-2xl font-black text-indigo-500">{m}</p><p className="text-[9px] font-bold text-indigo-400 uppercase">Niños</p></div><div className="text-center"><p className="text-2xl font-black text-pink-500">{f}</p><p className="text-[9px] font-bold text-pink-400 uppercase">Niñas</p></div></div>
-                                );
-                            })()}
+                    {pendientes.length > 0 && (
+                        <div className="bg-amber-400 p-5 rounded-[24px] shadow-lg shadow-amber-200 text-white">
+                            <h3 className="font-black text-sm mb-3 flex items-center"><i className="fas fa-bell mr-2 animate-bounce"></i> Solicitudes Pendientes ({pendientes.length})</h3>
+                            <div className="space-y-2 max-h-[200px] overflow-y-auto pr-1">
+                                {pendientes.map(p => (
+                                    <div key={p.id} className="bg-white/20 p-3 rounded-2xl flex justify-between items-center backdrop-blur-sm">
+                                        <div><p className="font-bold text-sm">{p.nombre}</p><span className="text-[9px] font-black uppercase tracking-widest opacity-80">{p.clase} • {p.campo}</span></div>
+                                        <div className="flex space-x-2"><button onClick={() => onApprove(p.id)} className="w-8 h-8 bg-white text-amber-500 rounded-xl hover:bg-emerald-500 hover:text-white transition-colors"><i className="fas fa-check"></i></button><button onClick={() => onDelete(p)} className="w-8 h-8 bg-black/10 text-white rounded-xl hover:bg-rose-500 transition-colors"><i className="fas fa-times"></i></button></div>
+                                    </div>
+                                ))}
+                            </div>
                         </div>
                     )}
+
+                    {diferenciaFinanzas !== 0 && (
+                        <div className="bg-rose-50 border-l-4 border-l-rose-500 p-4 rounded-2xl flex items-center shadow-sm">
+                            <div className="w-10 h-10 bg-rose-100 text-rose-500 rounded-xl flex items-center justify-center text-xl shrink-0 mr-3"><i className="fas fa-exclamation-triangle"></i></div>
+                            <div>
+                                <h4 className="font-black text-rose-700 text-xs uppercase tracking-widest">Alerta de Descuadre</h4>
+                                <p className="text-[10px] text-rose-600 font-bold mt-0.5">Diferencia de ${Math.abs(diferenciaFinanzas).toFixed(2)} entre cajas.</p>
+                            </div>
+                        </div>
+                    )}
+
+                    <div className="grid grid-cols-2 gap-3 mt-4">
+                        <ActionCard title="Auditoría Financiera" desc="Tesorero vs Secretaría" icon="fa-balance-scale" color="sky" onClick={()=>setSubVistaInicio('auditoria')} />
+                        <ActionCard title="Ofrendas de Clases" desc="Recolección por campos" icon="fa-hand-holding-usd" color="amber" onClick={()=>setSubVistaInicio('ofrendas')} />
+                        <ActionCard title="Asistencia Global" desc="Métricas semanales" icon="fa-users" color="emerald" onClick={()=>setSubVistaInicio('asistencia')} />
+                        <ActionCard title="Demografía Red" desc="Filtro de edades general" icon="fa-chart-pie" color="indigo" onClick={()=>setSubVistaInicio('demografia')} />
+                    </div>
                 </div>
-                <div className="grid grid-cols-2 gap-4 px-1"><div className="bg-indigo-600 p-6 rounded-[32px] text-white shadow-xl shadow-indigo-200 flex flex-col justify-between h-40 relative overflow-hidden"><div className="absolute top-0 right-0 w-20 h-20 bg-white opacity-10 rounded-bl-[100px] pointer-events-none"></div><p className="text-xs font-bold uppercase opacity-70 tracking-widest">Personal Activo</p><div><p className="text-5xl font-black tracking-tighter">{activos.length}</p><p className="text-[10px] opacity-70 mt-1">Miembros Totales</p></div></div><button onClick={onToggleModal} className="bg-white p-6 rounded-[32px] border border-slate-100 flex flex-col justify-between h-40 text-left shadow-sm group hover:shadow-md transition-all active:scale-95"><div className="w-12 h-12 bg-indigo-50 text-indigo-600 rounded-2xl flex items-center justify-center text-xl transition-colors"><i className="fas fa-plus"></i></div><div><p className="font-bold text-slate-700 text-lg leading-tight">Inscribir<br/>Personal</p><p className="text-[10px] text-slate-400 mt-1">Manual</p></div></button></div>
-            </div>
-        );
+            );
+        }
+
+        if (subVistaInicio === 'auditoria') {
+            contenidoAdmin = (
+                <div className="animate-in slide-in-from-right duration-300 space-y-4 pt-2 flex flex-col h-full">
+                    <button onClick={() => setSubVistaInicio(null)} className="text-slate-500 font-black text-[10px] uppercase tracking-widest mb-1 px-2 hover:text-indigo-500 transition-colors w-max"><i className="fas fa-arrow-left mr-2"></i> Volver al Menú</button>
+                    <div className="px-2 mb-2">
+                        <h2 className="text-2xl font-black text-slate-800">Auditoría Financiera</h2>
+                        <p className="text-slate-400 text-xs">Supervisión en vivo de movimientos</p>
+                    </div>
+
+                    <div className="bg-slate-800 rounded-[32px] p-6 shadow-xl relative overflow-hidden mx-1 shrink-0">
+                        <div className="absolute top-0 right-0 w-32 h-32 bg-white opacity-5 rounded-bl-[100px] pointer-events-none"></div>
+                        <div className="flex justify-between items-center mb-5 relative z-10">
+                            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest"><i className="fas fa-shield-alt mr-1"></i> Control Cruzado</span>
+                            <span className={`text-[9px] font-black px-3 py-1.5 rounded-lg uppercase tracking-widest border ${diferenciaFinanzas === 0 ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30' : 'bg-rose-500/20 text-rose-400 border-rose-500/30'}`}>
+                                {diferenciaFinanzas === 0 ? 'CUADRADO' : `DESCUADRE $${Math.abs(diferenciaFinanzas).toFixed(2)}`}
+                            </span>
+                        </div>
+                        <div className="grid grid-cols-2 gap-4 relative z-10">
+                            <div className="bg-slate-900/50 p-4 rounded-2xl border border-slate-700/50 text-center">
+                                <p className="text-[9px] font-bold text-sky-400 uppercase tracking-widest mb-1"><i className="fas fa-vault mr-1"></i> Tesorería</p>
+                                <p className="text-2xl font-black text-white">${Number(fondoTotal || 0).toFixed(2)}</p>
+                            </div>
+                            <div className="bg-slate-900/50 p-4 rounded-2xl border border-slate-700/50 text-center">
+                                <p className="text-[9px] font-bold text-pink-400 uppercase tracking-widest mb-1"><i className="fas fa-book mr-1"></i> Secretaría</p>
+                                <p className="text-2xl font-black text-white">${Number(fondoSecretariaTotal || 0).toFixed(2)}</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className="flex-1 bg-white rounded-t-[40px] shadow-[0_-10px_40px_rgba(0,0,0,0.05)] border-t border-slate-100 p-6 overflow-hidden flex flex-col mt-2 mx-1">
+                        <div className="flex space-x-2 mb-4 shrink-0">
+                            <button onClick={() => setTabAuditoria('tesoreria')} className={`flex-1 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all border ${tabAuditoria === 'tesoreria' ? 'bg-sky-50 text-sky-600 border-sky-100 shadow-sm' : 'bg-white text-slate-400 border-slate-100 hover:bg-slate-50'}`}>Ver Tesorería</button>
+                            <button onClick={() => setTabAuditoria('secretaria')} className={`flex-1 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all border ${tabAuditoria === 'secretaria' ? 'bg-pink-50 text-pink-600 border-pink-100 shadow-sm' : 'bg-white text-slate-400 border-slate-100 hover:bg-slate-50'}`}>Ver Secretaría</button>
+                        </div>
+                        
+                        <div className="overflow-y-auto space-y-3 pb-24 pr-1 flex-1">
+                            {tabAuditoria === 'tesoreria' ? (
+                                (historialIngresos && historialIngresos.length > 0) ? historialIngresos.map(h => (
+                                    <div key={h.id} className="bg-slate-50 p-4 rounded-2xl border border-slate-100 shadow-sm flex justify-between items-center">
+                                        <div className="w-2/3 pr-2">
+                                            <p className="font-bold text-slate-700 text-xs truncate mb-1">{h.descripcion}</p>
+                                            <p className="text-[9px] font-bold text-slate-400 uppercase"><i className="fas fa-user-tag mr-1 text-slate-300"></i>{h.registradoPor} • {h.fecha}</p>
+                                        </div>
+                                        <div className={`px-3 py-1.5 rounded-lg text-xs font-black shadow-sm shrink-0 ${h.tipo === 'ingreso' ? 'bg-emerald-100 text-emerald-700' : 'bg-rose-100 text-rose-700'}`}>
+                                            {h.tipo === 'ingreso' ? '+' : '-'}${Number(h.monto).toFixed(2)}
+                                        </div>
+                                    </div>
+                                )) : <p className="text-center text-slate-400 text-xs italic mt-8">Sin registros en Tesorería.</p>
+                            ) : (
+                                (historialSecretaria && historialSecretaria.length > 0) ? historialSecretaria.map(h => (
+                                    <div key={h.id} className="bg-slate-50 p-4 rounded-2xl border border-slate-100 shadow-sm flex justify-between items-center">
+                                        <div className="w-2/3 pr-2">
+                                            <p className="font-bold text-slate-700 text-xs truncate mb-1">{h.descripcion}</p>
+                                            <p className="text-[9px] font-bold text-slate-400 uppercase"><i className="fas fa-user-tag mr-1 text-slate-300"></i>{h.registradoPor} • {h.fecha}</p>
+                                        </div>
+                                        <div className={`px-3 py-1.5 rounded-lg text-xs font-black shadow-sm shrink-0 ${h.tipo === 'ingreso' ? 'bg-emerald-100 text-emerald-700' : 'bg-rose-100 text-rose-700'}`}>
+                                            {h.tipo === 'ingreso' ? '+' : '-'}${Number(h.monto).toFixed(2)}
+                                        </div>
+                                    </div>
+                                )) : <p className="text-center text-slate-400 text-xs italic mt-8">Sin registros en Secretaría.</p>
+                            )}
+                        </div>
+                    </div>
+                </div>
+            );
+        }
+
+        if (subVistaInicio === 'ofrendas') {
+            contenidoAdmin = (
+                <div className="animate-in slide-in-from-right duration-300 space-y-4 pt-2 flex flex-col h-full">
+                    <button onClick={() => setSubVistaInicio(null)} className="text-slate-500 font-black text-[10px] uppercase tracking-widest mb-1 px-2 hover:text-amber-500 transition-colors w-max"><i className="fas fa-arrow-left mr-2"></i> Volver al Menú</button>
+                    <div className="px-2 mb-2">
+                        <h2 className="text-2xl font-black text-slate-800">Ofrendas de Clases</h2>
+                        <p className="text-slate-400 text-xs">Recolectadas por maestros (Sáb/Dom)</p>
+                    </div>
+
+                    <div className="bg-amber-400 p-6 rounded-[32px] text-white shadow-lg shadow-amber-200 text-center relative overflow-hidden mx-1 shrink-0">
+                        <div className="w-40 h-40 bg-white opacity-10 rounded-full absolute -top-10 -right-10"></div>
+                        <i className="fas fa-coins absolute -left-4 -bottom-4 text-7xl opacity-20"></i>
+                        <div className="relative z-10">
+                            <p className="text-[10px] font-black uppercase tracking-widest opacity-80 mb-1">Total Semanal (Actual)</p>
+                            <p className="text-5xl font-black tracking-tighter">${totalOfrendaSemana.toFixed(2)}</p>
+                            <p className="text-[9px] font-bold mt-2 bg-amber-500/50 inline-block px-3 py-1 rounded-full">{textoFechas}</p>
+                        </div>
+                    </div>
+
+                    <div className="flex-1 bg-white rounded-t-[40px] shadow-[0_-10px_40px_rgba(0,0,0,0.05)] border-t border-slate-100 p-6 overflow-hidden flex flex-col mt-2 mx-1">
+                        <h3 className="font-black text-slate-700 text-xs uppercase tracking-widest mb-4 shrink-0"><i className="fas fa-history text-amber-500 mr-2"></i> Récord Histórico</h3>
+                        <div className="overflow-y-auto space-y-3 pb-24 pr-1 flex-1">
+                            {fechasOfrendas.length === 0 ? <p className="text-center text-slate-400 text-xs italic mt-8">Aún no hay ofrendas registradas en las clases.</p> :
+                                fechasOfrendas.map(fecha => {
+                                    const data = ofrendasPorFecha[fecha];
+                                    const isExp = fechaOfrendaExp === fecha;
+                                    return (
+                                        <div key={fecha} className="bg-slate-50 rounded-2xl border border-slate-100 overflow-hidden shadow-sm transition-all duration-300">
+                                            <button onClick={() => setFechaOfrendaExp(isExp ? null : fecha)} className="w-full p-4 flex justify-between items-center bg-white hover:bg-slate-50 transition-colors">
+                                                <div className="text-left">
+                                                    <p className="font-black text-slate-700 text-sm capitalize">{formatFechaDia(fecha)}</p>
+                                                    <p className="text-[10px] text-slate-400 font-bold mt-0.5">{data.detalles.length} campos reportaron</p>
+                                                </div>
+                                                <div className="flex items-center space-x-3">
+                                                    <span className="bg-amber-100 text-amber-600 font-black text-sm px-3 py-1.5 rounded-xl">${data.total.toFixed(2)}</span>
+                                                    <i className={`fas fa-chevron-down text-slate-300 transition-transform duration-300 ${isExp ? 'rotate-180' : ''}`}></i>
+                                                </div>
+                                            </button>
+                                            
+                                            {isExp && (
+                                                <div className="p-4 pt-0 border-t border-slate-100 bg-slate-50 animate-in slide-in-from-top-2 duration-200">
+                                                    <div className="space-y-2 mt-3">
+                                                        {data.detalles.map((det, i) => (
+                                                            <div key={i} className="flex justify-between items-center text-xs font-bold bg-white p-2.5 rounded-xl border border-slate-100 shadow-sm">
+                                                                <span className="text-slate-600 truncate mr-2"><i className="fas fa-map-marker-alt text-amber-400 mr-1.5"></i>{det.campo}</span>
+                                                                <span className="text-emerald-600 shrink-0">${(Number(det.ofrenda)||0).toFixed(2)}</span>
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                </div>
+                                            )}
+                                        </div>
+                                    )
+                                })
+                            }
+                        </div>
+                    </div>
+                </div>
+            );
+        }
+
+        if (subVistaInicio === 'asistencia') {
+            contenidoAdmin = (
+                <div className="animate-in slide-in-from-right duration-300 space-y-4 pt-2">
+                    <button onClick={() => setSubVistaInicio(null)} className="text-slate-500 font-black text-[10px] uppercase tracking-widest mb-1 px-2 hover:text-emerald-500 transition-colors"><i className="fas fa-arrow-left mr-2"></i> Volver al Menú</button>
+                    <div className="px-2 mb-4">
+                        <h2 className="text-2xl font-black text-slate-800">Asistencia Global</h2>
+                        <p className="text-slate-400 text-xs">Acumulado de la Red completa</p>
+                    </div>
+
+                    <div className="bg-white rounded-[32px] border border-slate-100 p-6 shadow-xl mx-1 relative overflow-hidden">
+                        <div className="absolute top-0 right-0 w-40 h-40 bg-emerald-50 opacity-50 rounded-bl-[100px] pointer-events-none"></div>
+                        <div className="flex justify-between items-center mb-6 relative z-10">
+                            <div><h3 className="font-bold text-slate-700 text-sm flex items-center"><i className="fas fa-chart-line text-emerald-500 mr-2"></i> Resumen de Semana</h3></div>
+                            <span className="text-[9px] bg-slate-100 text-slate-500 font-black tracking-widest px-3 py-1.5 rounded-lg border border-slate-200 uppercase">{textoFechas}</span>
+                        </div>
+                        <div className="flex justify-around text-center divide-x divide-slate-100 relative z-10">
+                            <div className="px-2 w-1/3"><p className="text-4xl font-black text-emerald-500 tracking-tighter">{tp}</p><p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mt-1">Presentes</p></div>
+                            <div className="px-2 w-1/3"><p className="text-4xl font-black text-rose-500 tracking-tighter">{ta}</p><p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mt-1">Ausentes</p></div>
+                            <div className="px-2 w-1/3"><p className="text-4xl font-black text-amber-500 tracking-tighter">{tperm}</p><p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mt-1">Permisos</p></div>
+                        </div>
+                    </div>
+                </div>
+            );
+        }
+
+        if (subVistaInicio === 'demografia') {
+            const adminAlumnosFiltrados = todosLosAlumnos.filter(a => { if (edadMin !== '' && a.edad < parseInt(edadMin)) return false; if (edadMax !== '' && a.edad > parseInt(edadMax)) return false; return true; });
+            const m = adminAlumnosFiltrados.filter(a => a.genero === 'M').length; 
+            const f = adminAlumnosFiltrados.filter(a => a.genero === 'F').length;
+
+            contenidoAdmin = (
+                <div className="animate-in slide-in-from-right duration-300 space-y-4 pt-2">
+                    <button onClick={() => setSubVistaInicio(null)} className="text-slate-500 font-black text-[10px] uppercase tracking-widest mb-1 px-2 hover:text-indigo-500 transition-colors"><i className="fas fa-arrow-left mr-2"></i> Volver al Menú</button>
+                    <div className="px-2 mb-4">
+                        <h2 className="text-2xl font-black text-slate-800">Filtro Demográfico</h2>
+                        <p className="text-slate-400 text-xs">Analizar edades en toda la Red</p>
+                    </div>
+
+                    <div className="bg-sky-50 rounded-[32px] p-6 shadow-sm border border-sky-100 mx-1">
+                        <div className="flex space-x-4 mb-4">
+                            <div className="w-1/2"><label className="text-[10px] font-bold text-sky-600 uppercase ml-2 tracking-widest mb-1 block">Edad Mínima</label><input type="number" placeholder="Ej: 0" className="w-full p-4 bg-white rounded-2xl outline-none border border-sky-100 focus:ring-2 focus:ring-sky-300 text-2xl font-black text-slate-700 text-center shadow-sm transition-all" value={edadMin} onChange={e=>setEdadMin(e.target.value)} /></div>
+                            <div className="w-1/2"><label className="text-[10px] font-bold text-sky-600 uppercase ml-2 tracking-widest mb-1 block">Edad Máxima</label><input type="number" placeholder="Ej: 12" className="w-full p-4 bg-white rounded-2xl outline-none border border-sky-100 focus:ring-2 focus:ring-sky-300 text-2xl font-black text-slate-700 text-center shadow-sm transition-all" value={edadMax} onChange={e=>setEdadMax(e.target.value)} /></div>
+                        </div>
+                        
+                        <div className="bg-white p-5 rounded-2xl shadow-sm mt-6 border border-sky-100">
+                            <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest text-center mb-4">Resultado del Filtro</h4>
+                            <div className="flex justify-around items-center">
+                                <div className="text-center w-1/3"><p className="text-4xl font-black text-sky-600 tracking-tighter">{adminAlumnosFiltrados.length}</p><p className="text-[9px] font-bold text-sky-500 uppercase mt-1">Total</p></div>
+                                <div className="w-px h-12 bg-slate-100"></div>
+                                <div className="text-center w-1/3"><p className="text-3xl font-black text-indigo-500 tracking-tighter">{m}</p><p className="text-[9px] font-bold text-indigo-400 uppercase mt-1">Niños</p></div>
+                                <div className="w-px h-12 bg-slate-100"></div>
+                                <div className="text-center w-1/3"><p className="text-3xl font-black text-pink-500 tracking-tighter">{f}</p><p className="text-[9px] font-bold text-pink-400 uppercase mt-1">Niñas</p></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            );
+        }
     }
 
     if (vistaActual === 'poblacion') {
-        const adminAlumnosFiltrados = todosLosAlumnos.filter(a => { if (edadMin !== '' && a.edad < parseInt(edadMin)) return false; if (edadMax !== '' && a.edad > parseInt(edadMax)) return false; return true; });
-        const filtroActivo = edadMin !== '' || edadMax !== '';
-
         contenidoAdmin = (
             <div className="space-y-4 animate-in slide-in-from-right duration-300">
-                <div className="px-2 mb-2"><h2 className="text-2xl font-black text-slate-800">Gestión por Campo</h2><p className="text-slate-400 text-xs">Población, currículo y clases del año</p></div>
-                
-                <div className="bg-sky-50 rounded-[32px] p-6 shadow-sm border border-sky-100 mx-1">
-                    <h3 className="font-bold text-sky-800 text-sm mb-4 flex items-center"><i className="fas fa-filter mr-2"></i> Rango de Edades</h3>
-                    <div className="flex space-x-4"><div className="w-1/2"><label className="text-[10px] font-bold text-sky-600 uppercase ml-2">Mínima (Años)</label><input type="number" placeholder="Ej: 0" className="w-full p-4 mt-1 bg-white rounded-2xl outline-none border border-sky-100 focus:ring-2 focus:ring-sky-300 text-lg font-bold" value={edadMin} onChange={e=>setEdadMin(e.target.value)} /></div><div className="w-1/2"><label className="text-[10px] font-bold text-sky-600 uppercase ml-2">Máxima (Años)</label><input type="number" placeholder="Ej: 5" className="w-full p-4 mt-1 bg-white rounded-2xl outline-none border border-sky-100 focus:ring-2 focus:ring-sky-300 text-lg font-bold" value={edadMax} onChange={e=>setEdadMax(e.target.value)} /></div></div>
-                    <div className="flex justify-around items-center bg-white p-4 rounded-2xl mt-4 shadow-sm">
-                        <div className="text-center"><p className="text-3xl font-black text-sky-600">{adminAlumnosFiltrados.length}</p><p className="text-[9px] font-bold text-sky-500 uppercase">Total Red</p></div>
-                        <div className="w-px h-10 bg-slate-100"></div>
-                        <div className="text-center"><p className="text-2xl font-black text-indigo-500">{adminAlumnosFiltrados.filter(a => a.genero === 'M').length}</p><p className="text-[9px] font-bold text-indigo-400 uppercase">Niños</p></div>
-                        <div className="w-px h-10 bg-slate-100"></div>
-                        <div className="text-center"><p className="text-2xl font-black text-pink-500">{adminAlumnosFiltrados.filter(a => a.genero === 'F').length}</p><p className="text-[9px] font-bold text-pink-400 uppercase">Niñas</p></div>
-                    </div>
-                </div>
+                <div className="px-2 mb-2 pt-2"><h2 className="text-2xl font-black text-slate-800">Gestión de Campos</h2><p className="text-slate-400 text-xs">Ajuste de material y revisiones</p></div>
 
-                <h3 className="font-bold text-slate-700 text-sm mt-6 px-2">Campos Activos</h3>
-                <div className="space-y-3 pb-24 px-1">
+                <div className="space-y-4 pb-24 px-1 mt-4">
                     {camposActivos.length === 0 ? (
                         <div className="text-center p-8 bg-slate-50 rounded-[32px] mt-4 border-2 border-dashed border-slate-200">
                             <div className="w-16 h-16 bg-white rounded-full flex items-center justify-center text-2xl text-slate-300 mx-auto mb-3 shadow-sm"><i className="fas fa-seedling"></i></div>
@@ -178,103 +358,90 @@ function AdminDashboard({
                         </div>
                     ) : (
                         camposActivos.map(campo => {
-                            if (filtroActivo) {
-                                const alumnosCampo = adminAlumnosFiltrados.filter(a => a.campo === campo);
-                                const total = alumnosCampo.length; const ninos = alumnosCampo.filter(a => a.genero === 'M').length; const ninas = alumnosCampo.filter(a => a.genero === 'F').length;
-                                if (total === 0) return null; 
-                                return (<div key={campo} className="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm flex items-center justify-between"><span className="font-bold text-slate-700 text-sm">{campo}</span><div className="flex space-x-2 text-xs font-bold"><span className="bg-slate-100 text-slate-600 px-3 py-1.5 rounded-lg">T: {total}</span><span className="bg-sky-50 text-sky-600 px-3 py-1.5 rounded-lg">M: {ninos}</span><span className="bg-pink-50 text-pink-600 px-3 py-1.5 rounded-lg">F: {ninas}</span></div></div>);
-                            } 
-                            else {
-                                const total = todosLosAlumnos.filter(a => a.campo === campo).length; 
-                                
-                                const registrosCampoTodo = historialAsistencias.filter(h => h.campo === campo && h.leccion !== undefined);
-                                const registrosOrdenados = registrosCampoTodo.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
-                                const ultimoReg = registrosOrdenados[0];
-                                
-                                let currLec = 0;
-                                if (ultimoReg) {
-                                    currLec = parseInt(ultimoReg.leccion);
-                                }
+                            const total = todosLosAlumnos.filter(a => a.campo === campo).length; 
+                            
+                            const registrosCampoTodo = historialAsistencias.filter(h => h.campo === campo && h.leccion !== undefined);
+                            const registrosOrdenados = registrosCampoTodo.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
+                            const ultimoReg = registrosOrdenados[0];
+                            
+                            let currLec = 0;
+                            if (ultimoReg) currLec = parseInt(ultimoReg.leccion);
 
-                                const prog = calcProgreso(currLec);
-                                const isExpanded = campoExpandido === campo;
-                                const registrosCampo = historialVisible.filter(h => h.campo === campo);
-                                
-                                return (
-                                    <div key={campo} className="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm overflow-hidden transition-all duration-300">
-                                        <div className="flex justify-between items-center mb-3">
-                                            <span className="font-bold text-slate-700 text-lg truncate w-1/3">{campo}</span>
-                                            <div className="flex items-center space-x-2">
-                                                <span className="bg-indigo-50 text-indigo-600 font-black text-[10px] px-2 py-1.5 rounded uppercase">{total} Alumnos</span>
-                                                <button onClick={() => setCampoExpandido(isExpanded ? null : campo)} className={`w-8 h-8 flex items-center justify-center rounded-lg transition-colors ${isExpanded ? 'bg-indigo-500 text-white' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'}`} title="Ver Historial de Clases"><i className={`fas fa-chevron-down transition-transform duration-300 ${isExpanded ? 'rotate-180' : ''}`}></i></button>
-                                                <button onClick={() => setCampoResetUI(campoResetUI === campo ? null : campo)} className="w-8 h-8 flex items-center justify-center bg-slate-100 text-slate-500 rounded-lg hover:bg-sky-500 hover:text-white transition-colors" title="Ajustar Material"><i className="fas fa-cog"></i></button>
-                                                <button onClick={() => onDeleteCampo(campo)} className="w-8 h-8 flex items-center justify-center bg-rose-50 text-rose-500 rounded-lg hover:bg-rose-500 hover:text-white transition-colors" title="Limpiar Campo"><i className="fas fa-trash-alt"></i></button>
-                                            </div>
+                            const prog = calcProgreso(currLec);
+                            const isExpanded = campoExpandido === campo;
+                            const registrosCampo = historialVisible.filter(h => h.campo === campo);
+                            
+                            return (
+                                <div key={campo} className="bg-white p-5 rounded-3xl border border-slate-100 shadow-sm overflow-hidden transition-all duration-300 relative group hover:border-indigo-100 hover:shadow-md">
+                                    <div className="absolute top-0 right-0 w-24 h-24 bg-indigo-50 opacity-50 rounded-bl-full pointer-events-none transition-all group-hover:scale-110"></div>
+                                    
+                                    {/* 1. NOMBRE Y ALUMNOS (ARRIBA) */}
+                                    <div className="mb-4 text-left relative z-10">
+                                        <h4 className="font-black text-slate-800 text-xl leading-tight">{campo}</h4>
+                                        <p className="text-[11px] text-slate-500 font-bold mt-1 uppercase tracking-widest"><i className="fas fa-users mr-1.5 text-indigo-400"></i> {total} Alumnos Inscritos</p>
+                                    </div>
+
+                                    {/* 2. BARRA DE PROGRESO DE MATERIAL */}
+                                    <div className="mb-5 relative z-10">
+                                        <div className="flex justify-between text-[10px] font-bold text-slate-500 mb-1.5 px-1">
+                                            <span>{!ultimoReg ? 'Material: Sin Asignar' : `Material: Parte ${prog.parte} • Lección ${prog.leccion}`}</span>
+                                            <span className="text-indigo-500">{prog.porc}%</span>
                                         </div>
+                                        <div className="w-full bg-slate-100 rounded-full h-2 overflow-hidden"><div className="bg-indigo-500 h-2 rounded-full transition-all duration-1000" style={{width: `${prog.porc}%`}}></div></div>
+                                    </div>
 
-                                        <div className="mt-2">
-                                            <div className="flex justify-between text-[10px] font-bold text-slate-500 mb-1">
-                                                <span>
-                                                    {!ultimoReg ? 'Material: Sin Asignar' : `Material: Parte ${prog.parte} • Lección ${prog.leccion}`}
-                                                </span>
-                                                <span className="text-indigo-500">{prog.porc}%</span>
-                                            </div>
-                                            <div className="w-full bg-slate-100 rounded-full h-2 overflow-hidden"><div className="bg-indigo-500 h-2 rounded-full transition-all duration-1000" style={{width: `${prog.porc}%`}}></div></div>
+                                    {/* 3. BOTONES DE ACCIÓN (ABAJO) */}
+                                    <div className="flex space-x-2 border-t border-slate-50 pt-4 relative z-10">
+                                        <button onClick={() => { setCampoExpandido(isExpanded ? null : campo); setCampoResetUI(null); }} className={`flex-1 py-3 rounded-xl text-xs font-black transition-colors ${isExpanded ? 'bg-indigo-500 text-white shadow-md' : 'bg-indigo-50 text-indigo-600 hover:bg-indigo-100'}`}><i className="fas fa-history mr-1"></i> Clases</button>
+                                        <button onClick={() => { setCampoResetUI(campoResetUI === campo ? null : campo); setCampoExpandido(null); }} className={`flex-1 py-3 rounded-xl text-xs font-black transition-colors ${campoResetUI === campo ? 'bg-sky-500 text-white shadow-md' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}><i className="fas fa-cog mr-1"></i> Asignar</button>
+                                        <button onClick={() => onDeleteCampo(campo)} className="w-12 flex flex-col justify-center items-center rounded-xl text-rose-500 bg-rose-50 hover:bg-rose-500 hover:text-white transition-colors shrink-0"><i className="fas fa-trash-alt"></i></button>
+                                    </div>
+
+                                    {/* 4. EXPANSIONES (Asignar Lección) */}
+                                    {campoResetUI === campo && (
+                                        <div className="mt-4 p-4 bg-slate-50 rounded-2xl border border-slate-200 animate-in slide-in-from-top-2 duration-200 shadow-inner relative z-10">
+                                            <p className="text-[10px] font-black text-slate-500 mb-3 uppercase tracking-widest text-center"><i className="fas fa-cog mr-1"></i> Asignar Lección Exacta</p>
+                                            <form onSubmit={(e) => { 
+                                                e.preventDefault(); 
+                                                onResetLecciones(campo, parseInt(e.target.leccion.value)); 
+                                                setCampoResetUI(null); 
+                                            }} className="flex space-x-2">
+                                                <input type="number" name="leccion" min="1" max="54" required placeholder="N° (1 al 54)" className="w-1/2 p-3 bg-white rounded-xl text-sm font-black text-slate-700 text-center shadow-sm border border-slate-200 outline-none focus:border-sky-400 focus:ring-2 focus:ring-sky-100 transition-all" />
+                                                <button type="submit" className="w-1/2 py-3 bg-sky-500 hover:bg-sky-600 text-white rounded-xl text-xs font-black shadow-md active:scale-95 transition-all"><i className="fas fa-check mr-2"></i>Aplicar</button>
+                                            </form>
+                                            <p className="text-[9px] text-slate-400 text-center mt-2 font-bold">1 al 25 = Mat 1 | 26 al 54 = Mat 2</p>
                                         </div>
+                                    )}
 
-                                        {campoResetUI === campo && (
-                                            <div className="mt-4 p-4 bg-slate-50 rounded-xl border border-slate-200 animate-in slide-in-from-top-2 duration-200 shadow-inner">
-                                                <p className="text-[10px] font-black text-slate-500 mb-3 uppercase tracking-widest text-center"><i className="fas fa-cog mr-1"></i> Asignar Lección Exacta</p>
-                                                <form onSubmit={(e) => { 
-                                                    e.preventDefault(); 
-                                                    onResetLecciones(campo, parseInt(e.target.leccion.value)); 
-                                                    setCampoResetUI(null); 
-                                                }} className="flex space-x-2">
-                                                    <input 
-                                                        type="number" 
-                                                        name="leccion" 
-                                                        min="1" 
-                                                        max="54" 
-                                                        required 
-                                                        placeholder="N° (1 al 54)" 
-                                                        className="w-1/2 p-3 bg-white rounded-xl text-sm font-black text-slate-700 text-center shadow-sm border border-slate-200 outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 transition-all" 
-                                                    />
-                                                    <button type="submit" className="w-1/2 py-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-black shadow-md active:scale-95 transition-all">
-                                                        <i className="fas fa-check mr-2"></i>Aplicar
-                                                    </button>
-                                                </form>
-                                                <p className="text-[9px] text-slate-400 text-center mt-2 font-bold">1 al 25 = Mat 1 | 26 al 54 = Mat 2</p>
-                                            </div>
-                                        )}
-
-                                        {isExpanded && (
-                                            <div className="mt-4 pt-4 border-t border-slate-100 animate-in slide-in-from-top-2 duration-200">
-                                                <p className="text-[10px] font-black text-slate-400 mb-3 uppercase tracking-widest"><i className="fas fa-history mr-1"></i> Clases Impartidas ({registrosCampo.length})</p>
-                                                <div className="space-y-2 max-h-[250px] overflow-y-auto pr-1">
-                                                    {registrosCampo.length === 0 ? <p className="text-xs text-slate-400 italic text-center py-2">Sin clases registradas aún.</p> : 
-                                                    registrosCampo.map((h, i) => (
-                                                        <div key={i} className="bg-slate-50 p-3 rounded-xl border border-slate-100 flex justify-between items-center shadow-sm">
-                                                            <div>
-                                                                <p className="font-black text-slate-700 text-xs">{formatoFecha(h.fecha)}</p>
-                                                                <p className="text-[9px] text-slate-400 uppercase mt-0.5"><i className="fas fa-user mr-1"></i>{h.maestro}</p>
-                                                                {h.leccion !== undefined && (<p className={`text-[9px] font-bold mt-1 ${h.leccionImpartida ? 'text-indigo-500' : 'text-rose-500'}`}>Lec. {h.leccion} {h.leccionImpartida ? '✅' : '❌'}</p>)}
-                                                            </div>
-                                                            <div className="flex flex-col items-end">
-                                                                <span className="text-[10px] font-black text-emerald-600 mb-1"><i className="fas fa-coins mr-1"></i>${Number(h.ofrenda||0).toFixed(2)}</span>
-                                                                <div className="flex space-x-1 text-[10px] font-bold">
-                                                                    <span className="bg-emerald-100 text-emerald-700 px-1.5 py-1 rounded">P: {h.totales?.presentes || 0}</span>
-                                                                    <span className="bg-rose-100 text-rose-700 px-1.5 py-1 rounded">A: {h.totales?.ausentes || 0}</span>
-                                                                    <span className="bg-amber-100 text-amber-700 px-1.5 py-1 rounded">Pe: {h.totales?.permisos || 0}</span>
-                                                                </div>
+                                    {/* 5. EXPANSIONES (Historial) */}
+                                    {isExpanded && (
+                                        <div className="mt-4 pt-4 border-t border-slate-100 animate-in slide-in-from-top-2 duration-200 relative z-10">
+                                            <p className="text-[10px] font-black text-slate-400 mb-3 uppercase tracking-widest"><i className="fas fa-history mr-1"></i> Clases Impartidas ({registrosCampo.length})</p>
+                                            <div className="space-y-2 max-h-[250px] overflow-y-auto pr-1">
+                                                {registrosCampo.length === 0 ? <p className="text-xs text-slate-400 italic text-center py-2">Sin clases registradas aún.</p> : 
+                                                registrosCampo.map((h, i) => (
+                                                    <div key={i} className="bg-slate-50 p-3 rounded-xl border border-slate-100 flex justify-between items-center shadow-sm hover:bg-white transition-colors">
+                                                        <div>
+                                                            <p className="font-black text-slate-700 text-xs">{formatoFecha(h.fecha)}</p>
+                                                            <p className="text-[9px] text-slate-400 uppercase mt-0.5"><i className="fas fa-user mr-1"></i>{h.maestro}</p>
+                                                            {h.leccion !== undefined && (<p className={`text-[9px] font-bold mt-1 ${h.leccionImpartida ? 'text-indigo-500' : 'text-rose-500'}`}>Lec. {h.leccion} {h.leccionImpartida ? '✅' : '❌'}</p>)}
+                                                        </div>
+                                                        <div className="flex flex-col items-end">
+                                                            {/* SE AGREGA LA VISTA DE LA OFRENDA AL HISTORIAL */}
+                                                            <span className="text-[10px] font-black text-emerald-600 mb-1.5 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-100"><i className="fas fa-coins mr-1"></i>${Number(h.ofrenda||0).toFixed(2)}</span>
+                                                            <div className="flex space-x-1 text-[9px] font-black tracking-wider">
+                                                                <span className="bg-emerald-100 text-emerald-700 px-1.5 py-1 rounded">P:{h.totales?.presentes || 0}</span>
+                                                                <span className="bg-rose-100 text-rose-700 px-1.5 py-1 rounded">A:{h.totales?.ausentes || 0}</span>
+                                                                <span className="bg-amber-100 text-amber-700 px-1.5 py-1 rounded">Pe:{h.totales?.permisos || 0}</span>
                                                             </div>
                                                         </div>
-                                                    ))}
-                                                </div>
+                                                    </div>
+                                                ))}
                                             </div>
-                                        )}
-                                    </div>
-                                );
-                            }
+                                        </div>
+                                    )}
+                                </div>
+                            );
                         })
                     )}
                 </div>
@@ -318,7 +485,7 @@ function AdminDashboard({
         const restanActual = actualRecibido - totalEntregadoActual;
 
         contenidoAdmin = (
-            <div className="space-y-4 animate-in slide-in-from-right duration-300 h-full flex flex-col">
+            <div className="space-y-4 animate-in slide-in-from-right duration-300 h-full flex flex-col pt-2">
                 <div className="px-2 mb-2"><h2 className="text-2xl font-black text-slate-800">Logística</h2><p className="text-slate-400 text-xs">Inventario, rutas y equipos</p></div>
                 
                 <div className="flex px-2 space-x-2 mb-2">
@@ -330,7 +497,7 @@ function AdminDashboard({
                 <div className="flex-1 overflow-y-auto pb-24">
                     
                     {subVistaAdminLogistica === 'bodega' && (
-                        <div className="animate-in slide-in-from-left duration-200 px-1">
+                        <div className="animate-in slide-in-from-left duration-200 px-1 mt-2">
                             <div className="bg-indigo-600 p-6 rounded-[32px] text-white shadow-xl shadow-indigo-200 relative overflow-hidden mb-5 mt-2">
                                 <div className="absolute top-0 right-0 w-32 h-32 bg-white opacity-10 rounded-bl-[100px] pointer-events-none"></div>
                                 <div className="relative z-10">
@@ -361,11 +528,12 @@ function AdminDashboard({
                                 </div>
                             </div>
 
+                            {/* SE AGREGÓ EXPLICACIÓN PARA PERMITIR NÚMEROS NEGATIVOS */}
                             <form onSubmit={(e) => { e.preventDefault(); onActualizarInventario(Number(e.target.nuevoStock.value)); e.target.reset(); }} className="bg-white p-5 rounded-3xl border border-slate-100 shadow-sm">
                                 <h3 className="font-bold text-slate-700 text-sm mb-1 flex items-center"><i className="fas fa-boxes text-indigo-500 mr-2"></i> Ajustar Inventario</h3>
-                                <p className="text-[10px] text-slate-400 mb-3">Usa un signo menos (-) para restar mermas. Ej: -20</p>
+                                <p className="text-[10px] text-slate-400 mb-3 leading-tight">Agrega stock o usa un signo menos (-) para restar mermas. Ej: -20</p>
                                 <div className="flex space-x-3">
-                                    <input type="number" name="nuevoStock" required placeholder="Ej: 100 o -20" className="w-2/3 p-4 bg-slate-50 rounded-2xl outline-none border border-slate-200 text-lg font-black text-slate-700 text-center focus:border-indigo-400" />
+                                    <input type="number" name="nuevoStock" required placeholder="Ej: 100 o -20" className="w-2/3 p-4 bg-slate-50 rounded-2xl outline-none border border-slate-200 text-lg font-black text-slate-700 text-center focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 transition-all" />
                                     <button type="submit" className="w-1/3 bg-indigo-600 hover:bg-indigo-700 text-white font-black rounded-2xl shadow-md active:scale-95 transition-all flex items-center justify-center">Ajustar</button>
                                 </div>
                             </form>
@@ -374,10 +542,9 @@ function AdminDashboard({
 
                     {subVistaAdminLogistica === 'misiones' && (
                         <>
-                            <form onSubmit={submitMision} className="bg-amber-50 p-6 rounded-[32px] border border-amber-100 shadow-sm mx-1">
-                                <h3 className="font-bold text-amber-800 text-sm mb-4 flex items-center"><i className="fas fa-map-marked-alt mr-2"></i> Crear Ruta de Reparto</h3>
+                            <form onSubmit={submitMision} className="bg-amber-50 p-6 rounded-[32px] border border-amber-100 shadow-sm mx-1 mt-2">
+                                <h3 className="font-bold text-amber-800 text-sm mb-4 flex items-center"><i className="fas fa-map-marked-alt mr-2"></i> Asignar / Agregar a Ruta</h3>
                                 <div className="space-y-4">
-                                    
                                     <div>
                                         <p className="text-[10px] font-bold text-amber-700 uppercase mb-2">1. Selecciona los campos a visitar:</p>
                                         <div className="grid grid-cols-2 gap-2 max-h-32 overflow-y-auto p-3 bg-white rounded-2xl border border-amber-100 shadow-inner">
@@ -389,28 +556,26 @@ function AdminDashboard({
                                             ))}
                                         </div>
                                     </div>
-
                                     <div>
                                         <p className="text-[10px] font-bold text-amber-700 uppercase mb-2">2. Asigna Cantidad y Equipo:</p>
                                         <div className="flex space-x-3">
-                                            <div className="w-1/2"><input type="number" name="cantidad" required placeholder="Total Víveres" className="w-full p-4 bg-white rounded-2xl outline-none border border-amber-100 text-sm font-bold text-slate-700 text-center shadow-sm" /></div>
+                                            <div className="w-1/2"><input type="number" name="cantidad" required placeholder="N° Víveres" className="w-full p-4 bg-white rounded-2xl outline-none border border-amber-100 text-sm font-bold text-slate-700 text-center shadow-sm focus:ring-2 focus:ring-amber-200" /></div>
                                             <div className="w-1/2">
-                                                <select name="grupo" required className="w-full p-4 bg-white rounded-2xl outline-none border border-amber-100 text-sm font-bold text-slate-700 shadow-sm">
+                                                <select name="grupo" required className="w-full p-4 bg-white rounded-2xl outline-none border border-amber-100 text-sm font-bold text-slate-700 shadow-sm focus:ring-2 focus:ring-amber-200">
                                                     <option value="">¿A qué Grupo?</option>
                                                     {[1, 2, 3, 4, 5, 6, 7, 8].map(n => (<option key={n} value={`Grupo ${n}`}>Grupo {n}</option>))}
                                                 </select>
                                             </div>
                                         </div>
                                     </div>
-
-                                    <button type="submit" className="w-full py-4 bg-amber-500 hover:bg-amber-600 text-white font-black rounded-2xl shadow-lg active:scale-95 transition-all mt-2">Confirmar Ruta</button>
+                                    <button type="submit" className="w-full py-4 bg-amber-500 hover:bg-amber-600 text-white font-black rounded-2xl shadow-lg active:scale-95 transition-all mt-2"><i className="fas fa-paper-plane mr-2"></i>Enviar Ruta</button>
                                 </div>
                             </form>
 
                             <div className="mt-6 px-1">
                                 {entregasPendientes.length > 0 && (
-                                    <div className="mb-6"><h4 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-3 px-2">Rutas Pendientes ({entregasPendientes.length})</h4>
-                                    <div className="space-y-3">
+                                    <div className="mb-6"><h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3 px-2 border-b border-slate-100 pb-2">Rutas Pendientes Activas ({entregasPendientes.length})</h4>
+                                    <div className="space-y-3 mt-3">
                                         {entregasPendientes.map(e => {
                                             const totalEntregado = e.detalles ? Object.values(e.detalles).reduce((sum, val) => sum + (Number(val) || 0), 0) : 0;
                                             const diferencia = e.cantidad - totalEntregado;
@@ -421,7 +586,7 @@ function AdminDashboard({
                                                         <p className="font-black text-slate-800 text-sm mb-1">{e.grupo}</p>
                                                         <p className="text-[10px] text-slate-500 font-bold leading-relaxed"><i className="fas fa-map-marker-alt mr-1 text-amber-500"></i> {e.campos ? e.campos.join(', ') : e.campo}</p>
                                                         
-                                                        <div className="bg-slate-50 p-2 rounded-lg mt-3 flex justify-between text-[10px] font-bold border border-slate-100">
+                                                        <div className="bg-slate-50 p-2.5 rounded-xl mt-3 flex justify-between text-[10px] font-black border border-slate-100 tracking-wide">
                                                             <span className="text-indigo-600">Total: {e.cantidad}</span>
                                                             <span className="text-emerald-600">Avance: {totalEntregado}</span>
                                                             <span className={diferencia < 0 ? 'text-rose-500' : 'text-amber-600'}>En Vehículo: {diferencia}</span>
@@ -435,8 +600,8 @@ function AdminDashboard({
                                 )}
 
                                 {gruposCompletados.length > 0 && (
-                                    <div><h4 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-3 px-2">Historial por Rutas (Completadas)</h4>
-                                    <div className="space-y-3 opacity-95">
+                                    <div><h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3 px-2 border-b border-slate-100 pb-2">Rutas Completadas</h4>
+                                    <div className="space-y-3 opacity-95 mt-3">
                                         {gruposCompletados.map(nombreGrupo => {
                                             const isExpanded = grupoCompletadoExp === nombreGrupo;
                                             const entregasDelGrupo = entregasCompletadasPorGrupo[nombreGrupo].sort((a, b) => (b.fechaEntrega || 0) - (a.fechaEntrega || 0));
@@ -516,7 +681,7 @@ function AdminDashboard({
                                                 <select 
                                                     value={p.grupo || ''} 
                                                     onChange={(e) => onAssignGroup(p.id, e.target.value)} 
-                                                    className={`w-full p-2 rounded-xl text-xs font-bold outline-none border ${p.grupo ? 'bg-indigo-50 border-indigo-100 text-indigo-700' : 'bg-rose-50 border-rose-100 text-rose-500'}`}
+                                                    className={`w-full p-3 rounded-xl text-xs font-bold outline-none border ${p.grupo ? 'bg-indigo-50 border-indigo-100 text-indigo-700' : 'bg-rose-50 border-rose-100 text-rose-500'}`}
                                                 >
                                                     <option value="">-- Sin Grupo --</option>
                                                     {[1, 2, 3, 4, 5, 6, 7, 8].map(n => (
@@ -538,10 +703,13 @@ function AdminDashboard({
     if (vistaActual === 'personal') {
         contenidoAdmin = (
             <div className="space-y-4 animate-in slide-in-from-right duration-300 h-full flex flex-col pt-2">
-                <div className="px-2 mb-2"><h2 className="text-2xl font-black text-slate-800">Directorio Personal</h2><p className="text-slate-400 text-xs">{activos.length} Miembros Activos</p></div>
+                <div className="flex justify-between items-center px-2 mb-2">
+                    <div><h2 className="text-2xl font-black text-slate-800">Directorio</h2><p className="text-slate-400 text-xs">{activos.length} Miembros Activos</p></div>
+                    <button onClick={onToggleModal} className="w-10 h-10 bg-indigo-600 text-white rounded-xl shadow-lg shadow-indigo-200 flex items-center justify-center hover:bg-indigo-700 active:scale-95 transition-all"><i className="fas fa-plus"></i></button>
+                </div>
                 <div className="flex items-center bg-white rounded-2xl px-5 py-4 shadow-sm border border-slate-100 mx-1"><i className="fas fa-search text-slate-300 mr-3 text-lg"></i><input type="text" placeholder="Buscar por nombre o campo..." className="bg-transparent w-full outline-none text-sm font-bold text-slate-700" value={busqueda} onChange={(e) => setBusqueda(e.target.value)} /></div>
                 
-                <div className="flex-1 overflow-y-auto space-y-3 pb-24 pr-1 mt-4 px-1">
+                <div className="flex-1 overflow-y-auto space-y-3 pb-24 pr-1 mt-2 px-1">
                     {rolesConGente.map(rolGrp => {
                         const isExp = rolExpandido === rolGrp;
                         const miembros = gruposPersonal[rolGrp];
