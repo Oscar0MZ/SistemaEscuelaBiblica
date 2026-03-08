@@ -5,7 +5,8 @@ function AdminDashboard({
     mantenimiento, onToggleMantenimiento, onApprove, onDelete, onToggleModal, 
     onDeleteCampo, onResetLecciones, onCrearEntrega, onBorrarEntrega, onAssignGroup,
     inventarioDatos, onActualizarInventario, onCerrarJornada,
-    fondoTotal, fondoSecretariaTotal, onEdit, historialIngresos, historialSecretaria
+    fondoTotal, fondoSecretariaTotal, onEdit, historialIngresos, historialSecretaria,
+    datosUsuarioActual // SE AGREGÓ PARA DETECTAR EL MODO SANDBOX
 }) {
     const [busqueda, setBusqueda] = useState('');
     const [vistaActual, setVistaActual] = useState('inicio'); 
@@ -15,7 +16,7 @@ function AdminDashboard({
     const [tabAuditoria, setTabAuditoria] = useState('tesoreria'); 
     const [fechaOfrendaExp, setFechaOfrendaExp] = useState(null);
     const [mesAuditoriaExp, setMesAuditoriaExp] = useState(null);
-    const [mesAsistenciaExp, setMesAsistenciaExp] = useState(null); // NUEVO ESTADO
+    const [mesAsistenciaExp, setMesAsistenciaExp] = useState(null); 
 
     // ESTADOS PARA ACORDEÓN DE CAMPOS
     const [campoExpandido, setCampoExpandido] = useState(null); 
@@ -23,12 +24,16 @@ function AdminDashboard({
 
     const [rolExpandido, setRolExpandido] = useState(null); 
     
-    // LOGÍSTICA
+    // LOGÍSTICA Y EDICIÓN DE RUTAS
     const [subVistaAdminLogistica, setSubVistaAdminLogistica] = useState('bodega'); 
     const [edadMin, setEdadMin] = useState('');
     const [edadMax, setEdadMax] = useState('');
     const [camposRuta, setCamposRuta] = useState([]);
     const [grupoCompletadoExp, setGrupoCompletadoExp] = useState(null);
+    
+    // NUEVOS ESTADOS PARA EDITAR CANTIDAD DE RUTA
+    const [rutaEditandoId, setRutaEditandoId] = useState(null);
+    const [nuevaCantidadRuta, setNuevaCantidadRuta] = useState('');
 
     const historialVisible = historialAsistencias.filter(h => !h.esReset);
     const todasAsistencias = datosGlobalesAsistencia?.registros || [];
@@ -68,7 +73,6 @@ function AdminDashboard({
         return Object.keys(grupos).sort((a,b) => b.localeCompare(a)).map(k => ({ id: k, ...grupos[k] }));
     };
 
-    // NUEVA FUNCIÓN: AGRUPAR ASISTENCIA POR MES
     const agruparAsistenciaPorMes = (historial) => {
         if (!historial) return [];
         const grupos = {};
@@ -149,6 +153,30 @@ function AdminDashboard({
         onCrearEntrega({ campos: camposRuta, cantidad: parseInt(fd.get('cantidad')), grupo: fd.get('grupo') });
         setCamposRuta([]); 
         e.target.reset();
+    };
+
+    // NUEVA FUNCIÓN PARA EDITAR LA CANTIDAD DE VÍVERES EN RUTA
+    const handleGuardarNuevaCantidadRuta = async (idEntrega) => {
+        const isSandbox = datosUsuarioActual?.id === 'user_sandbox_secreto';
+        if (isSandbox) {
+            alert("🔒 MODO DESARROLLADOR\n\nAcción simulada: [Editar Cantidad de Víveres en Ruta]\n\nLos datos reales están protegidos y no se han modificado.");
+            setRutaEditandoId(null);
+            return;
+        }
+
+        const cantidadNumerica = parseInt(nuevaCantidadRuta);
+        if (isNaN(cantidadNumerica) || cantidadNumerica < 0) {
+            alert("Por favor ingresa una cantidad válida.");
+            return;
+        }
+
+        try {
+            await window.db.collection('entregas').doc(idEntrega).update({ cantidad: cantidadNumerica });
+            setRutaEditandoId(null);
+        } catch (error) {
+            alert("Error al actualizar la cantidad.");
+            console.error(error);
+        }
     };
 
     // CÁLCULOS FINANCIEROS Y DE ASISTENCIA
@@ -505,7 +533,6 @@ function AdminDashboard({
                             return (
                                 <div key={campo} className="bg-slate-50 rounded-[24px] border border-slate-200 shadow-sm overflow-hidden transition-all duration-300">
                                     
-                                    {/* CABECERA DEL ACORDEÓN (SIEMPRE VISIBLE) */}
                                     <button onClick={() => { setCampoExpandido(isExpanded ? null : campo); setCampoAccionActiva(null); }} className="w-full bg-white p-5 flex justify-between items-center hover:bg-slate-50 transition-colors">
                                         <div className="text-left w-3/4">
                                             <h4 className="font-black text-slate-800 text-lg leading-tight truncate">{campo}</h4>
@@ -516,11 +543,9 @@ function AdminDashboard({
                                         </div>
                                     </button>
 
-                                    {/* CUERPO EXPANDIDO */}
                                     {isExpanded && (
                                         <div className="p-5 pt-4 animate-in slide-in-from-top-2 duration-200 border-t border-slate-100">
                                             
-                                            {/* BARRA DE PROGRESO DE MATERIAL */}
                                             <div className="mb-5 bg-white p-3 rounded-xl border border-slate-100 shadow-sm">
                                                 <div className="flex justify-between text-[10px] font-bold text-slate-500 mb-2 px-1">
                                                     <span>{!ultimoReg ? 'Material: Sin Asignar' : `Material: Parte ${prog.parte} • Lección ${prog.leccion}`}</span>
@@ -529,14 +554,12 @@ function AdminDashboard({
                                                 <div className="w-full bg-slate-100 rounded-full h-2 overflow-hidden"><div className="bg-indigo-500 h-2 rounded-full transition-all duration-1000" style={{width: `${prog.porc}%`}}></div></div>
                                             </div>
 
-                                            {/* BOTONES DE ACCIÓN (Clases, Asignar, Eliminar) */}
                                             <div className="flex space-x-2">
                                                 <button onClick={() => setCampoAccionActiva(campoAccionActiva === 'clases' ? null : 'clases')} className={`flex-1 py-3 rounded-xl text-[11px] font-black transition-colors border ${campoAccionActiva === 'clases' ? 'bg-indigo-500 text-white border-indigo-600 shadow-md' : 'bg-white text-indigo-600 border-indigo-100 hover:bg-indigo-50'}`}><i className="fas fa-history mr-1.5"></i> Clases</button>
                                                 <button onClick={() => setCampoAccionActiva(campoAccionActiva === 'asignar' ? null : 'asignar')} className={`flex-1 py-3 rounded-xl text-[11px] font-black transition-colors border ${campoAccionActiva === 'asignar' ? 'bg-sky-500 text-white border-sky-600 shadow-md' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-100'}`}><i className="fas fa-cog mr-1.5"></i> Asignar</button>
                                                 <button onClick={() => onDeleteCampo(campo)} className="w-12 flex flex-col justify-center items-center rounded-xl text-rose-500 bg-white border border-rose-200 hover:bg-rose-500 hover:text-white transition-colors shrink-0"><i className="fas fa-trash-alt"></i></button>
                                             </div>
 
-                                            {/* SUB-PANELES DE ACCIÓN */}
                                             {campoAccionActiva === 'asignar' && (
                                                 <div className="mt-4 p-4 bg-white rounded-2xl border border-sky-100 animate-in fade-in shadow-sm">
                                                     <p className="text-[10px] font-black text-slate-500 mb-3 uppercase tracking-widest text-center"><i className="fas fa-cog mr-1"></i> Asignar Lección Exacta</p>
@@ -721,18 +744,38 @@ function AdminDashboard({
                                             const camposArrayStr = Array.isArray(e.campos) ? e.campos.join(', ') : (e.campo || 'Campos no definidos');
 
                                             return (
-                                                <div key={e.id} className="bg-white p-4 rounded-2xl border-l-4 border-l-amber-400 shadow-sm flex justify-between items-center">
-                                                    <div className="w-3/4 pr-2">
-                                                        <p className="font-black text-slate-800 text-sm mb-1">{e.grupo || 'Sin grupo'}</p>
-                                                        <p className="text-[10px] text-slate-500 font-bold leading-relaxed"><i className="fas fa-map-marker-alt mr-1 text-amber-500"></i> {camposArrayStr}</p>
-                                                        
-                                                        <div className="bg-slate-50 p-2.5 rounded-xl mt-3 flex justify-between text-[10px] font-black border border-slate-100 tracking-wide">
-                                                            <span className="text-indigo-600">Total: {e.cantidad || 0}</span>
-                                                            <span className="text-emerald-600">Avance: {totalEntregado}</span>
-                                                            <span className={diferencia < 0 ? 'text-rose-500' : 'text-amber-600'}>En Vehículo: {diferencia}</span>
+                                                <div key={e.id} className="bg-white p-4 rounded-2xl border-l-4 border-l-amber-400 shadow-sm flex flex-col justify-between">
+                                                    <div className="flex justify-between items-start mb-2">
+                                                        <div className="pr-2">
+                                                            <p className="font-black text-slate-800 text-sm mb-1">{e.grupo || 'Sin grupo'}</p>
+                                                            <p className="text-[10px] text-slate-500 font-bold leading-relaxed"><i className="fas fa-map-marker-alt mr-1 text-amber-500"></i> {camposArrayStr}</p>
                                                         </div>
+                                                        <button onClick={() => onBorrarEntrega(e.id)} className="w-8 h-8 flex items-center justify-center bg-rose-50 text-rose-500 rounded-xl hover:bg-rose-500 hover:text-white transition-colors flex-shrink-0"><i className="fas fa-trash-alt"></i></button>
                                                     </div>
-                                                    <button onClick={() => onBorrarEntrega(e.id)} className="w-10 h-10 flex items-center justify-center bg-rose-50 text-rose-500 rounded-xl hover:bg-rose-500 hover:text-white transition-colors flex-shrink-0"><i className="fas fa-trash-alt"></i></button>
+                                                    
+                                                    {/* EDICIÓN DE CANTIDAD DE RUTA */}
+                                                    <div className="bg-slate-50 p-2.5 rounded-xl mt-2 flex justify-between items-center text-[10px] font-black border border-slate-100 tracking-wide">
+                                                        {rutaEditandoId === e.id ? (
+                                                            <div className="flex items-center space-x-1.5">
+                                                                <span className="text-indigo-600">Total:</span>
+                                                                <input 
+                                                                    type="number" 
+                                                                    className="w-12 p-1 rounded border border-indigo-200 text-indigo-700 outline-none text-center" 
+                                                                    value={nuevaCantidadRuta} 
+                                                                    onChange={(ev) => setNuevaCantidadRuta(ev.target.value)} 
+                                                                    autoFocus
+                                                                />
+                                                                <button onClick={() => handleGuardarNuevaCantidadRuta(e.id)} className="w-5 h-5 bg-emerald-100 text-emerald-600 rounded-md hover:bg-emerald-500 hover:text-white flex items-center justify-center"><i className="fas fa-check text-[9px]"></i></button>
+                                                                <button onClick={() => setRutaEditandoId(null)} className="w-5 h-5 bg-rose-100 text-rose-600 rounded-md hover:bg-rose-500 hover:text-white flex items-center justify-center"><i className="fas fa-times text-[9px]"></i></button>
+                                                            </div>
+                                                        ) : (
+                                                            <button onClick={() => { setRutaEditandoId(e.id); setNuevaCantidadRuta(e.cantidad); }} className="text-indigo-600 flex items-center hover:bg-indigo-100 px-2 py-1 rounded transition-colors" title="Editar cantidad">
+                                                                Total: {e.cantidad || 0} <i className="fas fa-pencil-alt ml-1 opacity-50"></i>
+                                                            </button>
+                                                        )}
+                                                        <span className="text-emerald-600">Avance: {totalEntregado}</span>
+                                                        <span className={diferencia < 0 ? 'text-rose-500' : 'text-amber-600'}>En Vehículo: {diferencia}</span>
+                                                    </div>
                                                 </div>
                                             );
                                         })}
