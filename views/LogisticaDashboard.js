@@ -4,9 +4,6 @@ function LogisticaDashboard({ datosUsuarioActual, entregasLogistica, onActualiza
     const [vistaActual, setVistaActual] = useState('inicio'); 
     const [cantidadesDetalle, setCantidadesDetalle] = useState({});
     
-    // NUEVO ESTADO PARA EL COMENTARIO DE RECOMPENSAS
-    const [comentariosRecompensas, setComentariosRecompensas] = useState({});
-    
     const nombreDisplay = datosUsuarioActual ? datosUsuarioActual.nombre.split(' ')[0] : '';
     const miGrupo = datosUsuarioActual?.grupo; 
     
@@ -19,18 +16,12 @@ function LogisticaDashboard({ datosUsuarioActual, entregasLogistica, onActualiza
 
     useEffect(() => {
         const inicial = {};
-        const comentariosIni = {};
         entregasPendientes.forEach(e => {
             if (e.detalles) {
                 inicial[e.id] = { ...e.detalles };
-                // Si la ruta pendiente ya traía un comentario guardado en un avance anterior, lo rescatamos
-                if (e.bloqueos && e.bloqueos['🏆 Recompensas Campos'] && e.bloqueos['🏆 Recompensas Campos'].comentario) {
-                    comentariosIni[e.id] = e.bloqueos['🏆 Recompensas Campos'].comentario;
-                }
             }
         });
         setCantidadesDetalle(inicial);
-        setComentariosRecompensas(comentariosIni);
     }, [entregasLogistica]);
 
     const handleCantidadChange = (idEntrega, campoRuta, valor) => {
@@ -43,22 +34,21 @@ function LogisticaDashboard({ datosUsuarioActual, entregasLogistica, onActualiza
         }));
     };
 
-    const handleComentarioChange = (idEntrega, comentario) => {
-        setComentariosRecompensas(prev => ({
-            ...prev,
-            [idEntrega]: comentario
-        }));
-    };
-
     const procesarCamposParaGuardar = (e) => {
         const misIngresos = cantidadesDetalle[e.id] || {};
         const nuevosDetalles = { ...(e.detalles || {}) };
         const nuevosBloqueos = { ...(e.bloqueos || {}) };
         let huboCambios = false;
 
-        // Armamos la lista completa de campos incluyendo los dos nuevos obligatorios visualmente
+        // Construir la lista dinámica de todos los campos posibles en esta ruta
         const camposOriginales = e.campos || [e.campo];
-        const camposCompletos = [...camposOriginales, '📦 Víveres Equipo Logística', '🏆 Recompensas Campos'];
+        const camposCompletos = ['📦 Víveres Equipo Logística'];
+        
+        camposOriginales.forEach(c => {
+            camposCompletos.push(c); // El campo principal
+            camposCompletos.push(`${c} - Textos`); // Recompensa textos
+            camposCompletos.push(`${c} - Amiguitos`); // Recompensa amiguitos
+        });
 
         camposCompletos.forEach(c => {
             const valorIngresado = misIngresos[c];
@@ -67,17 +57,7 @@ function LogisticaDashboard({ datosUsuarioActual, entregasLogistica, onActualiza
             if (valorIngresado !== undefined && valorIngresado !== "") {
                 if (!bloqueoActual || bloqueoActual.id === datosUsuarioActual.id) {
                     nuevosDetalles[c] = valorIngresado;
-                    
-                    // Si es Recompensas, le adjuntamos el comentario al bloqueo
-                    if (c === '🏆 Recompensas Campos') {
-                        nuevosBloqueos[c] = { 
-                            id: datosUsuarioActual.id, 
-                            nombre: datosUsuarioActual.nombre,
-                            comentario: comentariosRecompensas[e.id] || 'Sin especificar'
-                        };
-                    } else {
-                        nuevosBloqueos[c] = { id: datosUsuarioActual.id, nombre: datosUsuarioActual.nombre };
-                    }
+                    nuevosBloqueos[c] = { id: datosUsuarioActual.id, nombre: datosUsuarioActual.nombre };
                     huboCambios = true;
                 }
             }
@@ -99,7 +79,6 @@ function LogisticaDashboard({ datosUsuarioActual, entregasLogistica, onActualiza
     const handleFinalizar = (e) => {
         const misIngresos = cantidadesDetalle[e.id] || {};
         
-        // VALIDACIÓN DE CAMPO OBLIGATORIO: Equipo Logística
         const viveresLogistica = misIngresos['📦 Víveres Equipo Logística'];
         if (viveresLogistica === undefined || viveresLogistica === "") {
             alert("⚠️ ALTO: Debes registrar cuántos víveres consumió el Equipo de Logística. Si no ocuparon nada, ingresa el número 0.");
@@ -170,16 +149,9 @@ function LogisticaDashboard({ datosUsuarioActual, entregasLogistica, onActualiza
                                             <p className="text-xs font-bold text-slate-500 mb-4 pl-7">Total asignado: {ultimaRutaCompletada.cantidad} Paquetes</p>
                                             <div className="space-y-2">
                                                 {Object.entries(ultimaRutaCompletada.detalles || {}).map(([c, cant]) => (
-                                                    <div key={c} className="flex flex-col bg-white/50 p-2 px-3 rounded-xl border border-slate-200">
-                                                        <div className="flex justify-between items-center">
-                                                            <span className="text-xs font-bold text-slate-500 w-1/2 truncate">{c}</span>
-                                                            <span className="text-xs font-black text-slate-400">{cant} entregados</span>
-                                                        </div>
-                                                        {c === '🏆 Recompensas Campos' && ultimaRutaCompletada.bloqueos?.[c]?.comentario && (
-                                                            <p className="text-[9px] font-bold text-slate-400 mt-1 italic w-full text-right border-t border-slate-200/50 pt-1">
-                                                                Motivo: {ultimaRutaCompletada.bloqueos[c].comentario}
-                                                            </p>
-                                                        )}
+                                                    <div key={c} className="flex justify-between items-center bg-white/50 p-2 px-3 rounded-xl border border-slate-200">
+                                                        <span className="text-xs font-bold text-slate-500 w-1/2 truncate">{c}</span>
+                                                        <span className="text-xs font-black text-slate-400">{cant} entregados</span>
                                                     </div>
                                                 ))}
                                             </div>
@@ -191,9 +163,18 @@ function LogisticaDashboard({ datosUsuarioActual, entregasLogistica, onActualiza
                             entregasPendientes.map(e => {
                                 const camposDeRuta = e.campos || [e.campo];
                                 
-                                const totalIngresado = [...camposDeRuta, '📦 Víveres Equipo Logística', '🏆 Recompensas Campos'].reduce((sum, c) => {
-                                    return sum + (Number(cantidadesDetalle[e.id]?.[c]) || Number(e.detalles?.[c]) || 0);
+                                // Calculamos total ingresado construyendo dinámicamente las llaves
+                                const keysParaSumar = ['📦 Víveres Equipo Logística'];
+                                camposDeRuta.forEach(c => {
+                                    keysParaSumar.push(c);
+                                    keysParaSumar.push(`${c} - Textos`);
+                                    keysParaSumar.push(`${c} - Amiguitos`);
+                                });
+
+                                const totalIngresado = keysParaSumar.reduce((sum, key) => {
+                                    return sum + (Number(cantidadesDetalle[e.id]?.[key]) || Number(e.detalles?.[key]) || 0);
                                 }, 0);
+                                
                                 const enVehiculo = e.cantidad - totalIngresado;
 
                                 return (
@@ -216,43 +197,86 @@ function LogisticaDashboard({ datosUsuarioActual, entregasLogistica, onActualiza
                                             </div>
                                         </div>
                                         
-                                        <div className="space-y-3 mb-5">
-                                            <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest pl-1 mb-2">Ingresa cantidad dejada por campo:</p>
+                                        <div className="space-y-4 mb-5">
+                                            <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest pl-1 mb-2">Detalle de Entrega por Campos:</p>
                                             
-                                            {/* RENDERIZADO DE CAMPOS DE LA RUTA */}
+                                            {/* RENDERIZADO DE CAMPOS Y SUS RECOMPENSAS */}
                                             {camposDeRuta.map(c => {
+                                                const keyTextos = `${c} - Textos`;
+                                                const keyAmiguitos = `${c} - Amiguitos`;
+
                                                 const bloqueo = e.bloqueos?.[c];
                                                 const bloqueadoPorOtro = bloqueo && bloqueo.id !== datosUsuarioActual.id;
                                                 const bloqueadoPorMi = bloqueo && bloqueo.id === datosUsuarioActual.id;
 
+                                                const bloqueoTextos = e.bloqueos?.[keyTextos];
+                                                const bloqueadoPorOtroTextos = bloqueoTextos && bloqueoTextos.id !== datosUsuarioActual.id;
+
+                                                const bloqueoAmiguitos = e.bloqueos?.[keyAmiguitos];
+                                                const bloqueadoPorOtroAmiguitos = bloqueoAmiguitos && bloqueoAmiguitos.id !== datosUsuarioActual.id;
+
                                                 return (
-                                                    <div key={c} className={`flex flex-col bg-white p-3 rounded-xl border shadow-sm ${bloqueadoPorOtro ? 'border-rose-100 bg-rose-50/40' : bloqueadoPorMi ? 'border-emerald-100 bg-emerald-50/30' : 'border-slate-100'}`}>
-                                                        <div className="flex justify-between items-center">
-                                                            <span className={`text-xs font-bold w-1/2 truncate ${bloqueadoPorOtro ? 'text-slate-400' : 'text-slate-700'}`}>{c}</span>
+                                                    <div key={c} className={`flex flex-col bg-white p-4 rounded-2xl border shadow-sm ${bloqueadoPorOtro ? 'border-rose-100 bg-rose-50/40' : bloqueadoPorMi ? 'border-emerald-100 bg-emerald-50/30' : 'border-slate-200'}`}>
+                                                        
+                                                        {/* 1. CAMPO PRINCIPAL */}
+                                                        <div className="flex justify-between items-center mb-3">
+                                                            <span className={`text-sm font-black w-1/2 truncate ${bloqueadoPorOtro ? 'text-slate-400' : 'text-slate-800'}`}>📍 {c}</span>
                                                             <div className="w-1/2 flex justify-end">
                                                                 <input 
                                                                     type="number" 
-                                                                    placeholder="Cant." 
+                                                                    placeholder="Paquetes" 
                                                                     disabled={bloqueadoPorOtro}
-                                                                    className={`w-16 p-2 rounded-lg text-xs font-black text-center outline-none transition-colors ${bloqueadoPorOtro ? 'bg-transparent text-slate-400' : 'bg-slate-50 border border-slate-200 text-indigo-600 focus:border-indigo-400'}`}
+                                                                    className={`w-20 p-2 rounded-lg text-xs font-black text-center outline-none transition-colors shadow-sm ${bloqueadoPorOtro ? 'bg-transparent text-slate-400' : 'bg-slate-50 border border-slate-200 text-indigo-600 focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100'}`}
                                                                     value={cantidadesDetalle[e.id]?.[c] !== undefined ? cantidadesDetalle[e.id]?.[c] : (e.detalles?.[c] || '')}
                                                                     onChange={(ev) => handleCantidadChange(e.id, c, ev.target.value)}
                                                                 />
                                                             </div>
                                                         </div>
-                                                        {bloqueadoPorOtro && (<p className="text-[9px] text-rose-500 font-bold mt-2"><i className="fas fa-lock mr-1"></i> Registrado por {bloqueo.nombre}</p>)}
-                                                        {bloqueadoPorMi && (<p className="text-[9px] text-emerald-500 font-bold mt-2"><i className="fas fa-check mr-1"></i> Tú registraste este campo</p>)}
+
+                                                        {/* 2. SUB-MENÚ DE RECOMPENSAS */}
+                                                        <div className="bg-amber-50/60 p-3 rounded-xl border border-amber-100 space-y-3">
+                                                            <p className="text-[9px] font-black text-amber-700 uppercase tracking-widest"><i className="fas fa-gift mr-1"></i> Recompensas Extras (Opcional)</p>
+                                                            
+                                                            {/* Recompensa: 3 Textos */}
+                                                            <div className="flex justify-between items-center">
+                                                                <span className={`text-[10px] font-bold w-1/2 truncate ${bloqueadoPorOtroTextos ? 'text-slate-400' : 'text-slate-600'}`}><i className="fas fa-book-open text-amber-500 mr-1.5"></i>Por 3 Textos</span>
+                                                                <div className="w-1/2 flex justify-end">
+                                                                    <input 
+                                                                        type="number" 
+                                                                        placeholder="Cant." 
+                                                                        disabled={bloqueadoPorOtroTextos}
+                                                                        className={`w-16 p-1.5 rounded-lg text-xs font-black text-center outline-none transition-colors ${bloqueadoPorOtroTextos ? 'bg-transparent text-slate-400' : 'bg-white border border-amber-200 text-amber-600 focus:border-amber-400 focus:ring-1 focus:ring-amber-200'}`}
+                                                                        value={cantidadesDetalle[e.id]?.[keyTextos] !== undefined ? cantidadesDetalle[e.id]?.[keyTextos] : (e.detalles?.[keyTextos] || '')}
+                                                                        onChange={(ev) => handleCantidadChange(e.id, keyTextos, ev.target.value)}
+                                                                    />
+                                                                </div>
+                                                            </div>
+
+                                                            {/* Recompensa: Amiguito */}
+                                                            <div className="flex justify-between items-center">
+                                                                <span className={`text-[10px] font-bold w-1/2 truncate ${bloqueadoPorOtroAmiguitos ? 'text-slate-400' : 'text-slate-600'}`}><i className="fas fa-user-plus text-amber-500 mr-1.5"></i>Por Amiguito</span>
+                                                                <div className="w-1/2 flex justify-end">
+                                                                    <input 
+                                                                        type="number" 
+                                                                        placeholder="Cant." 
+                                                                        disabled={bloqueadoPorOtroAmiguitos}
+                                                                        className={`w-16 p-1.5 rounded-lg text-xs font-black text-center outline-none transition-colors ${bloqueadoPorOtroAmiguitos ? 'bg-transparent text-slate-400' : 'bg-white border border-amber-200 text-amber-600 focus:border-amber-400 focus:ring-1 focus:ring-amber-200'}`}
+                                                                        value={cantidadesDetalle[e.id]?.[keyAmiguitos] !== undefined ? cantidadesDetalle[e.id]?.[keyAmiguitos] : (e.detalles?.[keyAmiguitos] || '')}
+                                                                        onChange={(ev) => handleCantidadChange(e.id, keyAmiguitos, ev.target.value)}
+                                                                    />
+                                                                </div>
+                                                            </div>
+                                                        </div>
+
+                                                        {bloqueadoPorOtro && (<p className="text-[9px] text-rose-500 font-bold mt-2 text-right"><i className="fas fa-lock mr-1"></i> Registrado por {bloqueo.nombre}</p>)}
                                                     </div>
                                                 );
                                             })}
 
-                                            {/* SEPARADOR VISUAL PARA GASTOS DEL EQUIPO */}
-                                            <div className="pt-2 mt-4 border-t-2 border-dashed border-slate-200">
-                                                <p className="text-[9px] font-black text-indigo-400 uppercase tracking-widest pl-1 mb-2 mt-2"><i className="fas fa-clipboard-list mr-1"></i> Control Interno:</p>
-                                                
-                                                {/* 1. CAMPO OBLIGATORIO: LOGÍSTICA (DISEÑO VERTICAL) */}
-                                                <div className={`flex flex-col bg-indigo-50/30 p-4 rounded-xl border border-indigo-100 shadow-sm mb-3`}>
-                                                    <label className="text-xs font-bold text-indigo-800 mb-2">📦 Víveres Equipo Logística</label>
+                                            {/* SEPARADOR VISUAL PARA GASTOS DEL EQUIPO (OBLIGATORIO) */}
+                                            <div className="pt-3 mt-4 border-t-2 border-dashed border-slate-200">
+                                                <div className={`flex flex-col bg-indigo-50 p-4 rounded-2xl border border-indigo-100 shadow-sm`}>
+                                                    <label className="text-xs font-black text-indigo-800 mb-2 uppercase tracking-wide"><i className="fas fa-users-cog mr-1"></i> 📦 Víveres Equipo Logística</label>
                                                     <input 
                                                         type="number" 
                                                         placeholder="Cantidad (Obligatorio)" 
@@ -261,40 +285,11 @@ function LogisticaDashboard({ datosUsuarioActual, entregasLogistica, onActualiza
                                                         onChange={(ev) => handleCantidadChange(e.id, '📦 Víveres Equipo Logística', ev.target.value)}
                                                     />
                                                 </div>
-
-                                                {/* 2. CAMPO OPCIONAL: RECOMPENSAS (DISEÑO VERTICAL) */}
-                                                <div className={`flex flex-col bg-amber-50/30 p-4 rounded-xl border border-amber-100 shadow-sm`}>
-                                                    <label className="text-xs font-bold text-amber-800 mb-2">🏆 Recompensas Campos</label>
-                                                    <input 
-                                                        type="number" 
-                                                        placeholder="Cantidad (Opcional)" 
-                                                        className="w-full p-3 rounded-xl text-sm font-black text-center outline-none bg-white border border-amber-200 text-amber-600 focus:border-amber-400 focus:ring-2 focus:ring-amber-100 transition-all shadow-sm"
-                                                        value={cantidadesDetalle[e.id]?.['🏆 Recompensas Campos'] !== undefined ? cantidadesDetalle[e.id]?.['🏆 Recompensas Campos'] : (e.detalles?.['🏆 Recompensas Campos'] || '')}
-                                                        onChange={(ev) => handleCantidadChange(e.id, '🏆 Recompensas Campos', ev.target.value)}
-                                                    />
-                                                    
-                                                    {/* SELECTOR DE MOTIVO DE RECOMPENSA */}
-                                                    {(Number(cantidadesDetalle[e.id]?.['🏆 Recompensas Campos']) > 0 || Number(e.detalles?.['🏆 Recompensas Campos']) > 0) && (
-                                                        <div className="w-full mt-3 animate-in fade-in">
-                                                            <select 
-                                                                className="w-full p-3 bg-white border border-amber-200 rounded-xl text-xs font-bold text-slate-600 outline-none focus:ring-2 focus:ring-amber-100 shadow-sm transition-all"
-                                                                value={comentariosRecompensas[e.id] || ''}
-                                                                onChange={(ev) => handleComentarioChange(e.id, ev.target.value)}
-                                                            >
-                                                                <option value="" disabled>Selecciona el motivo...</option>
-                                                                <option value="Por textos aprendidos">Por textos aprendidos</option>
-                                                                <option value="Por nuevo amiguito">Por nuevo amiguito</option>
-                                                                <option value="Otra recompensa">Otra recompensa</option>
-                                                            </select>
-                                                        </div>
-                                                    )}
-                                                </div>
                                             </div>
-
                                         </div>
 
                                         <div className="flex space-x-2">
-                                            <button onClick={() => handleGuardarAvance(e)} className="w-1/3 py-4 bg-white hover:bg-slate-100 text-indigo-500 border border-indigo-100 font-black rounded-2xl shadow-sm active:scale-95 transition-all flex flex-col items-center justify-center text-[10px] uppercase tracking-wide">
+                                            <button onClick={() => handleGuardarAvance(e)} className="w-1/3 py-4 bg-white hover:bg-slate-100 text-indigo-500 border border-indigo-200 font-black rounded-2xl shadow-sm active:scale-95 transition-all flex flex-col items-center justify-center text-[10px] uppercase tracking-wide">
                                                 <i className="fas fa-save mb-1 text-base"></i> Avance
                                             </button>
                                             <button onClick={() => handleFinalizar(e)} className="w-2/3 py-4 bg-emerald-500 hover:bg-emerald-600 text-white font-black rounded-2xl shadow-lg shadow-emerald-200 active:scale-95 transition-all flex items-center justify-center text-sm">
