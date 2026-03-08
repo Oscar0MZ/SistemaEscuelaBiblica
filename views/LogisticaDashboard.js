@@ -4,24 +4,33 @@ function LogisticaDashboard({ datosUsuarioActual, entregasLogistica, onActualiza
     const [vistaActual, setVistaActual] = useState('inicio'); 
     const [cantidadesDetalle, setCantidadesDetalle] = useState({});
     
+    // NUEVO ESTADO PARA EL COMENTARIO DE RECOMPENSAS
+    const [comentariosRecompensas, setComentariosRecompensas] = useState({});
+    
     const nombreDisplay = datosUsuarioActual ? datosUsuarioActual.nombre.split(' ')[0] : '';
     const miGrupo = datosUsuarioActual?.grupo; 
     
-    // MAGIA: Filtramos para que no vean las rutas que tú ya "Archivaste" (Cerraste Jornada)
     const entregasPendientes = entregasLogistica.filter(e => e.estado === 'Pendiente' && e.grupo === miGrupo && !e.archivado);
     const entregasCompletadas = entregasLogistica.filter(e => e.estado === 'Entregado' && e.grupo === miGrupo && !e.archivado);
 
-    // Para la tarjeta gris, buscamos la última que hicieron de todas formas
     const todasMisCompletadas = entregasLogistica.filter(e => e.estado === 'Entregado' && e.grupo === miGrupo);
     const entregasCompletadasOrdenadas = [...todasMisCompletadas].sort((a, b) => (b.fechaEntrega || 0) - (a.fechaEntrega || 0));
     const ultimaRutaCompletada = entregasCompletadasOrdenadas.length > 0 ? entregasCompletadasOrdenadas[0] : null;
 
     useEffect(() => {
         const inicial = {};
+        const comentariosIni = {};
         entregasPendientes.forEach(e => {
-            if (e.detalles) inicial[e.id] = e.detalles;
+            if (e.detalles) {
+                inicial[e.id] = { ...e.detalles };
+                // Si la ruta pendiente ya traía un comentario guardado en un avance anterior, lo rescatamos
+                if (e.bloqueos && e.bloqueos['🏆 Recompensas Campos'] && e.bloqueos['🏆 Recompensas Campos'].comentario) {
+                    comentariosIni[e.id] = e.bloqueos['🏆 Recompensas Campos'].comentario;
+                }
+            }
         });
         setCantidadesDetalle(inicial);
+        setComentariosRecompensas(comentariosIni);
     }, [entregasLogistica]);
 
     const handleCantidadChange = (idEntrega, campoRuta, valor) => {
@@ -34,26 +43,51 @@ function LogisticaDashboard({ datosUsuarioActual, entregasLogistica, onActualiza
         }));
     };
 
-    const handleGuardarAvance = (e) => {
+    const handleComentarioChange = (idEntrega, comentario) => {
+        setComentariosRecompensas(prev => ({
+            ...prev,
+            [idEntrega]: comentario
+        }));
+    };
+
+    const procesarCamposParaGuardar = (e) => {
         const misIngresos = cantidadesDetalle[e.id] || {};
         const nuevosDetalles = { ...(e.detalles || {}) };
         const nuevosBloqueos = { ...(e.bloqueos || {}) };
-
         let huboCambios = false;
-        const camposDeRuta = e.campos || [e.campo];
 
-        camposDeRuta.forEach(c => {
+        // Armamos la lista completa de campos incluyendo los dos nuevos obligatorios visualmente
+        const camposOriginales = e.campos || [e.campo];
+        const camposCompletos = [...camposOriginales, '📦 Víveres Equipo Logística', '🏆 Recompensas Campos'];
+
+        camposCompletos.forEach(c => {
             const valorIngresado = misIngresos[c];
             const bloqueoActual = e.bloqueos?.[c];
             
             if (valorIngresado !== undefined && valorIngresado !== "") {
                 if (!bloqueoActual || bloqueoActual.id === datosUsuarioActual.id) {
                     nuevosDetalles[c] = valorIngresado;
-                    nuevosBloqueos[c] = { id: datosUsuarioActual.id, nombre: datosUsuarioActual.nombre };
+                    
+                    // Si es Recompensas, le adjuntamos el comentario al bloqueo
+                    if (c === '🏆 Recompensas Campos') {
+                        nuevosBloqueos[c] = { 
+                            id: datosUsuarioActual.id, 
+                            nombre: datosUsuarioActual.nombre,
+                            comentario: comentariosRecompensas[e.id] || 'Sin especificar'
+                        };
+                    } else {
+                        nuevosBloqueos[c] = { id: datosUsuarioActual.id, nombre: datosUsuarioActual.nombre };
+                    }
                     huboCambios = true;
                 }
             }
         });
+
+        return { huboCambios, nuevosDetalles, nuevosBloqueos };
+    };
+
+    const handleGuardarAvance = (e) => {
+        const { huboCambios, nuevosDetalles, nuevosBloqueos } = procesarCamposParaGuardar(e);
 
         if (huboCambios) {
             onGuardarAvanceEntrega(e.id, nuevosDetalles, nuevosBloqueos);
@@ -64,20 +98,15 @@ function LogisticaDashboard({ datosUsuarioActual, entregasLogistica, onActualiza
 
     const handleFinalizar = (e) => {
         const misIngresos = cantidadesDetalle[e.id] || {};
-        const nuevosDetalles = { ...(e.detalles || {}) };
-        const nuevosBloqueos = { ...(e.bloqueos || {}) };
         
-        const camposDeRuta = e.campos || [e.campo];
-        camposDeRuta.forEach(c => {
-            const valorIngresado = misIngresos[c];
-            const bloqueoActual = e.bloqueos?.[c];
-            if (valorIngresado !== undefined && valorIngresado !== "") {
-                if (!bloqueoActual || bloqueoActual.id === datosUsuarioActual.id) {
-                    nuevosDetalles[c] = valorIngresado;
-                    nuevosBloqueos[c] = { id: datosUsuarioActual.id, nombre: datosUsuarioActual.nombre };
-                }
-            }
-        });
+        // VALIDACIÓN DE CAMPO OBLIGATORIO: Equipo Logística
+        const viveresLogistica = misIngresos['📦 Víveres Equipo Logística'];
+        if (viveresLogistica === undefined || viveresLogistica === "") {
+            alert("⚠️ ALTO: Debes registrar cuántos víveres consumió el Equipo de Logística. Si no ocuparon nada, ingresa el número 0.");
+            return;
+        }
+
+        const { nuevosDetalles, nuevosBloqueos } = procesarCamposParaGuardar(e);
         onActualizarEntrega(e.id, 'Entregado', nuevosDetalles, nuevosBloqueos);
     };
 
@@ -140,10 +169,18 @@ function LogisticaDashboard({ datosUsuarioActual, entregasLogistica, onActualiza
                                             <h3 className="font-black text-slate-600 text-base mb-1 mt-1"><i className="fas fa-check-double text-slate-500 mr-2"></i>Ruta Finalizada</h3>
                                             <p className="text-xs font-bold text-slate-500 mb-4 pl-7">Total asignado: {ultimaRutaCompletada.cantidad} Paquetes</p>
                                             <div className="space-y-2">
-                                                {(ultimaRutaCompletada.campos || [ultimaRutaCompletada.campo]).map(c => (
-                                                    <div key={c} className="flex justify-between items-center bg-white/50 p-2 px-3 rounded-xl border border-slate-200">
-                                                        <span className="text-xs font-bold text-slate-500 w-1/2 truncate">{c}</span>
-                                                        <span className="text-xs font-black text-slate-400">{ultimaRutaCompletada.detalles?.[c] || 0} entregados</span>
+                                                {/* Mostrar todos los campos reales más los extras que se hayan guardado */}
+                                                {Object.entries(ultimaRutaCompletada.detalles || {}).map(([c, cant]) => (
+                                                    <div key={c} className="flex flex-col bg-white/50 p-2 px-3 rounded-xl border border-slate-200">
+                                                        <div className="flex justify-between items-center">
+                                                            <span className="text-xs font-bold text-slate-500 w-1/2 truncate">{c}</span>
+                                                            <span className="text-xs font-black text-slate-400">{cant} entregados</span>
+                                                        </div>
+                                                        {c === '🏆 Recompensas Campos' && ultimaRutaCompletada.bloqueos?.[c]?.comentario && (
+                                                            <p className="text-[9px] font-bold text-slate-400 mt-1 italic w-full text-right border-t border-slate-200/50 pt-1">
+                                                                Motivo: {ultimaRutaCompletada.bloqueos[c].comentario}
+                                                            </p>
+                                                        )}
                                                     </div>
                                                 ))}
                                             </div>
@@ -155,7 +192,8 @@ function LogisticaDashboard({ datosUsuarioActual, entregasLogistica, onActualiza
                             entregasPendientes.map(e => {
                                 const camposDeRuta = e.campos || [e.campo];
                                 
-                                const totalIngresado = camposDeRuta.reduce((sum, c) => {
+                                // Calculamos total ingresado tomando en cuenta los campos adicionales si ya tienen datos
+                                const totalIngresado = [...camposDeRuta, '📦 Víveres Equipo Logística', '🏆 Recompensas Campos'].reduce((sum, c) => {
                                     return sum + (Number(cantidadesDetalle[e.id]?.[c]) || Number(e.detalles?.[c]) || 0);
                                 }, 0);
                                 const enVehiculo = e.cantidad - totalIngresado;
@@ -183,6 +221,7 @@ function LogisticaDashboard({ datosUsuarioActual, entregasLogistica, onActualiza
                                         <div className="space-y-3 mb-5">
                                             <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest pl-1 mb-2">Ingresa cantidad dejada por campo:</p>
                                             
+                                            {/* RENDERIZADO DE CAMPOS DE LA RUTA */}
                                             {camposDeRuta.map(c => {
                                                 const bloqueo = e.bloqueos?.[c];
                                                 const bloqueadoPorOtro = bloqueo && bloqueo.id !== datosUsuarioActual.id;
@@ -203,12 +242,65 @@ function LogisticaDashboard({ datosUsuarioActual, entregasLogistica, onActualiza
                                                                 />
                                                             </div>
                                                         </div>
-                                                        
                                                         {bloqueadoPorOtro && (<p className="text-[9px] text-rose-500 font-bold mt-2"><i className="fas fa-lock mr-1"></i> Registrado por {bloqueo.nombre}</p>)}
                                                         {bloqueadoPorMi && (<p className="text-[9px] text-emerald-500 font-bold mt-2"><i className="fas fa-check mr-1"></i> Tú registraste este campo</p>)}
                                                     </div>
                                                 );
                                             })}
+
+                                            {/* SEPARADOR VISUAL PARA GASTOS DEL EQUIPO */}
+                                            <div className="pt-2 mt-4 border-t-2 border-dashed border-slate-200">
+                                                <p className="text-[9px] font-black text-indigo-400 uppercase tracking-widest pl-1 mb-2 mt-2"><i className="fas fa-clipboard-list mr-1"></i> Control Interno:</p>
+                                                
+                                                {/* 1. CAMPO OBLIGATORIO: LOGÍSTICA */}
+                                                <div className={`flex flex-col bg-indigo-50/30 p-3 rounded-xl border border-indigo-100 shadow-sm mb-3`}>
+                                                    <div className="flex justify-between items-center">
+                                                        <span className="text-xs font-bold text-indigo-800 w-1/2 truncate">📦 Víveres Equipo Logística</span>
+                                                        <div className="w-1/2 flex justify-end">
+                                                            <input 
+                                                                type="number" 
+                                                                placeholder="Obligatorio" 
+                                                                className="w-20 p-2 rounded-lg text-xs font-black text-center outline-none bg-white border border-indigo-200 text-indigo-600 focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100"
+                                                                value={cantidadesDetalle[e.id]?.['📦 Víveres Equipo Logística'] !== undefined ? cantidadesDetalle[e.id]?.['📦 Víveres Equipo Logística'] : (e.detalles?.['📦 Víveres Equipo Logística'] || '')}
+                                                                onChange={(ev) => handleCantidadChange(e.id, '📦 Víveres Equipo Logística', ev.target.value)}
+                                                            />
+                                                        </div>
+                                                    </div>
+                                                </div>
+
+                                                {/* 2. CAMPO OPCIONAL: RECOMPENSAS */}
+                                                <div className={`flex flex-col bg-amber-50/30 p-3 rounded-xl border border-amber-100 shadow-sm`}>
+                                                    <div className="flex justify-between items-center mb-2">
+                                                        <span className="text-xs font-bold text-amber-800 w-1/2 truncate">🏆 Recompensas Campos</span>
+                                                        <div className="w-1/2 flex justify-end">
+                                                            <input 
+                                                                type="number" 
+                                                                placeholder="Opcional" 
+                                                                className="w-16 p-2 rounded-lg text-xs font-black text-center outline-none bg-white border border-amber-200 text-amber-600 focus:border-amber-400 focus:ring-2 focus:ring-amber-100"
+                                                                value={cantidadesDetalle[e.id]?.['🏆 Recompensas Campos'] !== undefined ? cantidadesDetalle[e.id]?.['🏆 Recompensas Campos'] : (e.detalles?.['🏆 Recompensas Campos'] || '')}
+                                                                onChange={(ev) => handleCantidadChange(e.id, '🏆 Recompensas Campos', ev.target.value)}
+                                                            />
+                                                        </div>
+                                                    </div>
+                                                    
+                                                    {/* SELECTOR DE MOTIVO DE RECOMPENSA (Solo aparece si ingresan un número mayor a 0) */}
+                                                    {(Number(cantidadesDetalle[e.id]?.['🏆 Recompensas Campos']) > 0 || Number(e.detalles?.['🏆 Recompensas Campos']) > 0) && (
+                                                        <div className="w-full mt-1 animate-in fade-in">
+                                                            <select 
+                                                                className="w-full p-2 bg-white border border-amber-200 rounded-lg text-[10px] font-bold text-slate-600 outline-none"
+                                                                value={comentariosRecompensas[e.id] || ''}
+                                                                onChange={(ev) => handleComentarioChange(e.id, ev.target.value)}
+                                                            >
+                                                                <option value="" disabled>Selecciona el motivo...</option>
+                                                                <option value="Por textos aprendidos">Por textos aprendidos</option>
+                                                                <option value="Por nuevo amiguito">Por nuevo amiguito</option>
+                                                                <option value="Otra recompensa">Otra recompensa</option>
+                                                            </select>
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            </div>
+
                                         </div>
 
                                         <div className="flex space-x-2">
