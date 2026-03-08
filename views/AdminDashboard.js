@@ -259,10 +259,13 @@ function AdminDashboard({
                                                                 <p className="text-[9px] text-slate-400 uppercase mt-0.5"><i className="fas fa-user mr-1"></i>{h.maestro}</p>
                                                                 {h.leccion !== undefined && (<p className={`text-[9px] font-bold mt-1 ${h.leccionImpartida ? 'text-indigo-500' : 'text-rose-500'}`}>Lec. {h.leccion} {h.leccionImpartida ? '✅' : '❌'}</p>)}
                                                             </div>
-                                                            <div className="flex space-x-1 text-[10px] font-bold">
-                                                                <span className="bg-emerald-100 text-emerald-700 px-1.5 py-1 rounded">P: {h.totales?.presentes || 0}</span>
-                                                                <span className="bg-rose-100 text-rose-700 px-1.5 py-1 rounded">A: {h.totales?.ausentes || 0}</span>
-                                                                <span className="bg-amber-100 text-amber-700 px-1.5 py-1 rounded">Pe: {h.totales?.permisos || 0}</span>
+                                                            <div className="flex flex-col items-end">
+                                                                <span className="text-[10px] font-black text-emerald-600 mb-1"><i className="fas fa-coins mr-1"></i>${Number(h.ofrenda||0).toFixed(2)}</span>
+                                                                <div className="flex space-x-1 text-[10px] font-bold">
+                                                                    <span className="bg-emerald-100 text-emerald-700 px-1.5 py-1 rounded">P: {h.totales?.presentes || 0}</span>
+                                                                    <span className="bg-rose-100 text-rose-700 px-1.5 py-1 rounded">A: {h.totales?.ausentes || 0}</span>
+                                                                    <span className="bg-amber-100 text-amber-700 px-1.5 py-1 rounded">Pe: {h.totales?.permisos || 0}</span>
+                                                                </div>
                                                             </div>
                                                         </div>
                                                     ))}
@@ -359,10 +362,11 @@ function AdminDashboard({
                             </div>
 
                             <form onSubmit={(e) => { e.preventDefault(); onActualizarInventario(Number(e.target.nuevoStock.value)); e.target.reset(); }} className="bg-white p-5 rounded-3xl border border-slate-100 shadow-sm">
-                                <h3 className="font-bold text-slate-700 text-sm mb-3 flex items-center"><i className="fas fa-plus-circle text-indigo-500 mr-2"></i> Sumar Víveres Recibidos</h3>
+                                <h3 className="font-bold text-slate-700 text-sm mb-1 flex items-center"><i className="fas fa-boxes text-indigo-500 mr-2"></i> Ajustar Inventario</h3>
+                                <p className="text-[10px] text-slate-400 mb-3">Usa un signo menos (-) para restar mermas. Ej: -20</p>
                                 <div className="flex space-x-3">
-                                    <input type="number" name="nuevoStock" required min="1" placeholder="Ej: 100" className="w-2/3 p-4 bg-slate-50 rounded-2xl outline-none border border-slate-200 text-lg font-black text-slate-700 text-center focus:border-indigo-400" />
-                                    <button type="submit" className="w-1/3 bg-indigo-600 hover:bg-indigo-700 text-white font-black rounded-2xl shadow-md active:scale-95 transition-all flex items-center justify-center">Sumar</button>
+                                    <input type="number" name="nuevoStock" required placeholder="Ej: 100 o -20" className="w-2/3 p-4 bg-slate-50 rounded-2xl outline-none border border-slate-200 text-lg font-black text-slate-700 text-center focus:border-indigo-400" />
+                                    <button type="submit" className="w-1/3 bg-indigo-600 hover:bg-indigo-700 text-white font-black rounded-2xl shadow-md active:scale-95 transition-all flex items-center justify-center">Ajustar</button>
                                 </div>
                             </form>
                         </div>
@@ -570,7 +574,6 @@ function AdminDashboard({
                                                             </p>
                                                         </div>
                                                     </div>
-                                                    {/* ICONOS APILADOS: BORRAR ARRIBA, EDITAR ABAJO */}
                                                     <div className="flex flex-col space-y-1.5 shrink-0 ml-2">
                                                         <button onClick={() => onDelete(m)} className="text-rose-400 w-8 h-8 flex items-center justify-center bg-rose-50 hover:bg-rose-100 rounded-xl transition-colors shadow-sm"><i className="fas fa-trash"></i></button>
                                                         <button onClick={() => onEdit(m)} className="text-indigo-400 w-8 h-8 flex items-center justify-center bg-indigo-50 hover:bg-indigo-100 rounded-xl transition-colors shadow-sm"><i className="fas fa-edit"></i></button>
