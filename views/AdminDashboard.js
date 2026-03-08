@@ -15,6 +15,7 @@ function AdminDashboard({
     const [tabAuditoria, setTabAuditoria] = useState('tesoreria'); 
     const [fechaOfrendaExp, setFechaOfrendaExp] = useState(null);
     const [mesAuditoriaExp, setMesAuditoriaExp] = useState(null);
+    const [mesAsistenciaExp, setMesAsistenciaExp] = useState(null); // NUEVO ESTADO
 
     // ESTADOS PARA ACORDEÓN DE CAMPOS
     const [campoExpandido, setCampoExpandido] = useState(null); 
@@ -42,13 +43,14 @@ function AdminDashboard({
     const formatFechaDia = (f) => {
         if (!f) return '';
         const d = new Date(f + 'T12:00:00'); 
-        const dias = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
+        const dias = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
         const meses = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
         return `${dias[d.getDay()]}, ${d.getDate()} ${meses[d.getMonth()]} ${d.getFullYear()}`;
     };
 
-    // FUNCIÓN PARA AGRUPAR POR MESES (Auditoría)
+    // FUNCIONES PARA AGRUPAR POR MESES
     const mesesNombresCompletos = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
+    
     const agruparPorMes = (historialData) => {
         if (!historialData) return [];
         const grupos = {};
@@ -56,15 +58,39 @@ function AdminDashboard({
             const f = h.fecha || '';
             const p = f.split('-');
             if(p.length === 3) {
-                const mesKey = `${p[0]}-${p[1]}`; // Ej: 2026-03
+                const mesKey = `${p[0]}-${p[1]}`; 
                 if(!grupos[mesKey]) grupos[mesKey] = { mesLabel: `${mesesNombresCompletos[parseInt(p[1])-1]} ${p[0]}`, registros: [], totalIngreso: 0, totalEgreso: 0 };
                 grupos[mesKey].registros.push(h);
                 if(h.tipo === 'ingreso') grupos[mesKey].totalIngreso += Number(h.monto) || 0;
                 if(h.tipo === 'egreso') grupos[mesKey].totalEgreso += Number(h.monto) || 0;
             }
         });
-        // Ordenar de más reciente a más antiguo
         return Object.keys(grupos).sort((a,b) => b.localeCompare(a)).map(k => ({ id: k, ...grupos[k] }));
+    };
+
+    // NUEVA FUNCIÓN: AGRUPAR ASISTENCIA POR MES
+    const agruparAsistenciaPorMes = (historial) => {
+        if (!historial) return [];
+        const grupos = {};
+        historial.forEach(h => {
+            const f = h.fecha || '';
+            const p = f.split('-');
+            if(p.length === 3) {
+                const mesKey = `${p[0]}-${p[1]}`; 
+                if(!grupos[mesKey]) grupos[mesKey] = { 
+                    mesLabel: `${mesesNombresCompletos[parseInt(p[1])-1]} ${p[0]}`, 
+                    registros: [], tp: 0, ta: 0, tperm: 0 
+                };
+                grupos[mesKey].registros.push(h);
+                grupos[mesKey].tp += (h.totales?.presentes || 0);
+                grupos[mesKey].ta += (h.totales?.ausentes || 0);
+                grupos[mesKey].tperm += (h.totales?.permisos || 0);
+            }
+        });
+        return Object.keys(grupos).sort((a,b) => b.localeCompare(a)).map(k => {
+            grupos[k].registros.sort((x, y) => new Date(y.fecha) - new Date(x.fecha));
+            return { id: k, ...grupos[k] };
+        });
     };
 
     const textoFechas = datosGlobalesAsistencia?.rango ? `${formatoFecha(datosGlobalesAsistencia.rango.inicio).substring(0,5)} al ${formatoFecha(datosGlobalesAsistencia.rango.fin).substring(0,5)}` : 'Calculando...';
@@ -341,24 +367,74 @@ function AdminDashboard({
         }
 
         if (subVistaInicio === 'asistencia') {
+            const gruposMesesAsistencia = agruparAsistenciaPorMes(historialVisible);
+
             contenidoAdmin = (
-                <div className="animate-in slide-in-from-right duration-300 space-y-4 pt-2">
-                    <button onClick={() => setSubVistaInicio(null)} className="text-slate-500 font-black text-[10px] uppercase tracking-widest mb-1 px-2 hover:text-emerald-500 transition-colors"><i className="fas fa-arrow-left mr-2"></i> Volver al Menú</button>
-                    <div className="px-2 mb-4">
+                <div className="animate-in slide-in-from-right duration-300 space-y-4 pt-2 flex flex-col h-full">
+                    <button onClick={() => setSubVistaInicio(null)} className="text-slate-500 font-black text-[10px] uppercase tracking-widest mb-1 px-2 hover:text-emerald-500 transition-colors w-max"><i className="fas fa-arrow-left mr-2"></i> Volver al Menú</button>
+                    <div className="px-2 mb-2">
                         <h2 className="text-2xl font-black text-slate-800">Asistencia Global</h2>
-                        <p className="text-slate-400 text-xs">Acumulado de la Red completa</p>
+                        <p className="text-slate-400 text-xs">Acumulado y reportes por campos</p>
                     </div>
 
-                    <div className="bg-white rounded-[32px] border border-slate-100 p-6 shadow-xl mx-1 relative overflow-hidden">
-                        <div className="absolute top-0 right-0 w-40 h-40 bg-emerald-50 opacity-50 rounded-bl-[100px] pointer-events-none"></div>
+                    <div className="bg-emerald-500 rounded-[32px] p-6 shadow-xl mx-1 relative overflow-hidden text-white shrink-0">
+                        <div className="absolute top-0 right-0 w-40 h-40 bg-white opacity-10 rounded-bl-[100px] pointer-events-none"></div>
                         <div className="flex justify-between items-center mb-6 relative z-10">
-                            <div><h3 className="font-bold text-slate-700 text-sm flex items-center"><i className="fas fa-chart-line text-emerald-500 mr-2"></i> Resumen de Semana</h3></div>
-                            <span className="text-[9px] bg-slate-100 text-slate-500 font-black tracking-widest px-3 py-1.5 rounded-lg border border-slate-200 uppercase">{textoFechas}</span>
+                            <div><h3 className="font-bold text-white text-sm flex items-center"><i className="fas fa-chart-line mr-2"></i> Resumen de Semana</h3></div>
+                            <span className="text-[9px] bg-emerald-600/50 text-emerald-50 font-black tracking-widest px-3 py-1.5 rounded-lg uppercase">{textoFechas}</span>
                         </div>
-                        <div className="flex justify-around text-center divide-x divide-slate-100 relative z-10">
-                            <div className="px-2 w-1/3"><p className="text-4xl font-black text-emerald-500 tracking-tighter">{tp}</p><p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mt-1">Presentes</p></div>
-                            <div className="px-2 w-1/3"><p className="text-4xl font-black text-rose-500 tracking-tighter">{ta}</p><p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mt-1">Ausentes</p></div>
-                            <div className="px-2 w-1/3"><p className="text-4xl font-black text-amber-500 tracking-tighter">{tperm}</p><p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mt-1">Permisos</p></div>
+                        <div className="flex justify-around text-center divide-x divide-emerald-400/50 relative z-10">
+                            <div className="px-2 w-1/3"><p className="text-4xl font-black tracking-tighter">{tp}</p><p className="text-[9px] font-bold text-emerald-100 uppercase tracking-widest mt-1">Presentes</p></div>
+                            <div className="px-2 w-1/3"><p className="text-4xl font-black tracking-tighter text-rose-200">{ta}</p><p className="text-[9px] font-bold text-emerald-100 uppercase tracking-widest mt-1">Ausentes</p></div>
+                            <div className="px-2 w-1/3"><p className="text-4xl font-black tracking-tighter text-amber-200">{tperm}</p><p className="text-[9px] font-bold text-emerald-100 uppercase tracking-widest mt-1">Permisos</p></div>
+                        </div>
+                    </div>
+
+                    <div className="flex-1 bg-white rounded-t-[40px] shadow-[0_-10px_40px_rgba(0,0,0,0.05)] border-t border-slate-100 p-6 overflow-hidden flex flex-col mt-2 mx-1">
+                        <h3 className="font-black text-slate-700 text-xs uppercase tracking-widest mb-4 shrink-0"><i className="fas fa-list-alt text-emerald-500 mr-2"></i> Récord por Mes y Campo</h3>
+                        <div className="overflow-y-auto space-y-3 pb-24 pr-1 flex-1">
+                            {gruposMesesAsistencia.length === 0 ? <p className="text-center text-slate-400 text-xs italic mt-8">Sin registros de asistencia guardados.</p> : 
+                                gruposMesesAsistencia.map(grupo => {
+                                    const isExp = mesAsistenciaExp === grupo.id;
+                                    return (
+                                        <div key={grupo.id} className="bg-slate-50 rounded-2xl border border-slate-100 overflow-hidden shadow-sm transition-all duration-300">
+                                            <button onClick={() => setMesAsistenciaExp(isExp ? null : grupo.id)} className="w-full p-4 flex justify-between items-center bg-white hover:bg-slate-50 transition-colors">
+                                                <div className="text-left">
+                                                    <p className="font-black text-slate-700 text-sm capitalize">{grupo.mesLabel}</p>
+                                                    <p className="text-[10px] text-slate-400 font-bold mt-0.5">{grupo.registros.length} reportes enviados</p>
+                                                </div>
+                                                <div className="flex items-center space-x-3 text-[10px] font-black">
+                                                    <div className="flex space-x-2 mr-2">
+                                                        <span className="text-emerald-500 bg-emerald-50 px-2 py-1 rounded">P:{grupo.tp}</span>
+                                                        <span className="text-rose-500 bg-rose-50 px-2 py-1 rounded">A:{grupo.ta}</span>
+                                                    </div>
+                                                    <i className={`fas fa-chevron-down text-slate-300 transition-transform duration-300 ${isExp ? 'rotate-180' : ''}`}></i>
+                                                </div>
+                                            </button>
+                                            
+                                            {isExp && (
+                                                <div className="p-4 pt-0 border-t border-slate-100 bg-slate-50 animate-in slide-in-from-top-2 duration-200">
+                                                    <div className="space-y-2 mt-3">
+                                                        {grupo.registros.map((h, idx) => (
+                                                            <div key={idx} className="bg-white p-3 rounded-xl border border-slate-100 shadow-sm flex justify-between items-center">
+                                                                <div className="w-1/2 pr-2">
+                                                                    <p className="font-bold text-slate-700 text-xs truncate mb-0.5"><i className="fas fa-map-marker-alt text-emerald-400 mr-1.5"></i> {h.campo}</p>
+                                                                    <p className="text-[9px] font-bold text-slate-400 uppercase tracking-wide">{formatFechaDia(h.fecha)}</p>
+                                                                </div>
+                                                                <div className="flex space-x-1 text-[9px] font-black tracking-wider shrink-0">
+                                                                    <span className="bg-slate-50 text-emerald-600 px-2 py-1.5 rounded border border-slate-100">P:{h.totales?.presentes || 0}</span>
+                                                                    <span className="bg-slate-50 text-rose-500 px-2 py-1.5 rounded border border-slate-100">A:{h.totales?.ausentes || 0}</span>
+                                                                    <span className="bg-slate-50 text-amber-500 px-2 py-1.5 rounded border border-slate-100">Pe:{h.totales?.permisos || 0}</span>
+                                                                </div>
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                </div>
+                                            )}
+                                        </div>
+                                    );
+                                })
+                            }
                         </div>
                     </div>
                 </div>
@@ -519,7 +595,7 @@ function AdminDashboard({
 
         const entregasCompletadasPorGrupo = {};
         entregasCompletadas.forEach(e => {
-            const grp = e.grupo || 'Sin Grupo'; // ESCUDO DE SEGURIDAD
+            const grp = e.grupo || 'Sin Grupo'; 
             if (!entregasCompletadasPorGrupo[grp]) entregasCompletadasPorGrupo[grp] = [];
             entregasCompletadasPorGrupo[grp].push(e);
         });
@@ -534,7 +610,6 @@ function AdminDashboard({
 
         entregasLogistica.forEach(e => {
             let sumRoute = 0;
-            // ESCUDO DE SEGURIDAD PARA e.detalles
             if (e.detalles && typeof e.detalles === 'object') {
                 Object.values(e.detalles).forEach(val => sumRoute += (Number(val) || 0));
             }
@@ -641,7 +716,6 @@ function AdminDashboard({
                                     <div className="mb-6"><h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3 px-2 border-b border-slate-100 pb-2">Rutas Pendientes Activas ({entregasPendientes.length})</h4>
                                     <div className="space-y-3 mt-3">
                                         {entregasPendientes.map(e => {
-                                            // ESCUDOS DE SEGURIDAD PARA EVITAR PANTALLA BLANCA
                                             const totalEntregado = (e.detalles && typeof e.detalles === 'object') ? Object.values(e.detalles).reduce((sum, val) => sum + (Number(val) || 0), 0) : 0;
                                             const diferencia = (Number(e.cantidad) || 0) - totalEntregado;
                                             const camposArrayStr = Array.isArray(e.campos) ? e.campos.join(', ') : (e.campo || 'Campos no definidos');
@@ -689,7 +763,6 @@ function AdminDashboard({
                                                         <div className="p-4 pt-0 border-t border-slate-100 bg-slate-50 animate-in slide-in-from-top-2 duration-200">
                                                             <div className="space-y-4 mt-4 max-h-[400px] overflow-y-auto pr-1">
                                                                 {entregasDelGrupo.map(e => {
-                                                                    // ESCUDOS DE SEGURIDAD
                                                                     const totalEntregado = (e.detalles && typeof e.detalles === 'object') ? Object.values(e.detalles).reduce((sum, val) => sum + (Number(val) || 0), 0) : 0;
                                                                     const diferencia = (Number(e.cantidad) || 0) - totalEntregado;
                                                                     const fechaObj = e.fechaEntrega ? new Date(e.fechaEntrega) : null;
