@@ -11,13 +11,14 @@ function SecretariaDashboard({
     const [campoExpandido, setCampoExpandido] = useState(null); 
     const [mesCampoExp, setMesCampoExp] = useState(null);
     
-    // ESTADOS PARA AUDITORÍA (DOBLE ACORDEÓN)
+    // ESTADOS PARA AUDITORÍA (DOBLE ACORDEÓN + DETALLE EXPANDIBLE)
     const [tipoTransaccion, setTipoTransaccion] = useState('ingreso'); 
     const [monto, setMonto] = useState('');
     const [descripcion, setDescripcion] = useState('');
     const [cargando, setLoading] = useState(false);
     const [mesAuditoriaExp, setMesAuditoriaExp] = useState(null);
     const [semanaAuditoriaExp, setSemanaAuditoriaExp] = useState(null);
+    const [detalleMovExp, setDetalleMovExp] = useState(null); // NUEVO ESTADO PARA DESPLEGAR EL MOVIMIENTO
 
     // ESTADOS PARA REPORTES (DOBLE ACORDEÓN)
     const [fechaDesde, setFechaDesde] = useState('');
@@ -76,6 +77,7 @@ function SecretariaDashboard({
             const mesKey = `${hoy.getFullYear()}-${(hoy.getMonth()+1).toString().padStart(2, '0')}`;
             setMesAuditoriaExp(mesKey);
             setSemanaAuditoriaExp(null);
+            setDetalleMovExp(null);
         }
         setLoading(false);
     };
@@ -308,7 +310,7 @@ function SecretariaDashboard({
 
                             return (
                                 <div key={grupo.id} className="bg-white rounded-[24px] border border-slate-100 shadow-sm overflow-hidden transition-all duration-300">
-                                    <button onClick={() => {setMesAuditoriaExp(isExpMes ? null : grupo.id); setSemanaAuditoriaExp(null);}} className="w-full p-4 flex justify-between items-center bg-white hover:bg-slate-50 transition-colors">
+                                    <button onClick={() => {setMesAuditoriaExp(isExpMes ? null : grupo.id); setSemanaAuditoriaExp(null); setDetalleMovExp(null);}} className="w-full p-4 flex justify-between items-center bg-white hover:bg-slate-50 transition-colors">
                                         <div className="text-left">
                                             <span className="font-bold text-slate-700 text-sm uppercase">{grupo.mesLabel}</span>
                                             <p className="text-[9px] text-slate-400 mt-1 font-bold">{grupo.semanasArray.length} semanas</p>
@@ -331,7 +333,7 @@ function SecretariaDashboard({
                                                     const isSemExp = semanaAuditoriaExp === `${grupo.id}-${sem.id}`;
                                                     return (
                                                         <div key={sem.id} className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-                                                            <button onClick={() => setSemanaAuditoriaExp(isSemExp ? null : `${grupo.id}-${sem.id}`)} className="w-full p-3 flex justify-between items-center hover:bg-slate-50 transition-colors">
+                                                            <button onClick={() => {setSemanaAuditoriaExp(isSemExp ? null : `${grupo.id}-${sem.id}`); setDetalleMovExp(null);}} className="w-full p-3 flex justify-between items-center hover:bg-slate-50 transition-colors">
                                                                 <div className="text-left">
                                                                     <p className="font-bold text-slate-700 text-xs">{sem.label}</p>
                                                                     <p className="text-[9px] text-slate-400 font-bold mt-0.5">{sem.registros.length} movs</p>
@@ -349,20 +351,37 @@ function SecretariaDashboard({
                                                                 <div className="p-3 border-t border-slate-100 bg-slate-50/50 space-y-2">
                                                                     {sem.registros.map(mov => {
                                                                         const esIngreso = mov.tipo !== 'egreso';
-                                                                        const fechaObj = new Date(mov.timestamp);
-                                                                        const hora = fechaObj.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+                                                                        const fechaObj = new Date(mov.timestamp || mov.fecha);
+                                                                        const hora = mov.timestamp ? fechaObj.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : '';
+                                                                        const isMovExp = detalleMovExp === mov.id;
+
                                                                         return (
-                                                                            <div key={mov.id} className="bg-white p-3 rounded-xl border border-slate-100 flex justify-between items-center shadow-sm relative overflow-hidden">
+                                                                            <div key={mov.id} onClick={() => setDetalleMovExp(isMovExp ? null : mov.id)} className="bg-white p-3 rounded-lg border border-slate-100 shadow-sm relative overflow-hidden cursor-pointer transition-colors hover:bg-slate-50 group">
                                                                                 <div className={`absolute left-0 top-0 bottom-0 w-1 ${esIngreso ? 'bg-emerald-400' : 'bg-rose-400'}`}></div>
-                                                                                <div className="pl-2 w-2/3 pr-2">
-                                                                                    <p className="font-bold text-slate-700 text-xs truncate">{mov.descripcion}</p>
-                                                                                    <p className="text-[9px] text-slate-400 font-bold uppercase mt-0.5">{formatoFecha(mov.fecha)} a las {hora}</p>
+                                                                                <div className="flex justify-between items-start">
+                                                                                    <div className="pl-2 w-[70%] pr-2">
+                                                                                        <p className={`font-bold text-slate-700 text-xs transition-all ${isMovExp ? 'whitespace-normal break-words' : 'truncate'}`}>{mov.descripcion}</p>
+                                                                                        <p className="text-[9px] text-slate-400 font-bold uppercase mt-1">
+                                                                                            {formatoFecha(mov.fecha)} {hora && `a las ${hora}`}
+                                                                                        </p>
+                                                                                    </div>
+                                                                                    <div className="text-right w-[30%] flex flex-col items-end">
+                                                                                        <span className={`text-xs font-black px-2 py-1 rounded-lg ${esIngreso ? 'bg-emerald-50 text-emerald-600' : 'bg-rose-50 text-rose-600'}`}>
+                                                                                            {esIngreso ? '+' : '-'}${Number(mov.monto).toFixed(2)}
+                                                                                        </span>
+                                                                                        <i className={`fas fa-chevron-down text-[8px] text-slate-300 mt-2 transition-transform duration-300 ${isMovExp ? 'rotate-180' : ''}`}></i>
+                                                                                    </div>
                                                                                 </div>
-                                                                                <div className="text-right w-1/3">
-                                                                                    <span className={`text-xs font-black px-2 py-1 rounded-lg ${esIngreso ? 'bg-emerald-50 text-emerald-600' : 'bg-rose-50 text-rose-600'}`}>
-                                                                                        {esIngreso ? '+' : '-'}${Number(mov.monto).toFixed(2)}
-                                                                                    </span>
-                                                                                </div>
+                                                                                
+                                                                                {/* DESPLIEGUE DEL DETALLE COMPLETO DE LA TRANSACCIÓN */}
+                                                                                {isMovExp && (
+                                                                                    <div className="pl-2 mt-3 pt-2 border-t border-slate-50 animate-in fade-in duration-200">
+                                                                                        <p className="text-[10px] text-slate-500 leading-relaxed"><strong className="text-slate-600">Detalle completo:</strong> {mov.descripcion}</p>
+                                                                                        {mov.registradoPor && (
+                                                                                            <p className="text-[10px] text-slate-500 mt-1"><strong className="text-slate-600">Por:</strong> {mov.registradoPor}</p>
+                                                                                        )}
+                                                                                    </div>
+                                                                                )}
                                                                             </div>
                                                                         )
                                                                     })}
