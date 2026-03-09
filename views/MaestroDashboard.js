@@ -18,6 +18,12 @@ function MaestroDashboard({
     const [edadMin, setEdadMin] = useState('');
     const [edadMax, setEdadMax] = useState('');
 
+    // NUEVOS ESTADOS PARA EL CAMBIO DE CAMPO
+    const [modalCambioCampo, setModalCambioCampo] = useState(false);
+    const [campoSeleccionado, setCampoSeleccionado] = useState('');
+    
+    const camposDisponibles = ["La Isla", "Las Delicias", "El Amatal", "El Manguito", "Buenos Aires", "Corozal #1", "El Porvenir", "El Caulote", "Corozal #2", "Valle Encantado", "La Playa"];
+
     const historialVisible = historialAsistencias.filter(h => !h.esReset);
 
     const formatoFecha = (f) => {
@@ -105,7 +111,35 @@ function MaestroDashboard({
         if (exito) setVistaActual('inicio');
     };
 
-    // --- CORRECCIÓN DE CÁLCULO DE PRÓXIMO CUMPLEAÑOS ---
+    // FUNCIÓN MAGICA: CAMBIAR DE CAMPO EN VIVO
+    const cambiarCampo = async (nuevoCampo) => {
+        if (!nuevoCampo || nuevoCampo === datosUsuarioActual.campo) return;
+        
+        if (datosUsuarioActual.id === 'user_sandbox_secreto') {
+            alert("🔒 MODO DESARROLLADOR\n\nCambio de campo simulado con éxito.");
+            setModalCambioCampo(false);
+            return;
+        }
+
+        try {
+            // Actualizamos en Firebase
+            await window.db.collection('maestros').doc(datosUsuarioActual.id).update({ campo: nuevoCampo });
+            
+            // Actualizamos en la memoria del navegador para que no se pierda al recargar
+            const sesionStr = localStorage.getItem('datos_recientes_login');
+            if (sesionStr) {
+                const sesionData = JSON.parse(sesionStr);
+                sesionData.campo = nuevoCampo;
+                localStorage.setItem('datos_recientes_login', JSON.stringify(sesionData));
+            }
+            
+            // Recargamos la aplicación para forzar la descarga de los niños del nuevo campo
+            window.location.reload(); 
+        } catch (e) {
+            alert("Ocurrió un error al intentar cambiar de campo. Revisa tu conexión.");
+        }
+    };
+
     const mesesNombres = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
     
     const agruparCumpleanos = () => {
@@ -117,7 +151,7 @@ function MaestroDashboard({
         
         const hoy = new Date();
         const anioActual = hoy.getFullYear();
-        const mesActual = hoy.getMonth(); // 0 a 11
+        const mesActual = hoy.getMonth(); 
         const diaActual = hoy.getDate();
 
         alumnos.forEach(a => {
@@ -131,7 +165,6 @@ function MaestroDashboard({
                     if(mesNacIndex >= 0 && mesNacIndex < 12) {
                         let proximoAnioCumple = anioActual;
                         
-                        // Si el mes ya pasó, o si es el mismo mes pero el día ya pasó, su próximo cumpleaños es el año siguiente
                         if (mesNacIndex < mesActual || (mesNacIndex === mesActual && diaNac < diaActual)) {
                             proximoAnioCumple++;
                         }
@@ -139,7 +172,7 @@ function MaestroDashboard({
                         grupos[mesNacIndex].ninos.push({
                             ...a,
                             diaNac: diaNac,
-                            edadACumplir: proximoAnioCumple - anioNac // Calcula la edad exacta que cumplirá en esa próxima fecha
+                            edadACumplir: proximoAnioCumple - anioNac 
                         });
                     }
                 }
@@ -187,8 +220,20 @@ function MaestroDashboard({
 
     if (vistaActual === 'inicio') {
         contenidoMaestro = (
-            <div className="flex flex-col h-full space-y-6 pt-2 animate-in fade-in duration-300">
-                <div className={`w-full p-6 rounded-[32px] text-left relative overflow-hidden group shadow-lg ${estaBloqueada ? 'bg-slate-50 border border-slate-200' : asistenciaTomada ? 'bg-white border border-slate-100' : !esFinDeSemana ? 'bg-slate-200 text-slate-500 shadow-none' : 'bg-rose-500 text-white shadow-rose-200'}`}>
+            <div className="flex flex-col h-full pt-2 animate-in fade-in duration-300">
+                
+                {/* BANNER DE CAMBIO DE CAMPO RÁPIDO */}
+                <div className="bg-indigo-50 border border-indigo-100 p-4 rounded-[24px] flex justify-between items-center mb-5 shadow-sm mx-1">
+                    <div>
+                        <p className="text-[9px] font-bold text-indigo-400 uppercase tracking-widest mb-0.5">Operando en:</p>
+                        <p className="font-black text-indigo-700 text-sm"><i className="fas fa-map-marker-alt mr-1"></i> {datosUsuarioActual?.campo || 'Global'}</p>
+                    </div>
+                    <button onClick={() => { setCampoSeleccionado(datosUsuarioActual?.campo || ''); setModalCambioCampo(true); }} className="bg-white text-indigo-600 px-4 py-2.5 rounded-xl text-xs font-black shadow-sm border border-indigo-100 active:scale-95 transition-all">
+                        Cambiar <i className="fas fa-exchange-alt ml-1"></i>
+                    </button>
+                </div>
+
+                <div className={`w-full p-6 rounded-[32px] text-left relative overflow-hidden group shadow-lg mb-5 ${estaBloqueada ? 'bg-slate-50 border border-slate-200' : asistenciaTomada ? 'bg-white border border-slate-100' : !esFinDeSemana ? 'bg-slate-200 text-slate-500 shadow-none' : 'bg-rose-500 text-white shadow-rose-200'}`}>
                     {asistenciaTomada ? (
                         <>
                             <div className="flex justify-between items-center mb-6">
@@ -227,7 +272,12 @@ function MaestroDashboard({
                         </>
                     )}
                 </div>
-                <div className="w-full bg-indigo-600 p-6 rounded-[32px] text-white shadow-xl shadow-indigo-200 flex justify-between items-center relative overflow-hidden"><div className="absolute top-0 right-0 w-32 h-32 bg-white opacity-10 rounded-bl-[100px] pointer-events-none"></div><div className="relative z-10"><p className="text-xs font-bold uppercase opacity-70 tracking-widest">Niños Totales</p><p className="text-5xl font-black tracking-tighter mt-1">{alumnos.length}</p></div><div className="w-14 h-14 bg-white/20 rounded-2xl flex items-center justify-center text-3xl backdrop-blur-sm relative z-10"><i className="fas fa-users"></i></div></div>
+                
+                <div className="w-full bg-indigo-600 p-6 rounded-[32px] text-white shadow-xl shadow-indigo-200 flex justify-between items-center relative overflow-hidden mx-1">
+                    <div className="absolute top-0 right-0 w-32 h-32 bg-white opacity-10 rounded-bl-[100px] pointer-events-none"></div>
+                    <div className="relative z-10"><p className="text-xs font-bold uppercase opacity-70 tracking-widest">Niños Totales</p><p className="text-5xl font-black tracking-tighter mt-1">{alumnos.length}</p></div>
+                    <div className="w-14 h-14 bg-white/20 rounded-2xl flex items-center justify-center text-3xl backdrop-blur-sm relative z-10"><i className="fas fa-users"></i></div>
+                </div>
             </div>
         );
     }
@@ -518,6 +568,46 @@ function MaestroDashboard({
                 <NavButton id="gestion" icon="fa-users" label="Alumnos" width="w-[70px]" />
                 <NavButton id="reportes" icon="fa-chart-bar" label="Reportes" width="w-[70px]" />
             </div>
+
+            {/* MODAL PARA CAMBIO DE CAMPO */}
+            {modalCambioCampo && (
+                <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-[100] p-4 animate-in fade-in">
+                    <div className="bg-white w-full max-w-sm rounded-[32px] p-6 shadow-2xl animate-in zoom-in-95">
+                        <div className="w-16 h-16 bg-indigo-50 text-indigo-500 rounded-full flex items-center justify-center mx-auto mb-4 text-3xl">
+                            <i className="fas fa-exchange-alt"></i>
+                        </div>
+                        <h2 className="text-xl font-black text-slate-800 mb-2 text-center">Cambiar de Campo</h2>
+                        <p className="text-xs text-slate-500 mb-6 text-center leading-relaxed">Si estás a cargo de múltiples campos, selecciona el nuevo destino para gestionar su asistencia y alumnos.</p>
+                        
+                        <select 
+                            value={campoSeleccionado} 
+                            onChange={e => setCampoSeleccionado(e.target.value)}
+                            className="w-full p-4 bg-slate-50 rounded-2xl outline-none border border-slate-200 text-slate-700 font-bold mb-6 focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100"
+                        >
+                            <option value="" disabled>Elige tu destino...</option>
+                            {camposDisponibles.map(c => (
+                                <option key={c} value={c}>{c}</option>
+                            ))}
+                        </select>
+
+                        <div className="flex flex-col space-y-3">
+                            <button 
+                                onClick={() => cambiarCampo(campoSeleccionado)}
+                                disabled={!campoSeleccionado || campoSeleccionado === datosUsuarioActual?.campo}
+                                className="w-full py-4 bg-indigo-600 disabled:bg-slate-300 text-white font-black rounded-2xl shadow-lg active:scale-95 transition-all"
+                            >
+                                Confirmar Cambio
+                            </button>
+                            <button 
+                                onClick={() => setModalCambioCampo(false)}
+                                className="w-full py-3 text-slate-400 font-bold text-xs uppercase tracking-widest hover:text-rose-500 transition-colors"
+                            >
+                                Cancelar
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </>
     );
 }
