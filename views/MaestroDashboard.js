@@ -19,7 +19,7 @@ function MaestroDashboard({
     const [edadMax, setEdadMax] = useState('');
 
     const [modalCambioCampo, setModalCambioCampo] = useState(false);
-    const [campoSeleccionado, setCampoSeleccionado] = useState(''); // Solo usado en Sandbox
+    const [campoSeleccionado, setCampoSeleccionado] = useState(''); 
     
     const camposDisponibles = ["La Isla", "Las Delicias", "El Amatal", "El Manguito", "Buenos Aires", "Corozal #1", "El Porvenir", "El Caulote", "Corozal #2", "Valle Encantado", "La Playa"];
 
@@ -110,6 +110,7 @@ function MaestroDashboard({
         if (exito) setVistaActual('inicio');
     };
 
+    // --- CORRECCIÓN DE LA MAGIA DEL CAMBIO DE CAMPO ---
     const cambiarCampo = async (nuevoCampo) => {
         if (!nuevoCampo || nuevoCampo === datosUsuarioActual.campo) return;
         
@@ -120,8 +121,20 @@ function MaestroDashboard({
         }
 
         try {
+            document.body.style.opacity = '0.5'; // Efecto visual de carga
+            
+            // 1. Actualizar la base de datos de Google
             await window.db.collection('maestros').doc(datosUsuarioActual.id).update({ campo: nuevoCampo });
             
+            // 2. ACTUALIZACIÓN CRÍTICA: Forzar a la memoria interna a recordar el nuevo campo
+            const nuevosDatos = { ...datosUsuarioActual, campo: nuevoCampo };
+            if (window.AuthService && window.AuthService.guardarSesion) {
+                window.AuthService.guardarSesion(usuario, nuevosDatos);
+            } else {
+                localStorage.setItem('sesion_datos', JSON.stringify(nuevosDatos)); // Respaldo
+            }
+            
+            // 3. Actualizar el autologin
             const sesionStr = localStorage.getItem('datos_recientes_login');
             if (sesionStr) {
                 const sesionData = JSON.parse(sesionStr);
@@ -129,8 +142,10 @@ function MaestroDashboard({
                 localStorage.setItem('datos_recientes_login', JSON.stringify(sesionData));
             }
             
+            // 4. Recargar. Ahora sí leerá el campo correcto y traerá a los niños correspondientes.
             window.location.reload(); 
         } catch (e) {
+            document.body.style.opacity = '1';
             alert("Ocurrió un error al intentar cambiar de campo. Revisa tu conexión.");
         }
     };
