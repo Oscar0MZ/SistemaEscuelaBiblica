@@ -18,7 +18,6 @@ function MaestroDashboard({
     const [edadMin, setEdadMin] = useState('');
     const [edadMax, setEdadMax] = useState('');
 
-    // NUEVOS ESTADOS PARA EL CAMBIO DE CAMPO
     const [modalCambioCampo, setModalCambioCampo] = useState(false);
     const [campoSeleccionado, setCampoSeleccionado] = useState('');
     
@@ -111,7 +110,6 @@ function MaestroDashboard({
         if (exito) setVistaActual('inicio');
     };
 
-    // FUNCIÓN MAGICA: CAMBIAR DE CAMPO EN VIVO
     const cambiarCampo = async (nuevoCampo) => {
         if (!nuevoCampo || nuevoCampo === datosUsuarioActual.campo) return;
         
@@ -122,10 +120,8 @@ function MaestroDashboard({
         }
 
         try {
-            // Actualizamos en Firebase
             await window.db.collection('maestros').doc(datosUsuarioActual.id).update({ campo: nuevoCampo });
             
-            // Actualizamos en la memoria del navegador para que no se pierda al recargar
             const sesionStr = localStorage.getItem('datos_recientes_login');
             if (sesionStr) {
                 const sesionData = JSON.parse(sesionStr);
@@ -133,7 +129,6 @@ function MaestroDashboard({
                 localStorage.setItem('datos_recientes_login', JSON.stringify(sesionData));
             }
             
-            // Recargamos la aplicación para forzar la descarga de los niños del nuevo campo
             window.location.reload(); 
         } catch (e) {
             alert("Ocurrió un error al intentar cambiar de campo. Revisa tu conexión.");
@@ -216,22 +211,29 @@ function MaestroDashboard({
         return true;
     });
 
+    // --- FILTRO DE SEGURIDAD PARA EL BOTÓN DE CAMBIO ---
+    // Solo permitimos ver el botón si están en El Caulote, Corozal #2 o en el Sandbox de pruebas.
+    const camposConPermiso = ["El Caulote", "Corozal #2", "🧪 Zona Pruebas"];
+    const tienePermisoDeCambio = datosUsuarioActual && camposConPermiso.includes(datosUsuarioActual.campo);
+
     let contenidoMaestro;
 
     if (vistaActual === 'inicio') {
         contenidoMaestro = (
             <div className="flex flex-col h-full pt-2 animate-in fade-in duration-300">
                 
-                {/* BANNER DE CAMBIO DE CAMPO RÁPIDO */}
-                <div className="bg-indigo-50 border border-indigo-100 p-4 rounded-[24px] flex justify-between items-center mb-5 shadow-sm mx-1">
-                    <div>
-                        <p className="text-[9px] font-bold text-indigo-400 uppercase tracking-widest mb-0.5">Operando en:</p>
-                        <p className="font-black text-indigo-700 text-sm"><i className="fas fa-map-marker-alt mr-1"></i> {datosUsuarioActual?.campo || 'Global'}</p>
+                {/* BANNER DE CAMBIO DE CAMPO (SOLO VISIBLE PARA CAMPOS AUTORIZADOS) */}
+                {tienePermisoDeCambio && (
+                    <div className="bg-indigo-50 border border-indigo-100 p-4 rounded-[24px] flex justify-between items-center mb-5 shadow-sm mx-1">
+                        <div>
+                            <p className="text-[9px] font-bold text-indigo-400 uppercase tracking-widest mb-0.5">Operando en:</p>
+                            <p className="font-black text-indigo-700 text-sm"><i className="fas fa-map-marker-alt mr-1"></i> {datosUsuarioActual?.campo || 'Global'}</p>
+                        </div>
+                        <button onClick={() => { setCampoSeleccionado(datosUsuarioActual?.campo || ''); setModalCambioCampo(true); }} className="bg-white text-indigo-600 px-4 py-2.5 rounded-xl text-xs font-black shadow-sm border border-indigo-100 active:scale-95 transition-all">
+                            Cambiar <i className="fas fa-exchange-alt ml-1"></i>
+                        </button>
                     </div>
-                    <button onClick={() => { setCampoSeleccionado(datosUsuarioActual?.campo || ''); setModalCambioCampo(true); }} className="bg-white text-indigo-600 px-4 py-2.5 rounded-xl text-xs font-black shadow-sm border border-indigo-100 active:scale-95 transition-all">
-                        Cambiar <i className="fas fa-exchange-alt ml-1"></i>
-                    </button>
-                </div>
+                )}
 
                 <div className={`w-full p-6 rounded-[32px] text-left relative overflow-hidden group shadow-lg mb-5 ${estaBloqueada ? 'bg-slate-50 border border-slate-200' : asistenciaTomada ? 'bg-white border border-slate-100' : !esFinDeSemana ? 'bg-slate-200 text-slate-500 shadow-none' : 'bg-rose-500 text-white shadow-rose-200'}`}>
                     {asistenciaTomada ? (
@@ -577,7 +579,7 @@ function MaestroDashboard({
                             <i className="fas fa-exchange-alt"></i>
                         </div>
                         <h2 className="text-xl font-black text-slate-800 mb-2 text-center">Cambiar de Campo</h2>
-                        <p className="text-xs text-slate-500 mb-6 text-center leading-relaxed">Si estás a cargo de múltiples campos, selecciona el nuevo destino para gestionar su asistencia y alumnos.</p>
+                        <p className="text-xs text-slate-500 mb-6 text-center leading-relaxed">Selecciona tu nuevo destino para gestionar su asistencia y alumnos.</p>
                         
                         <select 
                             value={campoSeleccionado} 
