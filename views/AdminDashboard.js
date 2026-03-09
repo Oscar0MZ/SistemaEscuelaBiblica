@@ -5,8 +5,7 @@ function AdminDashboard({
     mantenimiento, onToggleMantenimiento, onApprove, onDelete, onToggleModal, 
     onDeleteCampo, onResetLecciones, onCrearEntrega, onBorrarEntrega, onAssignGroup,
     inventarioDatos, onActualizarInventario, onCerrarJornada,
-    fondoTotal, fondoSecretariaTotal, onEdit, historialIngresos, historialSecretaria,
-    datosUsuarioActual // SE AGREGÓ PARA DETECTAR EL MODO SANDBOX
+    fondoTotal, fondoSecretariaTotal, onEdit, historialIngresos, historialSecretaria
 }) {
     const [busqueda, setBusqueda] = useState('');
     const [vistaActual, setVistaActual] = useState('inicio'); 
@@ -16,7 +15,10 @@ function AdminDashboard({
     const [tabAuditoria, setTabAuditoria] = useState('tesoreria'); 
     const [fechaOfrendaExp, setFechaOfrendaExp] = useState(null);
     const [mesAuditoriaExp, setMesAuditoriaExp] = useState(null);
+    
+    // ESTADOS PARA EL DOBLE ACORDEÓN DE ASISTENCIA
     const [mesAsistenciaExp, setMesAsistenciaExp] = useState(null); 
+    const [semanaAsistenciaExp, setSemanaAsistenciaExp] = useState(null); 
 
     // ESTADOS PARA ACORDEÓN DE CAMPOS
     const [campoExpandido, setCampoExpandido] = useState(null); 
@@ -24,16 +26,12 @@ function AdminDashboard({
 
     const [rolExpandido, setRolExpandido] = useState(null); 
     
-    // LOGÍSTICA Y EDICIÓN DE RUTAS
+    // LOGÍSTICA
     const [subVistaAdminLogistica, setSubVistaAdminLogistica] = useState('bodega'); 
     const [edadMin, setEdadMin] = useState('');
     const [edadMax, setEdadMax] = useState('');
     const [camposRuta, setCamposRuta] = useState([]);
     const [grupoCompletadoExp, setGrupoCompletadoExp] = useState(null);
-    
-    // NUEVOS ESTADOS PARA EDITAR CANTIDAD DE RUTA
-    const [rutaEditandoId, setRutaEditandoId] = useState(null);
-    const [nuevaCantidadRuta, setNuevaCantidadRuta] = useState('');
 
     const historialVisible = historialAsistencias.filter(h => !h.esReset);
     const todasAsistencias = datosGlobalesAsistencia?.registros || [];
@@ -53,7 +51,6 @@ function AdminDashboard({
         return `${dias[d.getDay()]}, ${d.getDate()} ${meses[d.getMonth()]} ${d.getFullYear()}`;
     };
 
-    // FUNCIONES PARA AGRUPAR POR MESES
     const mesesNombresCompletos = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
     
     const agruparPorMes = (historialData) => {
@@ -73,27 +70,51 @@ function AdminDashboard({
         return Object.keys(grupos).sort((a,b) => b.localeCompare(a)).map(k => ({ id: k, ...grupos[k] }));
     };
 
-    const agruparAsistenciaPorMes = (historial) => {
+    // NUEVO ALGORITMO: Agrupar Asistencia por Mes y luego por Semana del Mes
+    const agruparAsistenciaPorMesYSemana = (historial) => {
         if (!historial) return [];
         const grupos = {};
         historial.forEach(h => {
             const f = h.fecha || '';
             const p = f.split('-');
             if(p.length === 3) {
+                const year = parseInt(p[0]);
+                const month = parseInt(p[1]);
+                const day = parseInt(p[2]);
+
                 const mesKey = `${p[0]}-${p[1]}`; 
-                if(!grupos[mesKey]) grupos[mesKey] = { 
-                    mesLabel: `${mesesNombresCompletos[parseInt(p[1])-1]} ${p[0]}`, 
-                    registros: [], tp: 0, ta: 0, tperm: 0 
-                };
-                grupos[mesKey].registros.push(h);
+                const mesLabel = `${mesesNombresCompletos[month-1]} ${year}`;
+
+                // Calcular en qué semana del mes cayó este día exacto
+                const firstDayOfMonth = new Date(year, month - 1, 1).getDay(); // 0 (Dom) a 6 (Sáb)
+                const weekNum = Math.ceil((day + firstDayOfMonth) / 7);
+                const semanaKey = `Semana ${weekNum}`;
+
+                if(!grupos[mesKey]) {
+                    grupos[mesKey] = { mesLabel, tp: 0, ta: 0, tperm: 0, semanas: {} };
+                }
+                
                 grupos[mesKey].tp += (h.totales?.presentes || 0);
                 grupos[mesKey].ta += (h.totales?.ausentes || 0);
                 grupos[mesKey].tperm += (h.totales?.permisos || 0);
+
+                if(!grupos[mesKey].semanas[semanaKey]) {
+                    grupos[mesKey].semanas[semanaKey] = { label: semanaKey, tp: 0, ta: 0, tperm: 0, registros: [] };
+                }
+
+                grupos[mesKey].semanas[semanaKey].tp += (h.totales?.presentes || 0);
+                grupos[mesKey].semanas[semanaKey].ta += (h.totales?.ausentes || 0);
+                grupos[mesKey].semanas[semanaKey].tperm += (h.totales?.permisos || 0);
+                grupos[mesKey].semanas[semanaKey].registros.push(h);
             }
         });
+
         return Object.keys(grupos).sort((a,b) => b.localeCompare(a)).map(k => {
-            grupos[k].registros.sort((x, y) => new Date(y.fecha) - new Date(x.fecha));
-            return { id: k, ...grupos[k] };
+            const semanasArray = Object.keys(grupos[k].semanas).sort().map(sk => {
+                grupos[k].semanas[sk].registros.sort((x, y) => new Date(y.fecha) - new Date(x.fecha));
+                return { id: sk, ...grupos[k].semanas[sk] };
+            });
+            return { id: k, ...grupos[k], semanasArray };
         });
     };
 
@@ -153,30 +174,6 @@ function AdminDashboard({
         onCrearEntrega({ campos: camposRuta, cantidad: parseInt(fd.get('cantidad')), grupo: fd.get('grupo') });
         setCamposRuta([]); 
         e.target.reset();
-    };
-
-    // NUEVA FUNCIÓN PARA EDITAR LA CANTIDAD DE VÍVERES EN RUTA
-    const handleGuardarNuevaCantidadRuta = async (idEntrega) => {
-        const isSandbox = datosUsuarioActual?.id === 'user_sandbox_secreto';
-        if (isSandbox) {
-            alert("🔒 MODO DESARROLLADOR\n\nAcción simulada: [Editar Cantidad de Víveres en Ruta]\n\nLos datos reales están protegidos y no se han modificado.");
-            setRutaEditandoId(null);
-            return;
-        }
-
-        const cantidadNumerica = parseInt(nuevaCantidadRuta);
-        if (isNaN(cantidadNumerica) || cantidadNumerica < 0) {
-            alert("Por favor ingresa una cantidad válida.");
-            return;
-        }
-
-        try {
-            await window.db.collection('entregas').doc(idEntrega).update({ cantidad: cantidadNumerica });
-            setRutaEditandoId(null);
-        } catch (error) {
-            alert("Error al actualizar la cantidad.");
-            console.error(error);
-        }
     };
 
     // CÁLCULOS FINANCIEROS Y DE ASISTENCIA
@@ -395,7 +392,7 @@ function AdminDashboard({
         }
 
         if (subVistaInicio === 'asistencia') {
-            const gruposMesesAsistencia = agruparAsistenciaPorMes(historialVisible);
+            const gruposMesesAsistencia = agruparAsistenciaPorMesYSemana(historialVisible);
 
             contenidoAdmin = (
                 <div className="animate-in slide-in-from-right duration-300 space-y-4 pt-2 flex flex-col h-full">
@@ -419,43 +416,75 @@ function AdminDashboard({
                     </div>
 
                     <div className="flex-1 bg-white rounded-t-[40px] shadow-[0_-10px_40px_rgba(0,0,0,0.05)] border-t border-slate-100 p-6 overflow-hidden flex flex-col mt-2 mx-1">
-                        <h3 className="font-black text-slate-700 text-xs uppercase tracking-widest mb-4 shrink-0"><i className="fas fa-list-alt text-emerald-500 mr-2"></i> Récord por Mes y Campo</h3>
+                        <h3 className="font-black text-slate-700 text-xs uppercase tracking-widest mb-4 shrink-0"><i className="fas fa-list-alt text-emerald-500 mr-2"></i> Récord por Mes y Semana</h3>
                         <div className="overflow-y-auto space-y-3 pb-24 pr-1 flex-1">
                             {gruposMesesAsistencia.length === 0 ? <p className="text-center text-slate-400 text-xs italic mt-8">Sin registros de asistencia guardados.</p> : 
                                 gruposMesesAsistencia.map(grupo => {
-                                    const isExp = mesAsistenciaExp === grupo.id;
+                                    const isExpMes = mesAsistenciaExp === grupo.id;
+                                    
                                     return (
-                                        <div key={grupo.id} className="bg-slate-50 rounded-2xl border border-slate-100 overflow-hidden shadow-sm transition-all duration-300">
-                                            <button onClick={() => setMesAsistenciaExp(isExp ? null : grupo.id)} className="w-full p-4 flex justify-between items-center bg-white hover:bg-slate-50 transition-colors">
+                                        <div key={grupo.id} className="bg-slate-50 rounded-2xl border border-slate-200 overflow-hidden shadow-sm transition-all duration-300">
+                                            
+                                            {/* ACORDEÓN NIVEL 1: MES */}
+                                            <button onClick={() => setMesAsistenciaExp(isExpMes ? null : grupo.id)} className="w-full p-4 flex justify-between items-center bg-white hover:bg-slate-50 transition-colors">
                                                 <div className="text-left">
                                                     <p className="font-black text-slate-700 text-sm capitalize">{grupo.mesLabel}</p>
-                                                    <p className="text-[10px] text-slate-400 font-bold mt-0.5">{grupo.registros.length} reportes enviados</p>
+                                                    <p className="text-[9px] text-slate-400 font-bold mt-0.5">{grupo.semanasArray.length} semanas registradas</p>
                                                 </div>
                                                 <div className="flex items-center space-x-3 text-[10px] font-black">
                                                     <div className="flex space-x-2 mr-2">
                                                         <span className="text-emerald-500 bg-emerald-50 px-2 py-1 rounded">P:{grupo.tp}</span>
                                                         <span className="text-rose-500 bg-rose-50 px-2 py-1 rounded">A:{grupo.ta}</span>
                                                     </div>
-                                                    <i className={`fas fa-chevron-down text-slate-300 transition-transform duration-300 ${isExp ? 'rotate-180' : ''}`}></i>
+                                                    <i className={`fas fa-chevron-down text-slate-300 transition-transform duration-300 ${isExpMes ? 'rotate-180' : ''}`}></i>
                                                 </div>
                                             </button>
                                             
-                                            {isExp && (
-                                                <div className="p-4 pt-0 border-t border-slate-100 bg-slate-50 animate-in slide-in-from-top-2 duration-200">
-                                                    <div className="space-y-2 mt-3">
-                                                        {grupo.registros.map((h, idx) => (
-                                                            <div key={idx} className="bg-white p-3 rounded-xl border border-slate-100 shadow-sm flex justify-between items-center">
-                                                                <div className="w-1/2 pr-2">
-                                                                    <p className="font-bold text-slate-700 text-xs truncate mb-0.5"><i className="fas fa-map-marker-alt text-emerald-400 mr-1.5"></i> {h.campo}</p>
-                                                                    <p className="text-[9px] font-bold text-slate-400 uppercase tracking-wide">{formatFechaDia(h.fecha)}</p>
+                                            {isExpMes && (
+                                                <div className="p-3 pt-0 border-t border-slate-100 bg-slate-50 animate-in slide-in-from-top-2 duration-200 space-y-3">
+                                                    <div className="mt-3 space-y-3">
+                                                        {grupo.semanasArray.map(sem => {
+                                                            const isSemExp = semanaAsistenciaExp === `${grupo.id}-${sem.id}`;
+                                                            
+                                                            return (
+                                                                <div key={sem.id} className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+                                                                    
+                                                                    {/* ACORDEÓN NIVEL 2: SEMANA */}
+                                                                    <button onClick={() => setSemanaAsistenciaExp(isSemExp ? null : `${grupo.id}-${sem.id}`)} className="w-full p-3 flex justify-between items-center hover:bg-slate-50 transition-colors">
+                                                                        <div className="text-left">
+                                                                            <p className="font-bold text-slate-700 text-xs">{sem.label}</p>
+                                                                            <p className="text-[9px] text-slate-400 font-bold mt-0.5">{sem.registros.length} reportes</p>
+                                                                        </div>
+                                                                        <div className="flex items-center space-x-2 text-[9px] font-black">
+                                                                            <div className="flex space-x-1 mr-1">
+                                                                                <span className="text-emerald-500 bg-emerald-50 px-1.5 py-0.5 rounded">P:{sem.tp}</span>
+                                                                                <span className="text-rose-500 bg-rose-50 px-1.5 py-0.5 rounded">A:{sem.ta}</span>
+                                                                            </div>
+                                                                            <i className={`fas fa-chevron-down text-slate-300 transition-transform duration-300 ${isSemExp ? 'rotate-180' : ''}`}></i>
+                                                                        </div>
+                                                                    </button>
+
+                                                                    {/* DETALLES DE LA SEMANA (CAMPOS) */}
+                                                                    {isSemExp && (
+                                                                        <div className="p-3 border-t border-slate-100 bg-slate-50/50 space-y-2">
+                                                                            {sem.registros.map((h, idx) => (
+                                                                                <div key={idx} className="bg-white p-3 rounded-lg border border-slate-100 shadow-sm flex justify-between items-center">
+                                                                                    <div className="w-1/2 pr-2">
+                                                                                        <p className="font-bold text-slate-700 text-xs truncate mb-0.5"><i className="fas fa-map-marker-alt text-emerald-400 mr-1.5"></i> {h.campo}</p>
+                                                                                        <p className="text-[9px] font-bold text-slate-400 uppercase tracking-wide">{formatFechaDia(h.fecha)}</p>
+                                                                                    </div>
+                                                                                    <div className="flex space-x-1 text-[9px] font-black tracking-wider shrink-0">
+                                                                                        <span className="bg-slate-50 text-emerald-600 px-2 py-1.5 rounded border border-slate-100">P:{h.totales?.presentes || 0}</span>
+                                                                                        <span className="bg-slate-50 text-rose-500 px-2 py-1.5 rounded border border-slate-100">A:{h.totales?.ausentes || 0}</span>
+                                                                                        <span className="bg-slate-50 text-amber-500 px-2 py-1.5 rounded border border-slate-100">Pe:{h.totales?.permisos || 0}</span>
+                                                                                    </div>
+                                                                                </div>
+                                                                            ))}
+                                                                        </div>
+                                                                    )}
                                                                 </div>
-                                                                <div className="flex space-x-1 text-[9px] font-black tracking-wider shrink-0">
-                                                                    <span className="bg-slate-50 text-emerald-600 px-2 py-1.5 rounded border border-slate-100">P:{h.totales?.presentes || 0}</span>
-                                                                    <span className="bg-slate-50 text-rose-500 px-2 py-1.5 rounded border border-slate-100">A:{h.totales?.ausentes || 0}</span>
-                                                                    <span className="bg-slate-50 text-amber-500 px-2 py-1.5 rounded border border-slate-100">Pe:{h.totales?.permisos || 0}</span>
-                                                                </div>
-                                                            </div>
-                                                        ))}
+                                                            );
+                                                        })}
                                                     </div>
                                                 </div>
                                             )}
@@ -753,7 +782,6 @@ function AdminDashboard({
                                                         <button onClick={() => onBorrarEntrega(e.id)} className="w-8 h-8 flex items-center justify-center bg-rose-50 text-rose-500 rounded-xl hover:bg-rose-500 hover:text-white transition-colors flex-shrink-0"><i className="fas fa-trash-alt"></i></button>
                                                     </div>
                                                     
-                                                    {/* EDICIÓN DE CANTIDAD DE RUTA */}
                                                     <div className="bg-slate-50 p-2.5 rounded-xl mt-2 flex justify-between items-center text-[10px] font-black border border-slate-100 tracking-wide">
                                                         {rutaEditandoId === e.id ? (
                                                             <div className="flex items-center space-x-1.5">
