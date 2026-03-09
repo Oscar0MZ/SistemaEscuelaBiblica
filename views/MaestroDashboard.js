@@ -19,7 +19,7 @@ function MaestroDashboard({
     const [edadMax, setEdadMax] = useState('');
 
     const [modalCambioCampo, setModalCambioCampo] = useState(false);
-    const [campoSeleccionado, setCampoSeleccionado] = useState('');
+    const [campoSeleccionado, setCampoSeleccionado] = useState(''); // Solo usado en Sandbox
     
     const camposDisponibles = ["La Isla", "Las Delicias", "El Amatal", "El Manguito", "Buenos Aires", "Corozal #1", "El Porvenir", "El Caulote", "Corozal #2", "Valle Encantado", "La Playa"];
 
@@ -114,7 +114,7 @@ function MaestroDashboard({
         if (!nuevoCampo || nuevoCampo === datosUsuarioActual.campo) return;
         
         if (datosUsuarioActual.id === 'user_sandbox_secreto') {
-            alert("🔒 MODO DESARROLLADOR\n\nCambio de campo simulado con éxito.");
+            alert("🔒 MODO DESARROLLADOR\n\nCambio de campo simulado con éxito a: " + nuevoCampo);
             setModalCambioCampo(false);
             return;
         }
@@ -211,10 +211,15 @@ function MaestroDashboard({
         return true;
     });
 
-    // --- FILTRO DE SEGURIDAD PARA EL BOTÓN DE CAMBIO ---
-    // Solo permitimos ver el botón si están en El Caulote, Corozal #2 o en el Sandbox de pruebas.
-    const camposConPermiso = ["El Caulote", "Corozal #2", "🧪 Zona Pruebas"];
-    const tienePermisoDeCambio = datosUsuarioActual && camposConPermiso.includes(datosUsuarioActual.campo);
+    // --- REGLAS DE SEGURIDAD PARA EL CAMBIO DE CAMPO ---
+    const isSandbox = datosUsuarioActual?.id === 'user_sandbox_secreto';
+    const miCampoActual = datosUsuarioActual?.campo;
+
+    let campoDestinoFijo = null;
+    if (miCampoActual === "El Caulote") campoDestinoFijo = "Corozal #2";
+    if (miCampoActual === "Corozal #2") campoDestinoFijo = "El Caulote";
+
+    const tienePermisoDeCambio = isSandbox || campoDestinoFijo !== null;
 
     let contenidoMaestro;
 
@@ -222,14 +227,17 @@ function MaestroDashboard({
         contenidoMaestro = (
             <div className="flex flex-col h-full pt-2 animate-in fade-in duration-300">
                 
-                {/* BANNER DE CAMBIO DE CAMPO (SOLO VISIBLE PARA CAMPOS AUTORIZADOS) */}
+                {/* BANNER DE CAMBIO DE CAMPO */}
                 {tienePermisoDeCambio && (
                     <div className="bg-indigo-50 border border-indigo-100 p-4 rounded-[24px] flex justify-between items-center mb-5 shadow-sm mx-1">
                         <div>
                             <p className="text-[9px] font-bold text-indigo-400 uppercase tracking-widest mb-0.5">Operando en:</p>
-                            <p className="font-black text-indigo-700 text-sm"><i className="fas fa-map-marker-alt mr-1"></i> {datosUsuarioActual?.campo || 'Global'}</p>
+                            <p className="font-black text-indigo-700 text-sm"><i className="fas fa-map-marker-alt mr-1"></i> {miCampoActual || 'Global'}</p>
                         </div>
-                        <button onClick={() => { setCampoSeleccionado(datosUsuarioActual?.campo || ''); setModalCambioCampo(true); }} className="bg-white text-indigo-600 px-4 py-2.5 rounded-xl text-xs font-black shadow-sm border border-indigo-100 active:scale-95 transition-all">
+                        <button onClick={() => { 
+                            if (isSandbox) setCampoSeleccionado(miCampoActual || ''); 
+                            setModalCambioCampo(true); 
+                        }} className="bg-white text-indigo-600 px-4 py-2.5 rounded-xl text-xs font-black shadow-sm border border-indigo-100 active:scale-95 transition-all">
                             Cambiar <i className="fas fa-exchange-alt ml-1"></i>
                         </button>
                     </div>
@@ -571,34 +579,41 @@ function MaestroDashboard({
                 <NavButton id="reportes" icon="fa-chart-bar" label="Reportes" width="w-[70px]" />
             </div>
 
-            {/* MODAL PARA CAMBIO DE CAMPO */}
+            {/* MODAL PARA CAMBIO DE CAMPO - RESTRINGIDO */}
             {modalCambioCampo && (
                 <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-[100] p-4 animate-in fade-in">
                     <div className="bg-white w-full max-w-sm rounded-[32px] p-6 shadow-2xl animate-in zoom-in-95">
                         <div className="w-16 h-16 bg-indigo-50 text-indigo-500 rounded-full flex items-center justify-center mx-auto mb-4 text-3xl">
                             <i className="fas fa-exchange-alt"></i>
                         </div>
-                        <h2 className="text-xl font-black text-slate-800 mb-2 text-center">Cambiar de Campo</h2>
-                        <p className="text-xs text-slate-500 mb-6 text-center leading-relaxed">Selecciona tu nuevo destino para gestionar su asistencia y alumnos.</p>
+                        <h2 className="text-xl font-black text-slate-800 mb-2 text-center">Cambio de Campo</h2>
+                        <p className="text-xs text-slate-500 mb-6 text-center leading-relaxed">Estás a punto de saltar hacia tu otro campo asignado.</p>
                         
-                        <select 
-                            value={campoSeleccionado} 
-                            onChange={e => setCampoSeleccionado(e.target.value)}
-                            className="w-full p-4 bg-slate-50 rounded-2xl outline-none border border-slate-200 text-slate-700 font-bold mb-6 focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100"
-                        >
-                            <option value="" disabled>Elige tu destino...</option>
-                            {camposDisponibles.map(c => (
-                                <option key={c} value={c}>{c}</option>
-                            ))}
-                        </select>
+                        {isSandbox ? (
+                            <select 
+                                value={campoSeleccionado} 
+                                onChange={e => setCampoSeleccionado(e.target.value)}
+                                className="w-full p-4 bg-slate-50 rounded-2xl outline-none border border-slate-200 text-slate-700 font-bold mb-6 focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100"
+                            >
+                                <option value="" disabled>Modo Prueba: Elige tu destino...</option>
+                                {camposDisponibles.map(c => (
+                                    <option key={c} value={c}>{c}</option>
+                                ))}
+                            </select>
+                        ) : (
+                            <div className="w-full p-4 bg-indigo-50 rounded-2xl border border-indigo-100 text-center mb-6 shadow-inner">
+                                <p className="text-[10px] font-bold text-indigo-400 uppercase tracking-widest mb-1">Destino Autorizado:</p>
+                                <p className="text-lg font-black text-indigo-700">{campoDestinoFijo}</p>
+                            </div>
+                        )}
 
                         <div className="flex flex-col space-y-3">
                             <button 
-                                onClick={() => cambiarCampo(campoSeleccionado)}
-                                disabled={!campoSeleccionado || campoSeleccionado === datosUsuarioActual?.campo}
+                                onClick={() => cambiarCampo(isSandbox ? campoSeleccionado : campoDestinoFijo)}
+                                disabled={isSandbox && (!campoSeleccionado || campoSeleccionado === miCampoActual)}
                                 className="w-full py-4 bg-indigo-600 disabled:bg-slate-300 text-white font-black rounded-2xl shadow-lg active:scale-95 transition-all"
                             >
-                                Confirmar Cambio
+                                <i className="fas fa-bolt mr-2"></i> Saltar a este Campo
                             </button>
                             <button 
                                 onClick={() => setModalCambioCampo(false)}
