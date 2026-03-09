@@ -5,33 +5,44 @@ function AdminDashboard({
     mantenimiento, onToggleMantenimiento, onApprove, onDelete, onToggleModal, 
     onDeleteCampo, onResetLecciones, onCrearEntrega, onBorrarEntrega, onAssignGroup,
     inventarioDatos, onActualizarInventario, onCerrarJornada,
-    fondoTotal, fondoSecretariaTotal, onEdit, historialIngresos, historialSecretaria
+    fondoTotal, fondoSecretariaTotal, onEdit, historialIngresos, historialSecretaria,
+    datosUsuarioActual
 }) {
     const [busqueda, setBusqueda] = useState('');
     const [vistaActual, setVistaActual] = useState('inicio'); 
     
     // ESTADOS PARA SUB-VISTAS DEL PANEL DIRECTOR
     const [subVistaInicio, setSubVistaInicio] = useState(null); 
-    const [tabAuditoria, setTabAuditoria] = useState('tesoreria'); 
-    const [fechaOfrendaExp, setFechaOfrendaExp] = useState(null);
-    const [mesAuditoriaExp, setMesAuditoriaExp] = useState(null);
     
+    // ESTADOS PARA EL DOBLE ACORDEÓN DE AUDITORÍA
+    const [tabAuditoria, setTabAuditoria] = useState('tesoreria'); 
+    const [mesAuditoriaExp, setMesAuditoriaExp] = useState(null);
+    const [semanaAuditoriaExp, setSemanaAuditoriaExp] = useState(null);
+
+    // ESTADOS PARA EL DOBLE ACORDEÓN DE OFRENDAS
+    const [mesOfrendaExp, setMesOfrendaExp] = useState(null);
+    const [semanaOfrendaExp, setSemanaOfrendaExp] = useState(null);
+
     // ESTADOS PARA EL DOBLE ACORDEÓN DE ASISTENCIA
     const [mesAsistenciaExp, setMesAsistenciaExp] = useState(null); 
     const [semanaAsistenciaExp, setSemanaAsistenciaExp] = useState(null); 
 
-    // ESTADOS PARA ACORDEÓN DE CAMPOS
+    // ESTADOS PARA EL TRIPLE ACORDEÓN DE LOGÍSTICA
+    const [subVistaAdminLogistica, setSubVistaAdminLogistica] = useState('bodega'); 
+    const [grupoCompletadoExp, setGrupoCompletadoExp] = useState(null);
+    const [mesLogisticaExp, setMesLogisticaExp] = useState(null);
+    const [semanaLogisticaExp, setSemanaLogisticaExp] = useState(null);
+
+    // ESTADOS PARA ACORDEÓN DE CAMPOS Y FILTROS
     const [campoExpandido, setCampoExpandido] = useState(null); 
     const [campoAccionActiva, setCampoAccionActiva] = useState(null); 
-
     const [rolExpandido, setRolExpandido] = useState(null); 
-    
-    // LOGÍSTICA
-    const [subVistaAdminLogistica, setSubVistaAdminLogistica] = useState('bodega'); 
     const [edadMin, setEdadMin] = useState('');
     const [edadMax, setEdadMax] = useState('');
     const [camposRuta, setCamposRuta] = useState([]);
-    const [grupoCompletadoExp, setGrupoCompletadoExp] = useState(null);
+    
+    const [rutaEditandoId, setRutaEditandoId] = useState(null);
+    const [nuevaCantidadRuta, setNuevaCantidadRuta] = useState('');
 
     const historialVisible = historialAsistencias.filter(h => !h.esReset);
     const todasAsistencias = datosGlobalesAsistencia?.registros || [];
@@ -51,61 +62,98 @@ function AdminDashboard({
         return `${dias[d.getDay()]}, ${d.getDate()} ${meses[d.getMonth()]} ${d.getFullYear()}`;
     };
 
-    const mesesNombresCompletos = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
-    
-    const agruparPorMes = (historialData) => {
-        if (!historialData) return [];
-        const grupos = {};
-        historialData.forEach(h => {
-            const f = h.fecha || '';
-            const p = f.split('-');
-            if(p.length === 3) {
-                const mesKey = `${p[0]}-${p[1]}`; 
-                if(!grupos[mesKey]) grupos[mesKey] = { mesLabel: `${mesesNombresCompletos[parseInt(p[1])-1]} ${p[0]}`, registros: [], totalIngreso: 0, totalEgreso: 0 };
-                grupos[mesKey].registros.push(h);
-                if(h.tipo === 'ingreso') grupos[mesKey].totalIngreso += Number(h.monto) || 0;
-                if(h.tipo === 'egreso') grupos[mesKey].totalEgreso += Number(h.monto) || 0;
-            }
-        });
-        return Object.keys(grupos).sort((a,b) => b.localeCompare(a)).map(k => ({ id: k, ...grupos[k] }));
+    const formatFechaHora = (timestamp) => {
+        if (!timestamp) return 'Fecha no registrada';
+        const d = new Date(timestamp);
+        return `${d.toLocaleDateString()} a las ${d.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}`;
     };
 
-    // NUEVO ALGORITMO: Agrupar Asistencia por Mes y luego por Semana del Mes
+    // --- FUNCIONES MATEMÁTICAS PARA CALCULAR SEMANAS Y AGRUPAR DATOS ---
+    const mesesNombresCompletos = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
+    
+    const getWeekOfMonth = (year, month, day) => {
+        const firstDayOfMonth = new Date(year, month - 1, 1).getDay(); 
+        return Math.ceil((day + firstDayOfMonth) / 7);
+    };
+
+    const agruparFinanzas = (data) => {
+        if (!data) return [];
+        const grupos = {};
+        data.forEach(h => {
+            const p = (h.fecha || '').split('-');
+            if(p.length === 3) {
+                const y = parseInt(p[0]); const m = parseInt(p[1]); const d = parseInt(p[2]);
+                const mesKey = `${y}-${p[1]}`;
+                const mesLabel = `${mesesNombresCompletos[m-1]} ${y}`;
+                const semKey = `Semana ${getWeekOfMonth(y, m, d)}`;
+
+                if(!grupos[mesKey]) grupos[mesKey] = { mesLabel, totalIngreso: 0, totalEgreso: 0, semanas: {} };
+                if(h.tipo === 'ingreso') grupos[mesKey].totalIngreso += Number(h.monto) || 0;
+                if(h.tipo === 'egreso') grupos[mesKey].totalEgreso += Number(h.monto) || 0;
+
+                if(!grupos[mesKey].semanas[semKey]) grupos[mesKey].semanas[semKey] = { label: semKey, totalIngreso: 0, totalEgreso: 0, registros: [] };
+                if(h.tipo === 'ingreso') grupos[mesKey].semanas[semKey].totalIngreso += Number(h.monto) || 0;
+                if(h.tipo === 'egreso') grupos[mesKey].semanas[semKey].totalEgreso += Number(h.monto) || 0;
+                
+                grupos[mesKey].semanas[semKey].registros.push(h);
+            }
+        });
+        return Object.keys(grupos).sort((a,b) => b.localeCompare(a)).map(k => {
+            const semanasArray = Object.keys(grupos[k].semanas).sort().map(sk => ({ id: sk, ...grupos[k].semanas[sk] }));
+            return { id: k, ...grupos[k], semanasArray };
+        });
+    };
+
+    const agruparOfrendas = (historial) => {
+        if (!historial) return [];
+        const grupos = {};
+        historial.forEach(h => {
+            if(!h.ofrenda || Number(h.ofrenda) === 0) return;
+            const p = (h.fecha || '').split('-');
+            if(p.length === 3) {
+                const y = parseInt(p[0]); const m = parseInt(p[1]); const d = parseInt(p[2]);
+                const mesKey = `${y}-${p[1]}`;
+                const mesLabel = `${mesesNombresCompletos[m-1]} ${y}`;
+                const semKey = `Semana ${getWeekOfMonth(y, m, d)}`;
+
+                if(!grupos[mesKey]) grupos[mesKey] = { mesLabel, total: 0, semanas: {} };
+                grupos[mesKey].total += Number(h.ofrenda) || 0;
+
+                if(!grupos[mesKey].semanas[semKey]) grupos[mesKey].semanas[semKey] = { label: semKey, total: 0, registros: [] };
+                grupos[mesKey].semanas[semKey].total += Number(h.ofrenda) || 0;
+                grupos[mesKey].semanas[semKey].registros.push(h);
+            }
+        });
+        return Object.keys(grupos).sort((a,b) => b.localeCompare(a)).map(k => {
+            const semanasArray = Object.keys(grupos[k].semanas).sort().map(sk => {
+                grupos[k].semanas[sk].registros.sort((x, y) => new Date(y.fecha) - new Date(x.fecha));
+                return { id: sk, ...grupos[k].semanas[sk] };
+            });
+            return { id: k, ...grupos[k], semanasArray };
+        });
+    };
+
     const agruparAsistenciaPorMesYSemana = (historial) => {
         if (!historial) return [];
         const grupos = {};
         historial.forEach(h => {
-            const f = h.fecha || '';
-            const p = f.split('-');
+            const p = (h.fecha || '').split('-');
             if(p.length === 3) {
-                const year = parseInt(p[0]);
-                const month = parseInt(p[1]);
-                const day = parseInt(p[2]);
+                const y = parseInt(p[0]); const m = parseInt(p[1]); const d = parseInt(p[2]);
+                const mesKey = `${y}-${p[1]}`; 
+                const mesLabel = `${mesesNombresCompletos[m-1]} ${y}`;
+                const semKey = `Semana ${getWeekOfMonth(y, m, d)}`;
 
-                const mesKey = `${p[0]}-${p[1]}`; 
-                const mesLabel = `${mesesNombresCompletos[month-1]} ${year}`;
-
-                // Calcular en qué semana del mes cayó este día exacto
-                const firstDayOfMonth = new Date(year, month - 1, 1).getDay(); // 0 (Dom) a 6 (Sáb)
-                const weekNum = Math.ceil((day + firstDayOfMonth) / 7);
-                const semanaKey = `Semana ${weekNum}`;
-
-                if(!grupos[mesKey]) {
-                    grupos[mesKey] = { mesLabel, tp: 0, ta: 0, tperm: 0, semanas: {} };
-                }
-                
+                if(!grupos[mesKey]) grupos[mesKey] = { mesLabel, tp: 0, ta: 0, tperm: 0, semanas: {} };
                 grupos[mesKey].tp += (h.totales?.presentes || 0);
                 grupos[mesKey].ta += (h.totales?.ausentes || 0);
                 grupos[mesKey].tperm += (h.totales?.permisos || 0);
 
-                if(!grupos[mesKey].semanas[semanaKey]) {
-                    grupos[mesKey].semanas[semanaKey] = { label: semanaKey, tp: 0, ta: 0, tperm: 0, registros: [] };
-                }
-
-                grupos[mesKey].semanas[semanaKey].tp += (h.totales?.presentes || 0);
-                grupos[mesKey].semanas[semanaKey].ta += (h.totales?.ausentes || 0);
-                grupos[mesKey].semanas[semanaKey].tperm += (h.totales?.permisos || 0);
-                grupos[mesKey].semanas[semanaKey].registros.push(h);
+                if(!grupos[mesKey].semanas[semKey]) grupos[mesKey].semanas[semKey] = { label: semKey, tp: 0, ta: 0, tperm: 0, registros: [] };
+                grupos[mesKey].semanas[semKey].tp += (h.totales?.presentes || 0);
+                grupos[mesKey].semanas[semKey].ta += (h.totales?.ausentes || 0);
+                grupos[mesKey].semanas[semKey].tperm += (h.totales?.permisos || 0);
+                grupos[mesKey].semanas[semKey].registros.push(h);
             }
         });
 
@@ -115,6 +163,39 @@ function AdminDashboard({
                 return { id: sk, ...grupos[k].semanas[sk] };
             });
             return { id: k, ...grupos[k], semanasArray };
+        });
+    };
+
+    const agruparLogisticaPorGrupo = (entregas) => {
+        const grupos = {};
+        entregas.forEach(e => {
+            const grp = e.grupo || 'Sin Grupo';
+            if(!grupos[grp]) grupos[grp] = { total: 0, meses: {} };
+            grupos[grp].total++;
+            
+            const d = e.fechaEntrega ? new Date(e.fechaEntrega) : new Date();
+            const y = d.getFullYear(); const m = d.getMonth() + 1; const day = d.getDate();
+            const mesKey = `${y}-${m.toString().padStart(2, '0')}`;
+            const mesLabel = `${mesesNombresCompletos[m-1]} ${y}`;
+            const semKey = `Semana ${getWeekOfMonth(y, m, day)}`;
+
+            if(!grupos[grp].meses[mesKey]) grupos[grp].meses[mesKey] = { label: mesLabel, total: 0, semanas: {} };
+            grupos[grp].meses[mesKey].total++;
+
+            if(!grupos[grp].meses[mesKey].semanas[semKey]) grupos[grp].meses[mesKey].semanas[semKey] = { label: semKey, total: 0, registros: [] };
+            grupos[grp].meses[mesKey].semanas[semKey].total++;
+            grupos[grp].meses[mesKey].semanas[semKey].registros.push(e);
+        });
+        
+        return Object.keys(grupos).sort().map(g => {
+            const mesesArray = Object.keys(grupos[g].meses).sort((a,b)=>b.localeCompare(a)).map(mk => {
+                const semanasArray = Object.keys(grupos[g].meses[mk].semanas).sort().map(sk => {
+                    grupos[g].meses[mk].semanas[sk].registros.sort((x,y) => y.fechaEntrega - x.fechaEntrega);
+                    return { id: sk, ...grupos[g].meses[mk].semanas[sk] };
+                });
+                return { id: mk, ...grupos[g].meses[mk], semanasArray };
+            });
+            return { id: g, label: g, total: grupos[g].total, mesesArray };
         });
     };
 
@@ -148,15 +229,8 @@ function AdminDashboard({
     const activos = maestros.filter(m => m.estado === 'Activo');
     const listaAdminVisible = maestros.filter(m => m.nombre.toLowerCase().includes(busqueda.toLowerCase()) || (m.campo && m.campo.toLowerCase().includes(busqueda.toLowerCase())));
     
-    const gruposPersonal = {
-        'MAESTRO': [], 'AUXILIAR': [], 'LOGISTICA': [], 'SECRETARIA': [], 'TESORERO': [], 'Dirección': []
-    };
-    listaAdminVisible.forEach(m => {
-        if (m.estado === 'Activo') {
-            if (gruposPersonal[m.clase]) gruposPersonal[m.clase].push(m);
-            else gruposPersonal[m.clase] = [m];
-        }
-    });
+    const gruposPersonal = { 'MAESTRO': [], 'AUXILIAR': [], 'LOGISTICA': [], 'SECRETARIA': [], 'TESORERO': [], 'Dirección': [] };
+    listaAdminVisible.forEach(m => { if (m.estado === 'Activo') { if (gruposPersonal[m.clase]) gruposPersonal[m.clase].push(m); else gruposPersonal[m.clase] = [m]; } });
     const rolesConGente = Object.keys(gruposPersonal).filter(k => gruposPersonal[k].length > 0);
 
     const camposActivos = [...new Set([...maestros.filter(m => m.clase !== 'LOGISTICA' && m.campo).map(m => m.campo), ...todosLosAlumnos.map(a => a.campo), ...historialVisible.map(h => h.campo)].filter(Boolean))].sort();
@@ -176,6 +250,14 @@ function AdminDashboard({
         e.target.reset();
     };
 
+    const handleGuardarNuevaCantidadRuta = async (idEntrega) => {
+        const isSandbox = datosUsuarioActual?.id === 'user_sandbox_secreto';
+        if (isSandbox) { alert("🔒 MODO DESARROLLADOR\n\nAcción simulada: [Editar Cantidad de Víveres en Ruta]"); setRutaEditandoId(null); return; }
+        const cantidadNumerica = parseInt(nuevaCantidadRuta);
+        if (isNaN(cantidadNumerica) || cantidadNumerica < 0) { alert("Por favor ingresa una cantidad válida."); return; }
+        try { await window.db.collection('entregas').doc(idEntrega).update({ cantidad: cantidadNumerica }); setRutaEditandoId(null); } catch (error) { alert("Error al actualizar la cantidad."); }
+    };
+
     // CÁLCULOS FINANCIEROS Y DE ASISTENCIA
     let tp = 0, ta = 0, tperm = 0; 
     let totalOfrendaSemana = 0;
@@ -185,14 +267,6 @@ function AdminDashboard({
     });
     
     const diferenciaFinanzas = (fondoTotal || 0) - (fondoSecretariaTotal || 0);
-
-    const ofrendasPorFecha = {};
-    historialVisible.forEach(h => {
-        if (!ofrendasPorFecha[h.fecha]) ofrendasPorFecha[h.fecha] = { total: 0, detalles: [] };
-        ofrendasPorFecha[h.fecha].total += (Number(h.ofrenda) || 0);
-        ofrendasPorFecha[h.fecha].detalles.push(h);
-    });
-    const fechasOfrendas = Object.keys(ofrendasPorFecha).sort((a,b) => new Date(b) - new Date(a));
 
     let contenidoAdmin;
 
@@ -247,7 +321,7 @@ function AdminDashboard({
 
         if (subVistaInicio === 'auditoria') {
             const dataActiva = tabAuditoria === 'tesoreria' ? historialIngresos : historialSecretaria;
-            const gruposMeses = agruparPorMes(dataActiva);
+            const gruposMesesFinanzas = agruparFinanzas(dataActiva);
 
             contenidoAdmin = (
                 <div className="animate-in slide-in-from-right duration-300 space-y-4 pt-2 flex flex-col h-full">
@@ -279,44 +353,72 @@ function AdminDashboard({
 
                     <div className="flex-1 bg-white rounded-t-[40px] shadow-[0_-10px_40px_rgba(0,0,0,0.05)] border-t border-slate-100 p-6 overflow-hidden flex flex-col mt-2 mx-1">
                         <div className="flex space-x-2 mb-4 shrink-0">
-                            <button onClick={() => {setTabAuditoria('tesoreria'); setMesAuditoriaExp(null);}} className={`flex-1 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all border ${tabAuditoria === 'tesoreria' ? 'bg-sky-50 text-sky-600 border-sky-100 shadow-sm' : 'bg-white text-slate-400 border-slate-100 hover:bg-slate-50'}`}>Ver Tesorería</button>
-                            <button onClick={() => {setTabAuditoria('secretaria'); setMesAuditoriaExp(null);}} className={`flex-1 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all border ${tabAuditoria === 'secretaria' ? 'bg-pink-50 text-pink-600 border-pink-100 shadow-sm' : 'bg-white text-slate-400 border-slate-100 hover:bg-slate-50'}`}>Ver Secretaría</button>
+                            <button onClick={() => {setTabAuditoria('tesoreria'); setMesAuditoriaExp(null); setSemanaAuditoriaExp(null);}} className={`flex-1 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all border ${tabAuditoria === 'tesoreria' ? 'bg-sky-50 text-sky-600 border-sky-100 shadow-sm' : 'bg-white text-slate-400 border-slate-100 hover:bg-slate-50'}`}>Ver Tesorería</button>
+                            <button onClick={() => {setTabAuditoria('secretaria'); setMesAuditoriaExp(null); setSemanaAuditoriaExp(null);}} className={`flex-1 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all border ${tabAuditoria === 'secretaria' ? 'bg-pink-50 text-pink-600 border-pink-100 shadow-sm' : 'bg-white text-slate-400 border-slate-100 hover:bg-slate-50'}`}>Ver Secretaría</button>
                         </div>
                         
                         <div className="overflow-y-auto space-y-3 pb-24 pr-1 flex-1">
-                            {gruposMeses.length === 0 ? <p className="text-center text-slate-400 text-xs italic mt-8">Sin registros guardados.</p> : 
-                                gruposMeses.map(grupo => {
-                                    const isExp = mesAuditoriaExp === grupo.id;
+                            {gruposMesesFinanzas.length === 0 ? <p className="text-center text-slate-400 text-xs italic mt-8">Sin registros guardados.</p> : 
+                                gruposMesesFinanzas.map(grupo => {
+                                    const isExpMes = mesAuditoriaExp === grupo.id;
                                     return (
                                         <div key={grupo.id} className="bg-slate-50 rounded-2xl border border-slate-100 overflow-hidden shadow-sm transition-all duration-300">
-                                            <button onClick={() => setMesAuditoriaExp(isExp ? null : grupo.id)} className="w-full p-4 flex justify-between items-center bg-white hover:bg-slate-50 transition-colors">
+                                            {/* ACORDEÓN MES */}
+                                            <button onClick={() => {setMesAuditoriaExp(isExpMes ? null : grupo.id); setSemanaAuditoriaExp(null);}} className="w-full p-4 flex justify-between items-center bg-white hover:bg-slate-50 transition-colors">
                                                 <div className="text-left">
                                                     <p className="font-black text-slate-700 text-sm capitalize">{grupo.mesLabel}</p>
-                                                    <p className="text-[9px] text-slate-400 font-bold mt-0.5">{grupo.registros.length} movimientos</p>
+                                                    <p className="text-[9px] text-slate-400 font-bold mt-0.5">{grupo.semanasArray.length} semanas</p>
                                                 </div>
                                                 <div className="flex items-center space-x-3 text-[10px] font-black">
                                                     <div className="flex flex-col items-end mr-2">
                                                         <span className="text-emerald-500">+${grupo.totalIngreso.toFixed(2)}</span>
                                                         <span className="text-rose-500">-${grupo.totalEgreso.toFixed(2)}</span>
                                                     </div>
-                                                    <i className={`fas fa-chevron-down text-slate-300 transition-transform duration-300 ${isExp ? 'rotate-180' : ''}`}></i>
+                                                    <i className={`fas fa-chevron-down text-slate-300 transition-transform duration-300 ${isExpMes ? 'rotate-180' : ''}`}></i>
                                                 </div>
                                             </button>
                                             
-                                            {isExp && (
-                                                <div className="p-4 pt-0 border-t border-slate-100 bg-slate-50 animate-in slide-in-from-top-2 duration-200">
-                                                    <div className="space-y-2 mt-3">
-                                                        {grupo.registros.map(h => (
-                                                            <div key={h.id} className="bg-white p-3 rounded-xl border border-slate-100 shadow-sm flex justify-between items-center">
-                                                                <div className="w-2/3 pr-2">
-                                                                    <p className="font-bold text-slate-700 text-[11px] truncate mb-1">{h.descripcion}</p>
-                                                                    <p className="text-[9px] font-bold text-slate-400 uppercase"><i className="fas fa-user-tag mr-1 text-slate-300"></i>{h.registradoPor} • {h.fecha}</p>
+                                            {isExpMes && (
+                                                <div className="p-3 pt-0 border-t border-slate-100 bg-slate-50 animate-in slide-in-from-top-2 duration-200 space-y-3">
+                                                    <div className="mt-3 space-y-3">
+                                                        {grupo.semanasArray.map(sem => {
+                                                            const isSemExp = semanaAuditoriaExp === `${grupo.id}-${sem.id}`;
+                                                            return (
+                                                                <div key={sem.id} className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+                                                                    {/* ACORDEÓN SEMANA */}
+                                                                    <button onClick={() => setSemanaAuditoriaExp(isSemExp ? null : `${grupo.id}-${sem.id}`)} className="w-full p-3 flex justify-between items-center hover:bg-slate-50 transition-colors">
+                                                                        <div className="text-left">
+                                                                            <p className="font-bold text-slate-700 text-xs">{sem.label}</p>
+                                                                            <p className="text-[9px] text-slate-400 font-bold mt-0.5">{sem.registros.length} movs</p>
+                                                                        </div>
+                                                                        <div className="flex items-center space-x-2 text-[9px] font-black">
+                                                                            <div className="flex flex-col items-end mr-1">
+                                                                                <span className="text-emerald-500">+${sem.totalIngreso.toFixed(2)}</span>
+                                                                                <span className="text-rose-500">-${sem.totalEgreso.toFixed(2)}</span>
+                                                                            </div>
+                                                                            <i className={`fas fa-chevron-down text-slate-300 transition-transform duration-300 ${isSemExp ? 'rotate-180' : ''}`}></i>
+                                                                        </div>
+                                                                    </button>
+
+                                                                    {/* DETALLES */}
+                                                                    {isSemExp && (
+                                                                        <div className="p-3 border-t border-slate-100 bg-slate-50/50 space-y-2">
+                                                                            {sem.registros.map(h => (
+                                                                                <div key={h.id} className="bg-white p-3 rounded-lg border border-slate-100 shadow-sm flex justify-between items-center">
+                                                                                    <div className="w-2/3 pr-2">
+                                                                                        <p className="font-bold text-slate-700 text-[11px] truncate mb-1">{h.descripcion}</p>
+                                                                                        <p className="text-[9px] font-bold text-slate-400 uppercase"><i className="fas fa-user-tag mr-1 text-slate-300"></i>{h.registradoPor} • {h.fecha}</p>
+                                                                                    </div>
+                                                                                    <div className={`px-2 py-1 rounded-lg text-[10px] font-black shadow-sm shrink-0 ${h.tipo === 'ingreso' ? 'bg-emerald-100 text-emerald-700' : 'bg-rose-100 text-rose-700'}`}>
+                                                                                        {h.tipo === 'ingreso' ? '+' : '-'}${Number(h.monto).toFixed(2)}
+                                                                                    </div>
+                                                                                </div>
+                                                                            ))}
+                                                                        </div>
+                                                                    )}
                                                                 </div>
-                                                                <div className={`px-2 py-1 rounded-lg text-[10px] font-black shadow-sm shrink-0 ${h.tipo === 'ingreso' ? 'bg-emerald-100 text-emerald-700' : 'bg-rose-100 text-rose-700'}`}>
-                                                                    {h.tipo === 'ingreso' ? '+' : '-'}${Number(h.monto).toFixed(2)}
-                                                                </div>
-                                                            </div>
-                                                        ))}
+                                                            );
+                                                        })}
                                                     </div>
                                                 </div>
                                             )}
@@ -331,6 +433,8 @@ function AdminDashboard({
         }
 
         if (subVistaInicio === 'ofrendas') {
+            const gruposMesesOfrendas = agruparOfrendas(historialVisible);
+
             contenidoAdmin = (
                 <div className="animate-in slide-in-from-right duration-300 space-y-4 pt-2 flex flex-col h-full">
                     <button onClick={() => setSubVistaInicio(null)} className="text-slate-500 font-black text-[10px] uppercase tracking-widest mb-1 px-2 hover:text-amber-500 transition-colors w-max"><i className="fas fa-arrow-left mr-2"></i> Volver al Menú</button>
@@ -350,34 +454,61 @@ function AdminDashboard({
                     </div>
 
                     <div className="flex-1 bg-white rounded-t-[40px] shadow-[0_-10px_40px_rgba(0,0,0,0.05)] border-t border-slate-100 p-6 overflow-hidden flex flex-col mt-2 mx-1">
-                        <h3 className="font-black text-slate-700 text-xs uppercase tracking-widest mb-4 shrink-0"><i className="fas fa-history text-amber-500 mr-2"></i> Récord Histórico</h3>
+                        <h3 className="font-black text-slate-700 text-xs uppercase tracking-widest mb-4 shrink-0"><i className="fas fa-history text-amber-500 mr-2"></i> Récord por Mes y Semana</h3>
                         <div className="overflow-y-auto space-y-3 pb-24 pr-1 flex-1">
-                            {fechasOfrendas.length === 0 ? <p className="text-center text-slate-400 text-xs italic mt-8">Aún no hay ofrendas registradas en las clases.</p> :
-                                fechasOfrendas.map(fecha => {
-                                    const data = ofrendasPorFecha[fecha];
-                                    const isExp = fechaOfrendaExp === fecha;
+                            {gruposMesesOfrendas.length === 0 ? <p className="text-center text-slate-400 text-xs italic mt-8">Aún no hay ofrendas registradas en las clases.</p> :
+                                gruposMesesOfrendas.map(grupo => {
+                                    const isExpMes = mesOfrendaExp === grupo.id;
                                     return (
-                                        <div key={fecha} className="bg-slate-50 rounded-2xl border border-slate-100 overflow-hidden shadow-sm transition-all duration-300">
-                                            <button onClick={() => setFechaOfrendaExp(isExp ? null : fecha)} className="w-full p-4 flex justify-between items-center bg-white hover:bg-slate-50 transition-colors">
+                                        <div key={grupo.id} className="bg-slate-50 rounded-2xl border border-slate-100 overflow-hidden shadow-sm transition-all duration-300">
+                                            {/* ACORDEÓN MES */}
+                                            <button onClick={() => {setMesOfrendaExp(isExpMes ? null : grupo.id); setSemanaOfrendaExp(null);}} className="w-full p-4 flex justify-between items-center bg-white hover:bg-slate-50 transition-colors">
                                                 <div className="text-left">
-                                                    <p className="font-black text-slate-700 text-sm capitalize">{formatFechaDia(fecha)}</p>
-                                                    <p className="text-[10px] text-slate-400 font-bold mt-0.5">{data.detalles.length} campos reportaron</p>
+                                                    <p className="font-black text-slate-700 text-sm capitalize">{grupo.mesLabel}</p>
+                                                    <p className="text-[9px] text-slate-400 font-bold mt-0.5">{grupo.semanasArray.length} semanas con ofrenda</p>
                                                 </div>
                                                 <div className="flex items-center space-x-3">
-                                                    <span className="bg-amber-100 text-amber-600 font-black text-sm px-3 py-1.5 rounded-xl">${data.total.toFixed(2)}</span>
-                                                    <i className={`fas fa-chevron-down text-slate-300 transition-transform duration-300 ${isExp ? 'rotate-180' : ''}`}></i>
+                                                    <span className="bg-amber-100 text-amber-600 font-black text-sm px-3 py-1.5 rounded-xl">${grupo.total.toFixed(2)}</span>
+                                                    <i className={`fas fa-chevron-down text-slate-300 transition-transform duration-300 ${isExpMes ? 'rotate-180' : ''}`}></i>
                                                 </div>
                                             </button>
                                             
-                                            {isExp && (
-                                                <div className="p-4 pt-0 border-t border-slate-100 bg-slate-50 animate-in slide-in-from-top-2 duration-200">
-                                                    <div className="space-y-2 mt-3">
-                                                        {data.detalles.map((det, i) => (
-                                                            <div key={i} className="flex justify-between items-center text-xs font-bold bg-white p-2.5 rounded-xl border border-slate-100 shadow-sm">
-                                                                <span className="text-slate-600 truncate mr-2"><i className="fas fa-map-marker-alt text-amber-400 mr-1.5"></i>{det.campo}</span>
-                                                                <span className="text-emerald-600 shrink-0">${(Number(det.ofrenda)||0).toFixed(2)}</span>
-                                                            </div>
-                                                        ))}
+                                            {isExpMes && (
+                                                <div className="p-3 pt-0 border-t border-slate-100 bg-slate-50 animate-in slide-in-from-top-2 duration-200 space-y-3">
+                                                    <div className="mt-3 space-y-3">
+                                                        {grupo.semanasArray.map(sem => {
+                                                            const isSemExp = semanaOfrendaExp === `${grupo.id}-${sem.id}`;
+                                                            return (
+                                                                <div key={sem.id} className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+                                                                    {/* ACORDEÓN SEMANA */}
+                                                                    <button onClick={() => setSemanaOfrendaExp(isSemExp ? null : `${grupo.id}-${sem.id}`)} className="w-full p-3 flex justify-between items-center hover:bg-slate-50 transition-colors">
+                                                                        <div className="text-left">
+                                                                            <p className="font-bold text-slate-700 text-xs">{sem.label}</p>
+                                                                            <p className="text-[9px] text-slate-400 font-bold mt-0.5">{sem.registros.length} aportes</p>
+                                                                        </div>
+                                                                        <div className="flex items-center space-x-2 text-[9px] font-black">
+                                                                            <span className="text-amber-600 bg-amber-50 px-2 py-1 rounded border border-amber-100">${sem.total.toFixed(2)}</span>
+                                                                            <i className={`fas fa-chevron-down text-slate-300 transition-transform duration-300 ${isSemExp ? 'rotate-180' : ''}`}></i>
+                                                                        </div>
+                                                                    </button>
+
+                                                                    {/* DETALLES DE LA SEMANA */}
+                                                                    {isSemExp && (
+                                                                        <div className="p-3 border-t border-slate-100 bg-slate-50/50 space-y-2">
+                                                                            {sem.registros.map((det, i) => (
+                                                                                <div key={i} className="flex justify-between items-center text-xs font-bold bg-white p-3 rounded-lg border border-slate-100 shadow-sm">
+                                                                                    <div className="flex flex-col w-2/3 truncate">
+                                                                                        <span className="text-slate-700 truncate"><i className="fas fa-map-marker-alt text-amber-400 mr-1.5"></i>{det.campo}</span>
+                                                                                        <span className="text-[9px] text-slate-400 mt-1 uppercase tracking-wide">{formatFechaDia(det.fecha)}</span>
+                                                                                    </div>
+                                                                                    <span className="text-emerald-600 shrink-0 font-black">${(Number(det.ofrenda)||0).toFixed(2)}</span>
+                                                                                </div>
+                                                                            ))}
+                                                                        </div>
+                                                                    )}
+                                                                </div>
+                                                            );
+                                                        })}
                                                     </div>
                                                 </div>
                                             )}
@@ -426,7 +557,7 @@ function AdminDashboard({
                                         <div key={grupo.id} className="bg-slate-50 rounded-2xl border border-slate-200 overflow-hidden shadow-sm transition-all duration-300">
                                             
                                             {/* ACORDEÓN NIVEL 1: MES */}
-                                            <button onClick={() => setMesAsistenciaExp(isExpMes ? null : grupo.id)} className="w-full p-4 flex justify-between items-center bg-white hover:bg-slate-50 transition-colors">
+                                            <button onClick={() => { setMesAsistenciaExp(isExpMes ? null : grupo.id); setSemanaAsistenciaExp(null); }} className="w-full p-4 flex justify-between items-center bg-white hover:bg-slate-50 transition-colors">
                                                 <div className="text-left">
                                                     <p className="font-black text-slate-700 text-sm capitalize">{grupo.mesLabel}</p>
                                                     <p className="text-[9px] text-slate-400 font-bold mt-0.5">{grupo.semanasArray.length} semanas registradas</p>
@@ -645,13 +776,8 @@ function AdminDashboard({
         const entregasCompletadas = entregasLogistica.filter(e => e.estado === 'Entregado');
         const personalLogistica = activos.filter(m => m.clase === 'LOGISTICA'); 
 
-        const entregasCompletadasPorGrupo = {};
-        entregasCompletadas.forEach(e => {
-            const grp = e.grupo || 'Sin Grupo'; 
-            if (!entregasCompletadasPorGrupo[grp]) entregasCompletadasPorGrupo[grp] = [];
-            entregasCompletadasPorGrupo[grp].push(e);
-        });
-        const gruposCompletados = Object.keys(entregasCompletadasPorGrupo).sort();
+        // USAR NUEVO ALGORITMO PARA LOGÍSTICA TRIPLE ACORDEÓN
+        const gruposLogistica = agruparLogisticaPorGrupo(entregasCompletadas);
 
         const historicoRecibido = inventarioDatos?.historicoRecibido || 0;
         const actualRecibido = inventarioDatos?.actualRecibido || 0;
@@ -810,60 +936,101 @@ function AdminDashboard({
                                     </div></div>
                                 )}
 
-                                {gruposCompletados.length > 0 && (
-                                    <div><h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3 px-2 border-b border-slate-100 pb-2">Rutas Completadas</h4>
+                                {gruposLogistica.length > 0 && (
+                                    <div><h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3 px-2 border-b border-slate-100 pb-2">Historial de Rutas Completadas</h4>
                                     <div className="space-y-3 opacity-95 mt-3">
-                                        {gruposCompletados.map(nombreGrupo => {
-                                            const isExpanded = grupoCompletadoExp === nombreGrupo;
-                                            const entregasDelGrupo = entregasCompletadasPorGrupo[nombreGrupo].sort((a, b) => (b.fechaEntrega || 0) - (a.fechaEntrega || 0));
+                                        {gruposLogistica.map(grupoL => {
+                                            const isGrpExp = grupoCompletadoExp === grupoL.id;
 
                                             return (
-                                                <div key={nombreGrupo} className="bg-slate-50 rounded-2xl border border-slate-200 overflow-hidden shadow-sm transition-all duration-300">
-                                                    <button onClick={() => setGrupoCompletadoExp(isExpanded ? null : nombreGrupo)} className="w-full p-4 flex justify-between items-center bg-white hover:bg-slate-50 transition-colors">
+                                                <div key={grupoL.id} className="bg-slate-50 rounded-[24px] border border-slate-200 overflow-hidden shadow-sm transition-all duration-300">
+                                                    {/* ACORDEÓN NIVEL 1: GRUPO DE REPARTO */}
+                                                    <button onClick={() => {setGrupoCompletadoExp(isGrpExp ? null : grupoL.id); setMesLogisticaExp(null); setSemanaLogisticaExp(null);}} className="w-full p-4 flex justify-between items-center bg-white hover:bg-slate-50 transition-colors">
                                                         <div className="text-left">
-                                                            <p className="font-black text-slate-700 text-sm">{nombreGrupo}</p>
-                                                            <p className="text-[10px] text-slate-500 font-bold mt-0.5">{entregasDelGrupo.length} misiones finalizadas</p>
+                                                            <p className="font-black text-slate-800 text-sm">{grupoL.label}</p>
+                                                            <p className="text-[10px] text-slate-500 font-bold mt-0.5">{grupoL.total} misiones finalizadas</p>
                                                         </div>
                                                         <div className="flex items-center space-x-3">
                                                             <span className="text-emerald-500 font-bold text-lg"><i className="fas fa-check-circle"></i></span>
-                                                            <i className={`fas fa-chevron-down text-slate-300 transition-transform duration-300 ${isExpanded ? 'rotate-180' : ''}`}></i>
+                                                            <i className={`fas fa-chevron-down text-slate-300 transition-transform duration-300 ${isGrpExp ? 'rotate-180' : ''}`}></i>
                                                         </div>
                                                     </button>
                                                     
-                                                    {isExpanded && (
-                                                        <div className="p-4 pt-0 border-t border-slate-100 bg-slate-50 animate-in slide-in-from-top-2 duration-200">
-                                                            <div className="space-y-4 mt-4 max-h-[400px] overflow-y-auto pr-1">
-                                                                {entregasDelGrupo.map(e => {
-                                                                    const totalEntregado = (e.detalles && typeof e.detalles === 'object') ? Object.values(e.detalles).reduce((sum, val) => sum + (Number(val) || 0), 0) : 0;
-                                                                    const diferencia = (Number(e.cantidad) || 0) - totalEntregado;
-                                                                    const fechaObj = e.fechaEntrega ? new Date(e.fechaEntrega) : null;
-                                                                    const fechaFormateada = fechaObj ? `${fechaObj.toLocaleDateString()} a las ${fechaObj.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}` : 'Fecha no registrada';
-
+                                                    {isGrpExp && (
+                                                        <div className="p-3 pt-0 border-t border-slate-100 bg-slate-50 animate-in slide-in-from-top-2 duration-200 space-y-3">
+                                                            <div className="mt-3 space-y-3">
+                                                                {grupoL.mesesArray.map(mes => {
+                                                                    const isMesExp = mesLogisticaExp === `${grupoL.id}-${mes.id}`;
+                                                                    
                                                                     return (
-                                                                        <div key={e.id} className="bg-white p-3 rounded-xl border border-slate-100 shadow-sm relative">
-                                                                            <div className="flex justify-between items-start border-b border-slate-100 pb-2 mb-2">
-                                                                                <div>
-                                                                                    <p className="text-[10px] font-bold text-indigo-500"><i className="far fa-calendar-alt mr-1"></i> {fechaFormateada}</p>
-                                                                                    <p className="text-xs font-black text-slate-700 mt-1">Asignado: {e.cantidad} | Entregado: {totalEntregado}</p>
+                                                                        <div key={mes.id} className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+                                                                            {/* ACORDEÓN NIVEL 2: MES */}
+                                                                            <button onClick={() => {setMesLogisticaExp(isMesExp ? null : `${grupoL.id}-${mes.id}`); setSemanaLogisticaExp(null);}} className="w-full p-3 flex justify-between items-center hover:bg-slate-50 transition-colors">
+                                                                                <div className="text-left">
+                                                                                    <p className="font-bold text-slate-700 text-xs capitalize">{mes.label}</p>
                                                                                 </div>
-                                                                                <span className={`text-[9px] font-black px-2 py-1 rounded-lg ${diferencia === 0 ? 'bg-emerald-100 text-emerald-700' : diferencia > 0 ? 'bg-amber-100 text-amber-700' : 'bg-rose-100 text-rose-700'}`}>
-                                                                                    {diferencia === 0 ? 'Exacto (0)' : diferencia > 0 ? `Sobraron ${diferencia}` : `Faltaron ${Math.abs(diferencia)}`}
-                                                                                </span>
-                                                                            </div>
+                                                                                <div className="flex items-center space-x-2 text-[9px] font-black">
+                                                                                    <span className="text-slate-500 bg-slate-100 px-2 py-0.5 rounded">{mes.total} Rutas</span>
+                                                                                    <i className={`fas fa-chevron-down text-slate-300 transition-transform duration-300 ${isMesExp ? 'rotate-180' : ''}`}></i>
+                                                                                </div>
+                                                                            </button>
 
-                                                                            <div className="grid grid-cols-1 gap-1.5">
-                                                                                {e.detalles && typeof e.detalles === 'object' && Object.entries(e.detalles).map(([campo, cant]) => {
-                                                                                    const creador = e.bloqueos?.[campo]?.nombre;
-                                                                                    return (
-                                                                                        <p key={campo} className="text-[10px] font-bold text-slate-500 truncate flex justify-between bg-slate-50 p-1.5 rounded-lg">
-                                                                                            <span><i className="fas fa-map-marker-alt text-slate-400 mr-1"></i> {campo}</span>
-                                                                                            <span className="text-indigo-600 font-black">{cant} <span className="font-normal text-slate-400 ml-1">{creador ? `(${creador})` : ''}</span></span>
-                                                                                        </p>
-                                                                                    )
-                                                                                })}
-                                                                            </div>
+                                                                            {isMesExp && (
+                                                                                <div className="p-2 border-t border-slate-100 bg-slate-50/50 space-y-2">
+                                                                                    {mes.semanasArray.map(sem => {
+                                                                                        const isSemExp = semanaLogisticaExp === `${grupoL.id}-${mes.id}-${sem.id}`;
+                                                                                        return (
+                                                                                            <div key={sem.id} className="bg-white rounded-lg border border-slate-100 shadow-sm overflow-hidden">
+                                                                                                {/* ACORDEÓN NIVEL 3: SEMANA */}
+                                                                                                <button onClick={() => setSemanaLogisticaExp(isSemExp ? null : `${grupoL.id}-${mes.id}-${sem.id}`)} className="w-full p-2.5 flex justify-between items-center hover:bg-slate-50 transition-colors">
+                                                                                                    <p className="font-bold text-slate-600 text-[11px]">{sem.label}</p>
+                                                                                                    <div className="flex items-center space-x-2 text-[9px] font-bold">
+                                                                                                        <span className="text-amber-500">{sem.total} Rutas</span>
+                                                                                                        <i className={`fas fa-chevron-down text-slate-300 transition-transform duration-300 ${isSemExp ? 'rotate-180' : ''}`}></i>
+                                                                                                    </div>
+                                                                                                </button>
+
+                                                                                                {/* DETALLES DE LAS RUTAS COMPLETADAS EN ESA SEMANA */}
+                                                                                                {isSemExp && (
+                                                                                                    <div className="p-3 border-t border-slate-100 bg-slate-50/30 space-y-3 max-h-[300px] overflow-y-auto">
+                                                                                                        {sem.registros.map(e => {
+                                                                                                            const totalEntregado = (e.detalles && typeof e.detalles === 'object') ? Object.values(e.detalles).reduce((sum, val) => sum + (Number(val) || 0), 0) : 0;
+                                                                                                            const diferencia = (Number(e.cantidad) || 0) - totalEntregado;
+
+                                                                                                            return (
+                                                                                                                <div key={e.id} className="bg-white p-3 rounded-xl border border-slate-200 shadow-sm relative">
+                                                                                                                    <div className="flex justify-between items-start border-b border-slate-100 pb-2 mb-2">
+                                                                                                                        <div>
+                                                                                                                            <p className="text-[10px] font-bold text-indigo-500"><i className="far fa-calendar-alt mr-1"></i> {formatFechaHora(e.fechaEntrega)}</p>
+                                                                                                                            <p className="text-xs font-black text-slate-700 mt-1">Asignado: {e.cantidad} | Entregado: {totalEntregado}</p>
+                                                                                                                        </div>
+                                                                                                                        <span className={`text-[9px] font-black px-2 py-1 rounded-lg ${diferencia === 0 ? 'bg-emerald-100 text-emerald-700' : diferencia > 0 ? 'bg-amber-100 text-amber-700' : 'bg-rose-100 text-rose-700'}`}>
+                                                                                                                            {diferencia === 0 ? 'Exacto' : diferencia > 0 ? `Sobró ${diferencia}` : `Faltó ${Math.abs(diferencia)}`}
+                                                                                                                        </span>
+                                                                                                                    </div>
+                                                                                                                    <div className="grid grid-cols-1 gap-1.5">
+                                                                                                                        {e.detalles && typeof e.detalles === 'object' && Object.entries(e.detalles).map(([campo, cant]) => {
+                                                                                                                            const creador = e.bloqueos?.[campo]?.nombre;
+                                                                                                                            return (
+                                                                                                                                <p key={campo} className="text-[10px] font-bold text-slate-500 truncate flex justify-between bg-slate-50 p-1.5 rounded-lg">
+                                                                                                                                    <span><i className="fas fa-map-marker-alt text-slate-400 mr-1"></i> {campo}</span>
+                                                                                                                                    <span className="text-indigo-600 font-black">{cant} <span className="font-normal text-slate-400 ml-1">{creador ? `(${creador})` : ''}</span></span>
+                                                                                                                                </p>
+                                                                                                                            )
+                                                                                                                        })}
+                                                                                                                    </div>
+                                                                                                                </div>
+                                                                                                            )
+                                                                                                        })}
+                                                                                                    </div>
+                                                                                                )}
+                                                                                            </div>
+                                                                                        );
+                                                                                    })}
+                                                                                </div>
+                                                                            )}
                                                                         </div>
-                                                                    )
+                                                                    );
                                                                 })}
                                                             </div>
                                                         </div>
