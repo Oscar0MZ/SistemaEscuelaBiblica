@@ -21,6 +21,9 @@ function TesoreroDashboard({
     const [fechaDesde, setFechaDesde] = useState('');
     const [fechaHasta, setFechaHasta] = useState('');
 
+    // NUEVO ESTADO: Controla qué transacción individual está abierta para ver su detalle completo
+    const [detalleMovExp, setDetalleMovExp] = useState(null);
+
     const handleSubmit = async (e) => {
         e.preventDefault();
         setLoading(true);
@@ -175,8 +178,7 @@ function TesoreroDashboard({
 
                             return (
                                 <div key={grupo.id} className="bg-white rounded-[24px] border border-slate-100 shadow-sm overflow-hidden transition-all duration-300">
-                                    {/* ACORDEÓN NIVEL 1: MES */}
-                                    <button onClick={() => { setMesExpandido(isExpMes ? null : grupo.id); setSemanaExpandida(null); }} className="w-full p-5 flex justify-between items-center bg-white hover:bg-slate-50 transition-colors">
+                                    <button onClick={() => { setMesExpandido(isExpMes ? null : grupo.id); setSemanaExpandida(null); setDetalleMovExp(null); }} className="w-full p-5 flex justify-between items-center bg-white hover:bg-slate-50 transition-colors">
                                         <div className="text-left">
                                             <span className="font-black text-slate-700 text-lg uppercase tracking-wide">{grupo.mesLabel}</span>
                                             <p className="text-[10px] text-slate-400 mt-1 font-bold">{grupo.semanasArray.length} semanas con actividad</p>
@@ -195,7 +197,6 @@ function TesoreroDashboard({
                                     {isExpMes && (
                                         <div className="p-4 pt-0 border-t border-slate-100 bg-slate-50 animate-in slide-in-from-top-2 duration-200">
                                             
-                                            {/* RESUMEN DEL MES */}
                                             <div className="flex justify-between p-3 bg-white rounded-xl shadow-sm mb-4 mt-4 border border-slate-100">
                                                 <div className="text-center w-1/2 border-r border-slate-100">
                                                     <p className="text-[9px] font-bold text-emerald-600 uppercase tracking-widest mb-1">Ingresos</p>
@@ -207,13 +208,12 @@ function TesoreroDashboard({
                                                 </div>
                                             </div>
 
-                                            {/* ACORDEÓN NIVEL 2: SEMANAS */}
                                             <div className="space-y-3">
                                                 {grupo.semanasArray.map(sem => {
                                                     const isSemExp = semanaExpandida === `${grupo.id}-${sem.id}`;
                                                     return (
                                                         <div key={sem.id} className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-                                                            <button onClick={() => setSemanaExpandida(isSemExp ? null : `${grupo.id}-${sem.id}`)} className="w-full p-3 flex justify-between items-center hover:bg-slate-50 transition-colors">
+                                                            <button onClick={() => { setSemanaExpandida(isSemExp ? null : `${grupo.id}-${sem.id}`); setDetalleMovExp(null); }} className="w-full p-3 flex justify-between items-center hover:bg-slate-50 transition-colors">
                                                                 <div className="text-left">
                                                                     <p className="font-bold text-slate-700 text-xs">{sem.label}</p>
                                                                     <p className="text-[9px] text-slate-400 font-bold mt-0.5">{sem.registros.length} movs</p>
@@ -227,26 +227,41 @@ function TesoreroDashboard({
                                                                 </div>
                                                             </button>
 
-                                                            {/* DETALLES DE LOS MOVIMIENTOS EN ESA SEMANA */}
                                                             {isSemExp && (
                                                                 <div className="p-3 border-t border-slate-100 bg-slate-50/50 space-y-2">
                                                                     {sem.registros.map(mov => {
                                                                         const esIngreso = mov.tipo !== 'egreso';
-                                                                        const fechaObj = new Date(mov.timestamp);
-                                                                        const hora = fechaObj.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+                                                                        const fechaObj = new Date(mov.timestamp || mov.fecha);
+                                                                        const hora = mov.timestamp ? fechaObj.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : '';
+                                                                        const isMovExp = detalleMovExp === mov.id;
                                                                         
                                                                         return (
-                                                                            <div key={mov.id} className="bg-white p-3 rounded-lg border border-slate-100 shadow-sm flex justify-between items-center relative overflow-hidden group">
+                                                                            <div key={mov.id} onClick={() => setDetalleMovExp(isMovExp ? null : mov.id)} className="bg-white p-3 rounded-lg border border-slate-100 shadow-sm relative overflow-hidden cursor-pointer transition-colors hover:bg-slate-50">
                                                                                 <div className={`absolute left-0 top-0 bottom-0 w-1 ${esIngreso ? 'bg-emerald-400' : 'bg-rose-400'}`}></div>
-                                                                                <div className="pl-2 w-2/3 pr-2">
-                                                                                    <p className="font-bold text-slate-700 text-xs truncate">{mov.descripcion}</p>
-                                                                                    <p className="text-[9px] text-slate-400 font-bold uppercase mt-0.5">{formatoFecha(mov.fecha)} a las {hora}</p>
+                                                                                <div className="flex justify-between items-start">
+                                                                                    <div className="pl-2 w-[70%] pr-2">
+                                                                                        <p className={`font-bold text-slate-700 text-xs transition-all ${isMovExp ? 'whitespace-normal break-words' : 'truncate'}`}>{mov.descripcion}</p>
+                                                                                        <p className="text-[9px] text-slate-400 font-bold uppercase mt-1">
+                                                                                            {formatoFecha(mov.fecha)} {hora && `a las ${hora}`}
+                                                                                        </p>
+                                                                                    </div>
+                                                                                    <div className="text-right w-[30%] flex flex-col items-end">
+                                                                                        <span className={`text-xs font-black px-2 py-1 rounded-lg ${esIngreso ? 'bg-emerald-50 text-emerald-600' : 'bg-rose-50 text-rose-600'}`}>
+                                                                                            {esIngreso ? '+' : '-'}${Number(mov.monto).toFixed(2)}
+                                                                                        </span>
+                                                                                        <i className={`fas fa-chevron-down text-[8px] text-slate-300 mt-2 transition-transform duration-300 ${isMovExp ? 'rotate-180' : ''}`}></i>
+                                                                                    </div>
                                                                                 </div>
-                                                                                <div className="text-right w-1/3">
-                                                                                    <span className={`text-xs font-black px-2 py-1 rounded-lg ${esIngreso ? 'bg-emerald-50 text-emerald-600' : 'bg-rose-50 text-rose-600'}`}>
-                                                                                        {esIngreso ? '+' : '-'}${Number(mov.monto).toFixed(2)}
-                                                                                    </span>
-                                                                                </div>
+                                                                                
+                                                                                {/* DESPLIEGUE DEL DETALLE COMPLETO DE LA TRANSACCIÓN */}
+                                                                                {isMovExp && (
+                                                                                    <div className="pl-2 mt-3 pt-2 border-t border-slate-50 animate-in fade-in duration-200">
+                                                                                        <p className="text-[10px] text-slate-500 leading-relaxed"><strong className="text-slate-600">Detalle completo:</strong> {mov.descripcion}</p>
+                                                                                        {mov.registradoPor && (
+                                                                                            <p className="text-[10px] text-slate-500 mt-1"><strong className="text-slate-600">Por:</strong> {mov.registradoPor}</p>
+                                                                                        )}
+                                                                                    </div>
+                                                                                )}
                                                                             </div>
                                                                         );
                                                                     })}
@@ -327,8 +342,7 @@ function TesoreroDashboard({
 
                             return (
                                 <div key={grupo.id} className="bg-white rounded-[24px] border border-slate-100 shadow-sm overflow-hidden transition-all duration-300">
-                                    {/* ACORDEÓN NIVEL 1: MES (REPORTE) */}
-                                    <button onClick={() => { setRepMesExpandido(isExpMes ? null : grupo.id); setRepSemanaExpandida(null); }} className="w-full p-4 flex justify-between items-center bg-white hover:bg-slate-50 transition-colors">
+                                    <button onClick={() => { setRepMesExpandido(isExpMes ? null : grupo.id); setRepSemanaExpandida(null); setDetalleMovExp(null); }} className="w-full p-4 flex justify-between items-center bg-white hover:bg-slate-50 transition-colors">
                                         <div className="text-left">
                                             <span className="font-bold text-slate-700 text-sm uppercase">{grupo.mesLabel}</span>
                                         </div>
@@ -342,12 +356,11 @@ function TesoreroDashboard({
                                     {isExpMes && (
                                         <div className="p-4 pt-0 border-t border-slate-100 bg-slate-50 animate-in slide-in-from-top-2 duration-200">
                                             <div className="space-y-3 mt-4">
-                                                {/* ACORDEÓN NIVEL 2: SEMANAS (REPORTE) */}
                                                 {grupo.semanasArray.map(sem => {
                                                     const isSemExp = repSemanaExpandida === `${grupo.id}-${sem.id}`;
                                                     return (
                                                         <div key={sem.id} className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-                                                            <button onClick={() => setRepSemanaExpandida(isSemExp ? null : `${grupo.id}-${sem.id}`)} className="w-full p-3 flex justify-between items-center hover:bg-slate-50 transition-colors">
+                                                            <button onClick={() => { setRepSemanaExpandida(isSemExp ? null : `${grupo.id}-${sem.id}`); setDetalleMovExp(null); }} className="w-full p-3 flex justify-between items-center hover:bg-slate-50 transition-colors">
                                                                 <div className="text-left">
                                                                     <p className="font-bold text-slate-700 text-xs">{sem.label}</p>
                                                                     <p className="text-[9px] text-slate-400 font-bold mt-0.5">{sem.registros.length} movs</p>
@@ -361,23 +374,41 @@ function TesoreroDashboard({
                                                                 </div>
                                                             </button>
 
-                                                            {/* DETALLES DE LOS MOVIMIENTOS FILTRADOS */}
                                                             {isSemExp && (
                                                                 <div className="p-3 border-t border-slate-100 bg-slate-50/50 space-y-2">
                                                                     {sem.registros.map(mov => {
                                                                         const esIngreso = mov.tipo !== 'egreso';
+                                                                        const fechaObj = new Date(mov.timestamp || mov.fecha);
+                                                                        const hora = mov.timestamp ? fechaObj.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : '';
+                                                                        const isMovExp = detalleMovExp === mov.id;
+
                                                                         return (
-                                                                            <div key={mov.id} className="bg-white p-3 rounded-lg border border-slate-100 shadow-sm flex justify-between items-center relative overflow-hidden group">
+                                                                            <div key={mov.id} onClick={() => setDetalleMovExp(isMovExp ? null : mov.id)} className="bg-white p-3 rounded-lg border border-slate-100 shadow-sm relative overflow-hidden cursor-pointer transition-colors hover:bg-slate-50">
                                                                                 <div className={`absolute left-0 top-0 bottom-0 w-1 ${esIngreso ? 'bg-emerald-400' : 'bg-rose-400'}`}></div>
-                                                                                <div className="pl-2 w-2/3 pr-2">
-                                                                                    <p className="font-bold text-slate-700 text-xs truncate">{mov.descripcion}</p>
-                                                                                    <p className="text-[9px] text-slate-400 font-bold uppercase mt-0.5">{formatoFecha(mov.fecha)}</p>
+                                                                                <div className="flex justify-between items-start">
+                                                                                    <div className="pl-2 w-[70%] pr-2">
+                                                                                        <p className={`font-bold text-slate-700 text-xs transition-all ${isMovExp ? 'whitespace-normal break-words' : 'truncate'}`}>{mov.descripcion}</p>
+                                                                                        <p className="text-[9px] text-slate-400 font-bold uppercase mt-1">
+                                                                                            {formatoFecha(mov.fecha)} {hora && `a las ${hora}`}
+                                                                                        </p>
+                                                                                    </div>
+                                                                                    <div className="text-right w-[30%] flex flex-col items-end">
+                                                                                        <span className={`text-xs font-black px-2 py-1 rounded-lg ${esIngreso ? 'bg-emerald-50 text-emerald-600' : 'bg-rose-50 text-rose-600'}`}>
+                                                                                            {esIngreso ? '+' : '-'}${Number(mov.monto).toFixed(2)}
+                                                                                        </span>
+                                                                                        <i className={`fas fa-chevron-down text-[8px] text-slate-300 mt-2 transition-transform duration-300 ${isMovExp ? 'rotate-180' : ''}`}></i>
+                                                                                    </div>
                                                                                 </div>
-                                                                                <div className="text-right w-1/3">
-                                                                                    <span className={`text-xs font-black px-2 py-1 rounded-lg ${esIngreso ? 'bg-emerald-50 text-emerald-600' : 'bg-rose-50 text-rose-600'}`}>
-                                                                                        {esIngreso ? '+' : '-'}${Number(mov.monto).toFixed(2)}
-                                                                                    </span>
-                                                                                </div>
+
+                                                                                {/* DESPLIEGUE DEL DETALLE COMPLETO DE LA TRANSACCIÓN */}
+                                                                                {isMovExp && (
+                                                                                    <div className="pl-2 mt-3 pt-2 border-t border-slate-50 animate-in fade-in duration-200">
+                                                                                        <p className="text-[10px] text-slate-500 leading-relaxed"><strong className="text-slate-600">Detalle completo:</strong> {mov.descripcion}</p>
+                                                                                        {mov.registradoPor && (
+                                                                                            <p className="text-[10px] text-slate-500 mt-1"><strong className="text-slate-600">Por:</strong> {mov.registradoPor}</p>
+                                                                                        )}
+                                                                                    </div>
+                                                                                )}
                                                                             </div>
                                                                         );
                                                                     })}
