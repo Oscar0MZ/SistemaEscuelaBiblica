@@ -11,9 +11,13 @@ function TesoreroDashboard({
     const [descripcion, setDescripcion] = useState('');
     const [cargando, setLoading] = useState(false);
 
-    // Estados para el Acordeón Mensual y Filtros
+    // Estados para el Acordeón Doble (Historial)
     const [mesExpandido, setMesExpandido] = useState(null);
-    const [repMesExpandido, setRepMesExpandido] = useState(null); // Acordeón para reportes
+    const [semanaExpandida, setSemanaExpandida] = useState(null);
+    
+    // Estados para el Acordeón Doble (Reportes)
+    const [repMesExpandido, setRepMesExpandido] = useState(null); 
+    const [repSemanaExpandida, setRepSemanaExpandida] = useState(null);
     const [fechaDesde, setFechaDesde] = useState('');
     const [fechaHasta, setFechaHasta] = useState('');
 
@@ -26,8 +30,10 @@ function TesoreroDashboard({
 
         if (exito) {
             setMonto(''); setDescripcion(''); setVistaActual('historial'); 
-            const hoy = new Date().toLocaleDateString('en-CA').substring(0, 7);
-            setMesExpandido(hoy);
+            const hoy = new Date();
+            const mesKey = `${hoy.getFullYear()}-${(hoy.getMonth()+1).toString().padStart(2, '0')}`;
+            setMesExpandido(mesKey);
+            setSemanaExpandida(null);
         }
         setLoading(false);
     };
@@ -37,25 +43,47 @@ function TesoreroDashboard({
         return `${p[2]}/${p[1]}/${p[0]}`; 
     };
 
-    const nombreMes = (mesKey) => {
-        if (mesKey === 'Desconocido') return 'Fecha Desconocida';
-        const [y, m] = mesKey.split('-');
-        const meses = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
-        return `${meses[parseInt(m, 10) - 1]} ${y}`;
+    // Función Matemática: Calcular semana del mes
+    const getWeekOfMonth = (year, month, day) => {
+        const firstDayOfMonth = new Date(year, month - 1, 1).getDay(); 
+        return Math.ceil((day + firstDayOfMonth) / 7);
     };
 
-    // Acordeón Historial
-    const historialPorMes = {};
-    historialIngresos.forEach(mov => {
-        const mesKey = mov.fecha ? mov.fecha.substring(0, 7) : 'Desconocido';
-        if (!historialPorMes[mesKey]) historialPorMes[mesKey] = { ingresos: 0, egresos: 0, movimientos: [] };
-        if (mov.tipo === 'egreso') historialPorMes[mesKey].egresos += Number(mov.monto);
-        else historialPorMes[mesKey].ingresos += Number(mov.monto);
-        historialPorMes[mesKey].movimientos.push(mov);
-    });
-    const mesesOrdenados = Object.keys(historialPorMes).sort((a,b) => b.localeCompare(a));
+    const mesesNombresCompletos = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
 
-    // Acordeón Reportes (Filtrados)
+    // Función centralizada para agrupar datos financieros en Doble Acordeón
+    const agruparFinanzas = (data) => {
+        if (!data) return [];
+        const grupos = {};
+        data.forEach(h => {
+            const p = (h.fecha || '').split('-');
+            if(p.length === 3) {
+                const y = parseInt(p[0]); const m = parseInt(p[1]); const d = parseInt(p[2]);
+                const mesKey = `${y}-${p[1]}`;
+                const mesLabel = `${mesesNombresCompletos[m-1]} ${y}`;
+                const semKey = `Semana ${getWeekOfMonth(y, m, d)}`;
+
+                if(!grupos[mesKey]) grupos[mesKey] = { mesLabel, ingresos: 0, egresos: 0, semanas: {} };
+                if(h.tipo === 'egreso') grupos[mesKey].egresos += Number(h.monto) || 0;
+                else grupos[mesKey].ingresos += Number(h.monto) || 0;
+
+                if(!grupos[mesKey].semanas[semKey]) grupos[mesKey].semanas[semKey] = { label: semKey, ingresos: 0, egresos: 0, registros: [] };
+                if(h.tipo === 'egreso') grupos[mesKey].semanas[semKey].egresos += Number(h.monto) || 0;
+                else grupos[mesKey].semanas[semKey].ingresos += Number(h.monto) || 0;
+                
+                grupos[mesKey].semanas[semKey].registros.push(h);
+            }
+        });
+        return Object.keys(grupos).sort((a,b) => b.localeCompare(a)).map(k => {
+            const semanasArray = Object.keys(grupos[k].semanas).sort().map(sk => ({ id: sk, ...grupos[k].semanas[sk] }));
+            return { id: k, ...grupos[k], semanasArray };
+        });
+    };
+
+    // Agrupación para la pestaña de Historial
+    const gruposMesesHistorial = agruparFinanzas(historialIngresos);
+
+    // Filtrado y Agrupación para la pestaña de Reportes
     const movsFiltrados = historialIngresos.filter(mov => {
         if (fechaDesde && mov.fecha < fechaDesde) return false;
         if (fechaHasta && mov.fecha > fechaHasta) return false;
@@ -63,19 +91,13 @@ function TesoreroDashboard({
     });
 
     let repIngresos = 0; let repEgresos = 0;
-    const repPorMes = {};
     movsFiltrados.forEach(mov => {
         if (mov.tipo === 'egreso') repEgresos += Number(mov.monto);
         else repIngresos += Number(mov.monto);
-
-        const mKey = mov.fecha ? mov.fecha.substring(0, 7) : 'Desconocido';
-        if (!repPorMes[mKey]) repPorMes[mKey] = { ingresos: 0, egresos: 0, movimientos: [] };
-        if (mov.tipo === 'egreso') repPorMes[mKey].egresos += Number(mov.monto);
-        else repPorMes[mKey].ingresos += Number(mov.monto);
-        repPorMes[mKey].movimientos.push(mov);
     });
     const repBalance = repIngresos - repEgresos;
-    const repMesesOrdenados = Object.keys(repPorMes).sort((a,b) => b.localeCompare(a));
+    
+    const gruposMesesReportes = agruparFinanzas(movsFiltrados);
 
     const NavButton = ({ id, icon, label }) => (
         <button onClick={() => setVistaActual(id)} className={`flex flex-col items-center justify-center w-[90px] h-14 rounded-2xl transition-all ${vistaActual === id ? 'text-amber-600 bg-amber-50 font-black' : 'text-slate-400 hover:text-slate-600 font-bold'}`}>
@@ -138,73 +160,100 @@ function TesoreroDashboard({
             <div className="space-y-4 animate-in slide-in-from-right duration-300 pt-2 pb-24">
                 <div className="px-2 mb-4">
                     <h2 className="text-2xl font-black text-slate-800">Libro Mayor</h2>
-                    <p className="text-slate-400 text-xs mt-1">Historial organizado por meses</p>
+                    <p className="text-slate-400 text-xs mt-1">Historial organizado por mes y semana</p>
                 </div>
                 
                 <div className="space-y-3 px-1">
-                    {mesesOrdenados.length === 0 ? (
+                    {gruposMesesHistorial.length === 0 ? (
                         <div className="text-center p-8 bg-slate-50 rounded-[32px] mt-4 border-2 border-dashed border-slate-200">
                             <i className="fas fa-book-open text-3xl text-slate-300 mb-3"></i>
                             <p className="text-sm font-bold text-slate-500">El libro de registros está vacío.</p>
                         </div>
                     ) : (
-                        mesesOrdenados.map(mesKey => {
-                            const data = historialPorMes[mesKey];
-                            const isExpanded = mesExpandido === mesKey;
+                        gruposMesesHistorial.map(grupo => {
+                            const isExpMes = mesExpandido === grupo.id;
 
                             return (
-                                <div key={mesKey} className="bg-white rounded-[24px] border border-slate-100 shadow-sm overflow-hidden transition-all duration-300">
-                                    <button onClick={() => setMesExpandido(isExpanded ? null : mesKey)} className="w-full p-5 flex justify-between items-center bg-white hover:bg-slate-50 transition-colors">
+                                <div key={grupo.id} className="bg-white rounded-[24px] border border-slate-100 shadow-sm overflow-hidden transition-all duration-300">
+                                    {/* ACORDEÓN NIVEL 1: MES */}
+                                    <button onClick={() => { setMesExpandido(isExpMes ? null : grupo.id); setSemanaExpandida(null); }} className="w-full p-5 flex justify-between items-center bg-white hover:bg-slate-50 transition-colors">
                                         <div className="text-left">
-                                            <span className="font-black text-slate-700 text-lg uppercase tracking-wide">{nombreMes(mesKey)}</span>
-                                            <p className="text-[10px] text-slate-400 mt-1 font-bold">{data.movimientos.length} movimientos</p>
+                                            <span className="font-black text-slate-700 text-lg uppercase tracking-wide">{grupo.mesLabel}</span>
+                                            <p className="text-[10px] text-slate-400 mt-1 font-bold">{grupo.semanasArray.length} semanas con actividad</p>
                                         </div>
                                         <div className="flex items-center space-x-3">
                                             <div className="text-right mr-2 hidden sm:block">
-                                                <p className="text-[10px] font-bold text-emerald-500">+${data.ingresos.toFixed(2)}</p>
-                                                <p className="text-[10px] font-bold text-rose-500">-${data.egresos.toFixed(2)}</p>
+                                                <p className="text-[10px] font-bold text-emerald-500">+${grupo.ingresos.toFixed(2)}</p>
+                                                <p className="text-[10px] font-bold text-rose-500">-${grupo.egresos.toFixed(2)}</p>
                                             </div>
-                                            <div className={`w-8 h-8 flex items-center justify-center rounded-xl transition-colors shadow-sm ${isExpanded ? 'bg-amber-500 text-white' : 'bg-slate-50 text-slate-400'}`}>
-                                                <i className={`fas fa-chevron-down transition-transform duration-300 ${isExpanded ? 'rotate-180' : ''}`}></i>
+                                            <div className={`w-8 h-8 flex items-center justify-center rounded-xl transition-colors shadow-sm ${isExpMes ? 'bg-amber-500 text-white' : 'bg-slate-50 text-slate-400'}`}>
+                                                <i className={`fas fa-chevron-down transition-transform duration-300 ${isExpMes ? 'rotate-180' : ''}`}></i>
                                             </div>
                                         </div>
                                     </button>
 
-                                    {isExpanded && (
+                                    {isExpMes && (
                                         <div className="p-4 pt-0 border-t border-slate-100 bg-slate-50 animate-in slide-in-from-top-2 duration-200">
-                                            <div className="flex justify-between p-3 bg-white rounded-xl shadow-sm mb-3 mt-4 border border-slate-100">
+                                            
+                                            {/* RESUMEN DEL MES */}
+                                            <div className="flex justify-between p-3 bg-white rounded-xl shadow-sm mb-4 mt-4 border border-slate-100">
                                                 <div className="text-center w-1/2 border-r border-slate-100">
                                                     <p className="text-[9px] font-bold text-emerald-600 uppercase tracking-widest mb-1">Ingresos</p>
-                                                    <p className="font-black text-emerald-500">${data.ingresos.toFixed(2)}</p>
+                                                    <p className="font-black text-emerald-500">${grupo.ingresos.toFixed(2)}</p>
                                                 </div>
                                                 <div className="text-center w-1/2">
                                                     <p className="text-[9px] font-bold text-rose-600 uppercase tracking-widest mb-1">Retiros</p>
-                                                    <p className="font-black text-rose-500">${data.egresos.toFixed(2)}</p>
+                                                    <p className="font-black text-rose-500">${grupo.egresos.toFixed(2)}</p>
                                                 </div>
                                             </div>
 
-                                            <div className="space-y-2 max-h-[350px] overflow-y-auto pr-1">
-                                                {data.movimientos.map(mov => {
-                                                    const fechaObj = new Date(mov.timestamp);
-                                                    const hora = fechaObj.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
-                                                    const esIngreso = mov.tipo !== 'egreso';
-
+                                            {/* ACORDEÓN NIVEL 2: SEMANAS */}
+                                            <div className="space-y-3">
+                                                {grupo.semanasArray.map(sem => {
+                                                    const isSemExp = semanaExpandida === `${grupo.id}-${sem.id}`;
                                                     return (
-                                                        <div key={mov.id} className="bg-white p-3 rounded-xl border border-slate-100 shadow-sm flex justify-between items-center relative overflow-hidden group">
-                                                            <div className={`absolute left-0 top-0 bottom-0 w-1 ${esIngreso ? 'bg-emerald-400' : 'bg-rose-400'}`}></div>
-                                                            <div className="pl-3 w-2/3">
-                                                                <p className="font-bold text-slate-700 text-xs truncate">{mov.descripcion}</p>
-                                                                <p className="text-[9px] text-slate-400 mt-1 font-bold">
-                                                                    {formatoFecha(mov.fecha)} a las {hora}
-                                                                </p>
-                                                            </div>
-                                                            <div className="text-right w-1/3">
-                                                                <p className={`font-black text-sm ${esIngreso ? 'text-emerald-500' : 'text-rose-500'}`}>
-                                                                    {esIngreso ? '+' : '-'} ${Number(mov.monto).toFixed(2)}
-                                                                </p>
-                                                            </div>
+                                                        <div key={sem.id} className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+                                                            <button onClick={() => setSemanaExpandida(isSemExp ? null : `${grupo.id}-${sem.id}`)} className="w-full p-3 flex justify-between items-center hover:bg-slate-50 transition-colors">
+                                                                <div className="text-left">
+                                                                    <p className="font-bold text-slate-700 text-xs">{sem.label}</p>
+                                                                    <p className="text-[9px] text-slate-400 font-bold mt-0.5">{sem.registros.length} movs</p>
+                                                                </div>
+                                                                <div className="flex items-center space-x-2 text-[9px] font-black">
+                                                                    <div className="flex flex-col items-end mr-1">
+                                                                        <span className="text-emerald-500">+${sem.ingresos.toFixed(2)}</span>
+                                                                        <span className="text-rose-500">-${sem.egresos.toFixed(2)}</span>
+                                                                    </div>
+                                                                    <i className={`fas fa-chevron-down text-slate-300 transition-transform duration-300 ${isSemExp ? 'rotate-180' : ''}`}></i>
+                                                                </div>
+                                                            </button>
+
+                                                            {/* DETALLES DE LOS MOVIMIENTOS EN ESA SEMANA */}
+                                                            {isSemExp && (
+                                                                <div className="p-3 border-t border-slate-100 bg-slate-50/50 space-y-2">
+                                                                    {sem.registros.map(mov => {
+                                                                        const esIngreso = mov.tipo !== 'egreso';
+                                                                        const fechaObj = new Date(mov.timestamp);
+                                                                        const hora = fechaObj.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+                                                                        
+                                                                        return (
+                                                                            <div key={mov.id} className="bg-white p-3 rounded-lg border border-slate-100 shadow-sm flex justify-between items-center relative overflow-hidden group">
+                                                                                <div className={`absolute left-0 top-0 bottom-0 w-1 ${esIngreso ? 'bg-emerald-400' : 'bg-rose-400'}`}></div>
+                                                                                <div className="pl-2 w-2/3 pr-2">
+                                                                                    <p className="font-bold text-slate-700 text-xs truncate">{mov.descripcion}</p>
+                                                                                    <p className="text-[9px] text-slate-400 font-bold uppercase mt-0.5">{formatoFecha(mov.fecha)} a las {hora}</p>
+                                                                                </div>
+                                                                                <div className="text-right w-1/3">
+                                                                                    <span className={`text-xs font-black px-2 py-1 rounded-lg ${esIngreso ? 'bg-emerald-50 text-emerald-600' : 'bg-rose-50 text-rose-600'}`}>
+                                                                                        {esIngreso ? '+' : '-'}${Number(mov.monto).toFixed(2)}
+                                                                                    </span>
+                                                                                </div>
+                                                                            </div>
+                                                                        );
+                                                                    })}
+                                                                </div>
+                                                            )}
                                                         </div>
-                                                    )
+                                                    );
                                                 })}
                                             </div>
                                         </div>
@@ -265,50 +314,77 @@ function TesoreroDashboard({
                 )}
 
                 <h3 className="font-bold text-slate-700 text-sm mt-6 px-2 border-b border-slate-100 pb-2">
-                    Detalle de Transacciones (Acordeón)
+                    Detalle de Transacciones Filtradas
                 </h3>
                 <div className="space-y-3 px-1">
-                    {repMesesOrdenados.length === 0 ? (
+                    {gruposMesesReportes.length === 0 ? (
                         <div className="text-center p-6 bg-slate-50 rounded-2xl mt-2 border border-slate-100">
                             <p className="text-xs font-bold text-slate-400">Ajusta las fechas para ver resultados.</p>
                         </div>
                     ) : (
-                        repMesesOrdenados.map(mesKey => {
-                            const data = repPorMes[mesKey];
-                            const isExpanded = repMesExpandido === mesKey;
+                        gruposMesesReportes.map(grupo => {
+                            const isExpMes = repMesExpandido === grupo.id;
 
                             return (
-                                <div key={mesKey} className="bg-white rounded-[24px] border border-slate-100 shadow-sm overflow-hidden transition-all duration-300">
-                                    <button onClick={() => setRepMesExpandido(isExpanded ? null : mesKey)} className="w-full p-4 flex justify-between items-center bg-white hover:bg-slate-50 transition-colors">
+                                <div key={grupo.id} className="bg-white rounded-[24px] border border-slate-100 shadow-sm overflow-hidden transition-all duration-300">
+                                    {/* ACORDEÓN NIVEL 1: MES (REPORTE) */}
+                                    <button onClick={() => { setRepMesExpandido(isExpMes ? null : grupo.id); setRepSemanaExpandida(null); }} className="w-full p-4 flex justify-between items-center bg-white hover:bg-slate-50 transition-colors">
                                         <div className="text-left">
-                                            <span className="font-bold text-slate-700 text-sm uppercase">{nombreMes(mesKey)}</span>
+                                            <span className="font-bold text-slate-700 text-sm uppercase">{grupo.mesLabel}</span>
                                         </div>
                                         <div className="flex items-center space-x-3">
-                                            <div className={`w-8 h-8 flex items-center justify-center rounded-xl transition-colors shadow-sm ${isExpanded ? 'bg-amber-500 text-white' : 'bg-slate-50 text-slate-400'}`}>
-                                                <i className={`fas fa-chevron-down transition-transform duration-300 ${isExpanded ? 'rotate-180' : ''}`}></i>
+                                            <div className={`w-8 h-8 flex items-center justify-center rounded-xl transition-colors shadow-sm ${isExpMes ? 'bg-amber-500 text-white' : 'bg-slate-50 text-slate-400'}`}>
+                                                <i className={`fas fa-chevron-down transition-transform duration-300 ${isExpMes ? 'rotate-180' : ''}`}></i>
                                             </div>
                                         </div>
                                     </button>
 
-                                    {isExpanded && (
+                                    {isExpMes && (
                                         <div className="p-4 pt-0 border-t border-slate-100 bg-slate-50 animate-in slide-in-from-top-2 duration-200">
-                                            <div className="space-y-2 max-h-[350px] overflow-y-auto pr-1 mt-4">
-                                                {data.movimientos.map(mov => {
-                                                    const esIngreso = mov.tipo !== 'egreso';
+                                            <div className="space-y-3 mt-4">
+                                                {/* ACORDEÓN NIVEL 2: SEMANAS (REPORTE) */}
+                                                {grupo.semanasArray.map(sem => {
+                                                    const isSemExp = repSemanaExpandida === `${grupo.id}-${sem.id}`;
                                                     return (
-                                                        <div key={mov.id} className="bg-white p-3 rounded-xl border border-slate-100 shadow-sm flex justify-between items-center relative overflow-hidden group">
-                                                            <div className={`absolute left-0 top-0 bottom-0 w-1 ${esIngreso ? 'bg-emerald-400' : 'bg-rose-400'}`}></div>
-                                                            <div className="pl-2 w-2/3 pr-2">
-                                                                <p className="font-bold text-slate-700 text-xs truncate">{mov.descripcion}</p>
-                                                                <p className="text-[9px] text-slate-400 font-bold uppercase mt-0.5">{formatoFecha(mov.fecha)}</p>
-                                                            </div>
-                                                            <div className="text-right w-1/3">
-                                                                <span className={`text-xs font-black px-2 py-1 rounded-lg ${esIngreso ? 'bg-emerald-50 text-emerald-600' : 'bg-rose-50 text-rose-600'}`}>
-                                                                    {esIngreso ? '+' : '-'}${Number(mov.monto).toFixed(2)}
-                                                                </span>
-                                                            </div>
+                                                        <div key={sem.id} className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+                                                            <button onClick={() => setRepSemanaExpandida(isSemExp ? null : `${grupo.id}-${sem.id}`)} className="w-full p-3 flex justify-between items-center hover:bg-slate-50 transition-colors">
+                                                                <div className="text-left">
+                                                                    <p className="font-bold text-slate-700 text-xs">{sem.label}</p>
+                                                                    <p className="text-[9px] text-slate-400 font-bold mt-0.5">{sem.registros.length} movs</p>
+                                                                </div>
+                                                                <div className="flex items-center space-x-2 text-[9px] font-black">
+                                                                    <div className="flex flex-col items-end mr-1">
+                                                                        <span className="text-emerald-500">+${sem.ingresos.toFixed(2)}</span>
+                                                                        <span className="text-rose-500">-${sem.egresos.toFixed(2)}</span>
+                                                                    </div>
+                                                                    <i className={`fas fa-chevron-down text-slate-300 transition-transform duration-300 ${isSemExp ? 'rotate-180' : ''}`}></i>
+                                                                </div>
+                                                            </button>
+
+                                                            {/* DETALLES DE LOS MOVIMIENTOS FILTRADOS */}
+                                                            {isSemExp && (
+                                                                <div className="p-3 border-t border-slate-100 bg-slate-50/50 space-y-2">
+                                                                    {sem.registros.map(mov => {
+                                                                        const esIngreso = mov.tipo !== 'egreso';
+                                                                        return (
+                                                                            <div key={mov.id} className="bg-white p-3 rounded-lg border border-slate-100 shadow-sm flex justify-between items-center relative overflow-hidden group">
+                                                                                <div className={`absolute left-0 top-0 bottom-0 w-1 ${esIngreso ? 'bg-emerald-400' : 'bg-rose-400'}`}></div>
+                                                                                <div className="pl-2 w-2/3 pr-2">
+                                                                                    <p className="font-bold text-slate-700 text-xs truncate">{mov.descripcion}</p>
+                                                                                    <p className="text-[9px] text-slate-400 font-bold uppercase mt-0.5">{formatoFecha(mov.fecha)}</p>
+                                                                                </div>
+                                                                                <div className="text-right w-1/3">
+                                                                                    <span className={`text-xs font-black px-2 py-1 rounded-lg ${esIngreso ? 'bg-emerald-50 text-emerald-600' : 'bg-rose-50 text-rose-600'}`}>
+                                                                                        {esIngreso ? '+' : '-'}${Number(mov.monto).toFixed(2)}
+                                                                                    </span>
+                                                                                </div>
+                                                                            </div>
+                                                                        );
+                                                                    })}
+                                                                </div>
+                                                            )}
                                                         </div>
-                                                    )
+                                                    );
                                                 })}
                                             </div>
                                         </div>
