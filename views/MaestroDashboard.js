@@ -18,6 +18,9 @@ function MaestroDashboard({
     const [edadMin, setEdadMin] = useState('');
     const [edadMax, setEdadMax] = useState('');
 
+    // NUEVO ESTADO PARA ACORDEÓN DE HISTORIAL DE CLASES
+    const [mesHistorialExp, setMesHistorialExp] = useState(null);
+
     const [modalCambioCampo, setModalCambioCampo] = useState(false);
     const [campoSeleccionado, setCampoSeleccionado] = useState(''); 
     
@@ -110,7 +113,6 @@ function MaestroDashboard({
         if (exito) setVistaActual('inicio');
     };
 
-    // --- CORRECCIÓN DE LA MAGIA DEL CAMBIO DE CAMPO ---
     const cambiarCampo = async (nuevoCampo) => {
         if (!nuevoCampo || nuevoCampo === datosUsuarioActual.campo) return;
         
@@ -121,20 +123,16 @@ function MaestroDashboard({
         }
 
         try {
-            document.body.style.opacity = '0.5'; // Efecto visual de carga
-            
-            // 1. Actualizar la base de datos de Google
+            document.body.style.opacity = '0.5'; 
             await window.db.collection('maestros').doc(datosUsuarioActual.id).update({ campo: nuevoCampo });
             
-            // 2. ACTUALIZACIÓN CRÍTICA: Forzar a la memoria interna a recordar el nuevo campo
             const nuevosDatos = { ...datosUsuarioActual, campo: nuevoCampo };
             if (window.AuthService && window.AuthService.guardarSesion) {
                 window.AuthService.guardarSesion(usuario, nuevosDatos);
             } else {
-                localStorage.setItem('sesion_datos', JSON.stringify(nuevosDatos)); // Respaldo
+                localStorage.setItem('sesion_datos', JSON.stringify(nuevosDatos)); 
             }
             
-            // 3. Actualizar el autologin
             const sesionStr = localStorage.getItem('datos_recientes_login');
             if (sesionStr) {
                 const sesionData = JSON.parse(sesionStr);
@@ -142,7 +140,6 @@ function MaestroDashboard({
                 localStorage.setItem('datos_recientes_login', JSON.stringify(sesionData));
             }
             
-            // 4. Recargar. Ahora sí leerá el campo correcto y traerá a los niños correspondientes.
             window.location.reload(); 
         } catch (e) {
             document.body.style.opacity = '1';
@@ -152,6 +149,30 @@ function MaestroDashboard({
 
     const mesesNombres = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
     
+    // --- FUNCIÓN PARA AGRUPAR EL HISTORIAL DEL MAESTRO POR MES ---
+    const agruparHistorialPorMes = (historial) => {
+        if (!historial) return [];
+        const grupos = {};
+        historial.forEach(h => {
+            const p = (h.fecha || '').split('-');
+            if(p.length === 3) {
+                const y = parseInt(p[0]); const m = parseInt(p[1]);
+                const mesKey = `${y}-${p[1]}`; 
+                const mesLabel = `${mesesNombres[m-1]} ${y}`;
+
+                if(!grupos[mesKey]) grupos[mesKey] = { mesLabel, registros: [] };
+                grupos[mesKey].registros.push(h);
+            }
+        });
+
+        return Object.keys(grupos).sort((a,b) => b.localeCompare(a)).map(k => {
+            grupos[k].registros.sort((x, y) => new Date(y.fecha) - new Date(x.fecha));
+            return { id: k, ...grupos[k] };
+        });
+    };
+
+    const gruposMesesHistorial = agruparHistorialPorMes(historialVisible);
+
     const agruparCumpleanos = () => {
         const grupos = Array.from({length: 12}, (_, i) => ({
             mesNum: (i + 1).toString().padStart(2, '0'),
@@ -226,7 +247,6 @@ function MaestroDashboard({
         return true;
     });
 
-    // --- REGLAS DE SEGURIDAD PARA EL CAMBIO DE CAMPO ---
     const isSandbox = datosUsuarioActual?.id === 'user_sandbox_secreto';
     const miCampoActual = datosUsuarioActual?.campo;
 
@@ -242,7 +262,6 @@ function MaestroDashboard({
         contenidoMaestro = (
             <div className="flex flex-col h-full pt-2 animate-in fade-in duration-300">
                 
-                {/* BANNER DE CAMBIO DE CAMPO */}
                 {tienePermisoDeCambio && (
                     <div className="bg-indigo-50 border border-indigo-100 p-4 rounded-[24px] flex justify-between items-center mb-5 shadow-sm mx-1">
                         <div>
@@ -548,20 +567,51 @@ function MaestroDashboard({
                             </div>
                         </>
                     )}
+                    
+                    {/* NUEVO HISTORIAL DE CLASES EN MODO ACORDEÓN POR MESES PARA EL MAESTRO */}
                     {subVistaReporte === 'historial' && (
                         <>
                             <h3 className="text-sm font-bold text-slate-700 mb-4 px-2">Días Anteriores (Solo Lectura)</h3>
                             <div className="overflow-y-auto space-y-3 pb-24 pr-2">
-                                {historialVisible.length === 0 ? <p className="text-center text-slate-400 text-sm italic mt-8">Sin registros previos.</p> : 
-                                historialVisible.map((h, i) => (
-                                    <div key={i} className="bg-slate-50 p-4 rounded-2xl border border-slate-100 flex justify-between items-center">
-                                        <div><p className="font-bold text-slate-700 text-sm">{formatoFecha(h.fecha)}</p><p className="text-[9px] text-slate-400 uppercase mt-1">Por: {h.maestro}</p>{h.leccion && (<p className={`text-[9px] font-bold mt-1 ${h.leccionImpartida ? 'text-indigo-500' : 'text-rose-500'}`}><i className="fas fa-book-open mr-1"></i>Lección {h.leccion} {h.leccionImpartida ? '✅' : '❌'}</p>)}</div>
-                                        <div className="flex flex-col space-y-1 items-end">
-                                            <span className="text-[10px] font-black text-emerald-600 mb-1">${Number(h.ofrenda||0).toFixed(2)}</span>
-                                            <div className="flex space-x-1 text-[10px] font-bold"><span className="bg-emerald-100 text-emerald-700 px-1.5 py-1 rounded">P: {h.totales?.presentes||0}</span><span className="bg-rose-100 text-rose-700 px-1.5 py-1 rounded">A: {h.totales?.ausentes||0}</span></div>
-                                        </div>
-                                    </div>
-                                ))}
+                                {gruposMesesHistorial.length === 0 ? <p className="text-center text-slate-400 text-sm italic mt-8">Sin registros previos.</p> : 
+                                    gruposMesesHistorial.map(grupo => {
+                                        const isExp = mesHistorialExp === grupo.id;
+                                        return (
+                                            <div key={grupo.id} className="bg-slate-50 rounded-[24px] border border-slate-200 overflow-hidden shadow-sm transition-all duration-300">
+                                                <button onClick={() => setMesHistorialExp(isExp ? null : grupo.id)} className="w-full p-4 flex justify-between items-center bg-white hover:bg-slate-50 transition-colors">
+                                                    <div className="text-left">
+                                                        <p className="font-black text-slate-700 text-sm capitalize">{grupo.mesLabel}</p>
+                                                        <p className="text-[10px] text-slate-400 font-bold mt-0.5">{grupo.registros.length} clases reportadas</p>
+                                                    </div>
+                                                    <div className={`w-8 h-8 flex items-center justify-center rounded-xl transition-colors shadow-sm ${isExp ? 'bg-emerald-500 text-white' : 'bg-slate-100 text-slate-400'}`}>
+                                                        <i className={`fas fa-chevron-down transition-transform duration-300 ${isExp ? 'rotate-180' : ''}`}></i>
+                                                    </div>
+                                                </button>
+                                                
+                                                {isExp && (
+                                                    <div className="p-3 pt-0 border-t border-slate-100 bg-slate-50 animate-in slide-in-from-top-2 duration-200 space-y-2 mt-3">
+                                                        {grupo.registros.map((h, i) => (
+                                                            <div key={i} className="bg-white p-3 rounded-xl border border-slate-100 flex justify-between items-center shadow-sm">
+                                                                <div>
+                                                                    <p className="font-bold text-slate-700 text-xs">{formatoFecha(h.fecha)}</p>
+                                                                    <p className="text-[9px] text-slate-400 uppercase mt-0.5">Por: {h.maestro.split(' ')[0]}</p>
+                                                                    {h.leccion && (<p className={`text-[9px] font-bold mt-1 ${h.leccionImpartida ? 'text-indigo-500' : 'text-rose-500'}`}><i className="fas fa-book-open mr-1"></i>Lección {h.leccion} {h.leccionImpartida ? '✅' : '❌'}</p>)}
+                                                                </div>
+                                                                <div className="flex flex-col space-y-1.5 items-end">
+                                                                    <span className="text-[10px] font-black text-emerald-600 mb-1">${Number(h.ofrenda||0).toFixed(2)}</span>
+                                                                    <div className="flex space-x-1 text-[9px] font-bold">
+                                                                        <span className="bg-emerald-50 text-emerald-700 px-1.5 py-1 rounded border border-emerald-100">P: {h.totales?.presentes||0}</span>
+                                                                        <span className="bg-rose-50 text-rose-700 px-1.5 py-1 rounded border border-rose-100">A: {h.totales?.ausentes||0}</span>
+                                                                    </div>
+                                                                </div>
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                )}
+                                            </div>
+                                        );
+                                    })
+                                }
                             </div>
                         </>
                     )}
