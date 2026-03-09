@@ -23,9 +23,13 @@ function AdminDashboard({
     const [mesOfrendaExp, setMesOfrendaExp] = useState(null);
     const [semanaOfrendaExp, setSemanaOfrendaExp] = useState(null);
 
-    // ESTADOS PARA EL DOBLE ACORDEÓN DE ASISTENCIA
+    // ESTADOS PARA EL DOBLE ACORDEÓN DE ASISTENCIA GLOBAL
     const [mesAsistenciaExp, setMesAsistenciaExp] = useState(null); 
     const [semanaAsistenciaExp, setSemanaAsistenciaExp] = useState(null); 
+
+    // ESTADOS PARA EL DOBLE ACORDEÓN DE CLASES POR CAMPO (NUEVO)
+    const [mesClasesExp, setMesClasesExp] = useState(null);
+    const [semanaClasesExp, setSemanaClasesExp] = useState(null);
 
     // ESTADOS PARA EL TRIPLE ACORDEÓN DE LOGÍSTICA
     const [subVistaAdminLogistica, setSubVistaAdminLogistica] = useState('bodega'); 
@@ -693,7 +697,7 @@ function AdminDashboard({
                             return (
                                 <div key={campo} className="bg-slate-50 rounded-[24px] border border-slate-200 shadow-sm overflow-hidden transition-all duration-300">
                                     
-                                    <button onClick={() => { setCampoExpandido(isExpanded ? null : campo); setCampoAccionActiva(null); }} className="w-full bg-white p-5 flex justify-between items-center hover:bg-slate-50 transition-colors">
+                                    <button onClick={() => { setCampoExpandido(isExpanded ? null : campo); setCampoAccionActiva(null); setMesClasesExp(null); setSemanaClasesExp(null); }} className="w-full bg-white p-5 flex justify-between items-center hover:bg-slate-50 transition-colors">
                                         <div className="text-left w-3/4">
                                             <h4 className="font-black text-slate-800 text-lg leading-tight truncate">{campo}</h4>
                                             <p className="text-[11px] text-slate-500 font-bold mt-1 uppercase tracking-widest"><i className="fas fa-users mr-1.5 text-indigo-400"></i> {total} Alumnos</p>
@@ -715,7 +719,7 @@ function AdminDashboard({
                                             </div>
 
                                             <div className="flex space-x-2">
-                                                <button onClick={() => setCampoAccionActiva(campoAccionActiva === 'clases' ? null : 'clases')} className={`flex-1 py-3 rounded-xl text-[11px] font-black transition-colors border ${campoAccionActiva === 'clases' ? 'bg-indigo-500 text-white border-indigo-600 shadow-md' : 'bg-white text-indigo-600 border-indigo-100 hover:bg-indigo-50'}`}><i className="fas fa-history mr-1.5"></i> Clases</button>
+                                                <button onClick={() => { setCampoAccionActiva(campoAccionActiva === 'clases' ? null : 'clases'); setMesClasesExp(null); setSemanaClasesExp(null); }} className={`flex-1 py-3 rounded-xl text-[11px] font-black transition-colors border ${campoAccionActiva === 'clases' ? 'bg-indigo-500 text-white border-indigo-600 shadow-md' : 'bg-white text-indigo-600 border-indigo-100 hover:bg-indigo-50'}`}><i className="fas fa-history mr-1.5"></i> Clases</button>
                                                 <button onClick={() => setCampoAccionActiva(campoAccionActiva === 'asignar' ? null : 'asignar')} className={`flex-1 py-3 rounded-xl text-[11px] font-black transition-colors border ${campoAccionActiva === 'asignar' ? 'bg-sky-500 text-white border-sky-600 shadow-md' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-100'}`}><i className="fas fa-cog mr-1.5"></i> Asignar</button>
                                                 <button onClick={() => onDeleteCampo(campo)} className="w-12 flex flex-col justify-center items-center rounded-xl text-rose-500 bg-white border border-rose-200 hover:bg-rose-500 hover:text-white transition-colors shrink-0"><i className="fas fa-trash-alt"></i></button>
                                             </div>
@@ -735,28 +739,78 @@ function AdminDashboard({
                                                 </div>
                                             )}
 
+                                            {/* NUEVO HISTORIAL DE CLASES EN DOBLE ACORDEÓN */}
                                             {campoAccionActiva === 'clases' && (
                                                 <div className="mt-4 pt-4 border-t border-slate-200 animate-in fade-in">
                                                     <p className="text-[10px] font-black text-slate-500 mb-3 uppercase tracking-widest"><i className="fas fa-history mr-1"></i> Historial de Clases ({registrosCampo.length})</p>
-                                                    <div className="space-y-2 max-h-[250px] overflow-y-auto pr-1">
-                                                        {registrosCampo.length === 0 ? <p className="text-xs text-slate-400 italic text-center py-2">Sin clases registradas aún.</p> : 
-                                                        registrosCampo.map((h, i) => (
-                                                            <div key={i} className="bg-white p-3 rounded-xl border border-slate-100 flex justify-between items-center shadow-sm">
-                                                                <div>
-                                                                    <p className="font-black text-slate-700 text-xs">{formatoFecha(h.fecha)}</p>
-                                                                    <p className="text-[9px] text-slate-400 uppercase mt-0.5"><i className="fas fa-user mr-1"></i>{h.maestro}</p>
-                                                                    {h.leccion !== undefined && (<p className={`text-[9px] font-bold mt-1 ${h.leccionImpartida ? 'text-indigo-500' : 'text-rose-500'}`}>Lec. {h.leccion} {h.leccionImpartida ? '✅' : '❌'}</p>)}
-                                                                </div>
-                                                                <div className="flex flex-col items-end">
-                                                                    <span className="text-[10px] font-black text-emerald-600 mb-1.5 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-100"><i className="fas fa-coins mr-1"></i>${Number(h.ofrenda||0).toFixed(2)}</span>
-                                                                    <div className="flex space-x-1 text-[9px] font-black tracking-wider">
-                                                                        <span className="bg-slate-100 text-emerald-600 px-1.5 py-1 rounded border border-slate-200">P:{h.totales?.presentes || 0}</span>
-                                                                        <span className="bg-slate-100 text-rose-500 px-1.5 py-1 rounded border border-slate-200">A:{h.totales?.ausentes || 0}</span>
-                                                                        <span className="bg-slate-100 text-amber-500 px-1.5 py-1 rounded border border-slate-200">Pe:{h.totales?.permisos || 0}</span>
+                                                    
+                                                    <div className="space-y-3 max-h-[300px] overflow-y-auto pr-1">
+                                                        {registrosCampo.length === 0 ? <p className="text-xs text-slate-400 italic text-center py-2">Sin clases registradas aún.</p> : (() => {
+                                                            const gruposMesesCampo = agruparAsistenciaPorMesYSemana(registrosCampo);
+                                                            return gruposMesesCampo.map(grupo => {
+                                                                const isExpMes = mesClasesExp === `${campo}-${grupo.id}`;
+                                                                return (
+                                                                    <div key={grupo.id} className="bg-slate-50 rounded-xl border border-slate-200 overflow-hidden shadow-sm transition-all duration-300">
+                                                                        
+                                                                        {/* ACORDEÓN MES (CAMPO) */}
+                                                                        <button onClick={() => { setMesClasesExp(isExpMes ? null : `${campo}-${grupo.id}`); setSemanaClasesExp(null); }} className="w-full p-3 flex justify-between items-center bg-white hover:bg-slate-50 transition-colors">
+                                                                            <div className="text-left">
+                                                                                <p className="font-bold text-slate-700 text-xs capitalize">{grupo.mesLabel}</p>
+                                                                            </div>
+                                                                            <div className="flex items-center space-x-2 text-[9px] font-black">
+                                                                                <span className="text-emerald-500 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-100">P:{grupo.tp}</span>
+                                                                                <i className={`fas fa-chevron-down text-slate-300 transition-transform duration-300 ${isExpMes ? 'rotate-180' : ''}`}></i>
+                                                                            </div>
+                                                                        </button>
+                                                                        
+                                                                        {/* ACORDEÓN SEMANAS (CAMPO) */}
+                                                                        {isExpMes && (
+                                                                            <div className="p-2 border-t border-slate-100 bg-slate-50 space-y-2">
+                                                                                {grupo.semanasArray.map(sem => {
+                                                                                    const isSemExp = semanaClasesExp === `${campo}-${grupo.id}-${sem.id}`;
+                                                                                    return (
+                                                                                        <div key={sem.id} className="bg-white rounded-lg border border-slate-200 shadow-sm overflow-hidden">
+                                                                                            <button onClick={() => setSemanaClasesExp(isSemExp ? null : `${campo}-${grupo.id}-${sem.id}`)} className="w-full p-2.5 flex justify-between items-center hover:bg-slate-50 transition-colors">
+                                                                                                <div className="text-left">
+                                                                                                    <p className="font-bold text-slate-600 text-[10px]">{sem.label}</p>
+                                                                                                </div>
+                                                                                                <div className="flex items-center space-x-2 text-[9px] font-black">
+                                                                                                    <span className="text-slate-400">{sem.registros.length} rep.</span>
+                                                                                                    <i className={`fas fa-chevron-down text-slate-300 transition-transform duration-300 ${isSemExp ? 'rotate-180' : ''}`}></i>
+                                                                                                </div>
+                                                                                            </button>
+
+                                                                                            {/* DETALLES DEL REPORTE */}
+                                                                                            {isSemExp && (
+                                                                                                <div className="p-2 border-t border-slate-100 bg-slate-50/50 space-y-2">
+                                                                                                    {sem.registros.map((h, idx) => (
+                                                                                                        <div key={idx} className="bg-white p-3 rounded-xl border border-slate-100 flex justify-between items-center shadow-sm">
+                                                                                                            <div>
+                                                                                                                <p className="font-black text-slate-700 text-xs">{formatFechaDia(h.fecha)}</p>
+                                                                                                                <p className="text-[9px] text-slate-400 uppercase mt-0.5"><i className="fas fa-user mr-1"></i>{h.maestro}</p>
+                                                                                                                {h.leccion !== undefined && (<p className={`text-[9px] font-bold mt-1 ${h.leccionImpartida ? 'text-indigo-500' : 'text-rose-500'}`}>Lec. {h.leccion} {h.leccionImpartida ? '✅' : '❌'}</p>)}
+                                                                                                            </div>
+                                                                                                            <div className="flex flex-col items-end">
+                                                                                                                <span className="text-[10px] font-black text-emerald-600 mb-1.5 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-100"><i className="fas fa-coins mr-1"></i>${Number(h.ofrenda||0).toFixed(2)}</span>
+                                                                                                                <div className="flex space-x-1 text-[9px] font-black tracking-wider">
+                                                                                                                    <span className="bg-slate-100 text-emerald-600 px-1.5 py-1 rounded border border-slate-200">P:{h.totales?.presentes || 0}</span>
+                                                                                                                    <span className="bg-slate-100 text-rose-500 px-1.5 py-1 rounded border border-slate-200">A:{h.totales?.ausentes || 0}</span>
+                                                                                                                    <span className="bg-slate-100 text-amber-500 px-1.5 py-1 rounded border border-slate-200">Pe:{h.totales?.permisos || 0}</span>
+                                                                                                                </div>
+                                                                                                            </div>
+                                                                                                        </div>
+                                                                                                    ))}
+                                                                                                </div>
+                                                                                            )}
+                                                                                        </div>
+                                                                                    );
+                                                                                })}
+                                                                            </div>
+                                                                        )}
                                                                     </div>
-                                                                </div>
-                                                            </div>
-                                                        ))}
+                                                                );
+                                                            });
+                                                        })()}
                                                     </div>
                                                 </div>
                                             )}
@@ -776,7 +830,6 @@ function AdminDashboard({
         const entregasCompletadas = entregasLogistica.filter(e => e.estado === 'Entregado');
         const personalLogistica = activos.filter(m => m.clase === 'LOGISTICA'); 
 
-        // USAR NUEVO ALGORITMO PARA LOGÍSTICA TRIPLE ACORDEÓN
         const gruposLogistica = agruparLogisticaPorGrupo(entregasCompletadas);
 
         const historicoRecibido = inventarioDatos?.historicoRecibido || 0;
