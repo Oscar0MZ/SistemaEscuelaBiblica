@@ -2,25 +2,27 @@ const { useState } = React;
 
 function SecretariaDashboard({
     todosLosAlumnos, datosGlobalesAsistencia, historialAsistencias, maestros,
-    fondoTotal, fondoSecretariaTotal, historialSecretaria, 
+    fondoTotal, fondoVoluntarioTotal, // Fondos del Tesorero
+    fondoSecretariaTotal, fondoSecretariaVoluntarioTotal, historialSecretaria, // Fondos del Secretario
     onGuardarIngresoSecretaria, onGuardarEgresoSecretaria
 }) {
     const [vistaActual, setVistaActual] = useState('inicio'); 
     
-    // ESTADOS PARA MONITOREO DE CAMPOS (SOLO MES - SIMPLE ACORDEÓN)
-    const [campoExpandido, setCampoExpandido] = useState(null); 
-    const [mesCampoExp, setMesCampoExp] = useState(null);
-    
-    // ESTADOS PARA AUDITORÍA (DOBLE ACORDEÓN + DETALLE EXPANDIBLE)
+    // ESTADOS PARA AUDITORÍA (DOBLE ACORDEÓN + CONTROL CRUZADO)
+    const [fondoActivo, setFondoActivo] = useState('general'); // <-- NUEVO SELECTOR DE FONDO
     const [tipoTransaccion, setTipoTransaccion] = useState('ingreso'); 
     const [monto, setMonto] = useState('');
     const [descripcion, setDescripcion] = useState('');
     const [cargando, setLoading] = useState(false);
     const [mesAuditoriaExp, setMesAuditoriaExp] = useState(null);
     const [semanaAuditoriaExp, setSemanaAuditoriaExp] = useState(null);
-    const [detalleMovExp, setDetalleMovExp] = useState(null); // NUEVO ESTADO PARA DESPLEGAR EL MOVIMIENTO
+    const [detalleMovExp, setDetalleMovExp] = useState(null);
 
-    // ESTADOS PARA REPORTES (DOBLE ACORDEÓN)
+    // ESTADOS PARA MONITOREO DE CAMPOS
+    const [campoExpandido, setCampoExpandido] = useState(null); 
+    const [mesCampoExp, setMesCampoExp] = useState(null);
+
+    // ESTADOS PARA REPORTES
     const [fechaDesde, setFechaDesde] = useState('');
     const [fechaHasta, setFechaHasta] = useState('');
     const [filtroCampo, setFiltroCampo] = useState('TODOS');
@@ -31,15 +33,12 @@ function SecretariaDashboard({
     const todasAsistencias = datosGlobalesAsistencia?.registros || [];
 
     const formatoFecha = (f) => {
-        if (!f) return '';
-        const p = f.split('-');
-        if (p.length !== 3) return f;
+        if (!f) return ''; const p = f.split('-'); if (p.length !== 3) return f;
         return `${p[2]}/${p[1]}/${p[0]}`; 
     };
 
     const formatFechaDia = (f) => {
-        if (!f) return '';
-        const d = new Date(f + 'T12:00:00'); 
+        if (!f) return ''; const d = new Date(f + 'T12:00:00'); 
         const dias = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
         const meses = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
         return `${dias[d.getDay()]}, ${d.getDate()} ${meses[d.getMonth()]} ${d.getFullYear()}`;
@@ -47,7 +46,6 @@ function SecretariaDashboard({
 
     const mesesNombresCompletos = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
     
-    // FUNCIÓN MATEMÁTICA: Calcular semana del mes
     const getWeekOfMonth = (year, month, day) => {
         const firstDayOfMonth = new Date(year, month - 1, 1).getDay(); 
         return Math.ceil((day + firstDayOfMonth) / 7);
@@ -63,13 +61,15 @@ function SecretariaDashboard({
         if(r.ofrenda) totalOfrendaSemana += Number(r.ofrenda);
     });
 
-    // 2. Lógica de la Pestaña AUDITORÍA (Doble Acordeón)
+    // 2. Lógica de la Pestaña AUDITORÍA
     const handleSubmitAuditoria = async (e) => {
         e.preventDefault();
         setLoading(true);
         let exito = false;
-        if (tipoTransaccion === 'ingreso') exito = await onGuardarIngresoSecretaria(monto, descripcion);
-        else exito = await onGuardarEgresoSecretaria(monto, descripcion);
+        
+        // Pasamos el fondoActivo para que se guarde en la colección correcta
+        if (tipoTransaccion === 'ingreso') exito = await onGuardarIngresoSecretaria(monto, descripcion, fondoActivo);
+        else exito = await onGuardarEgresoSecretaria(monto, descripcion, fondoActivo);
 
         if (exito) {
             setMonto(''); setDescripcion('');
@@ -81,6 +81,12 @@ function SecretariaDashboard({
         }
         setLoading(false);
     };
+
+    // FILTRAMOS EL HISTORIAL SECRETARIAL SEGÚN EL FONDO SELECCIONADO
+    const historialFiltradoPorFondo = (historialSecretaria || []).filter(h => {
+        if (fondoActivo === 'general') return h.fondo === 'general' || !h.fondo;
+        return h.fondo === 'voluntario';
+    });
 
     const agruparFinanzas = (data) => {
         if (!data) return [];
@@ -110,10 +116,14 @@ function SecretariaDashboard({
         });
     };
     
-    const gruposMesesAuditoria = agruparFinanzas(historialSecretaria);
-    const diferencia = fondoTotal - fondoSecretariaTotal;
+    const gruposMesesAuditoria = agruparFinanzas(historialFiltradoPorFondo);
 
-    // 3. Lógica de la Pestaña MONITOREO (Solo Acordeón por Mes)
+    // CÁLCULO DEL CONTROL CRUZADO DINÁMICO
+    const saldoTesoreroActual = fondoActivo === 'general' ? fondoTotal : (fondoVoluntarioTotal || 0);
+    const saldoSecretariaActual = fondoActivo === 'general' ? fondoSecretariaTotal : (fondoSecretariaVoluntarioTotal || 0);
+    const diferencia = saldoTesoreroActual - saldoSecretariaActual;
+
+    // 3. Lógica de la Pestaña MONITOREO
     const agruparAsistenciaPorMes = (historial) => {
         if (!historial) return [];
         const grupos = {};
@@ -138,7 +148,7 @@ function SecretariaDashboard({
         });
     };
 
-    // 4. Lógica de la Pestaña REPORTES (Doble Acordeón)
+    // 4. Lógica de la Pestaña REPORTES
     const registrosFiltrados = historialVisible.filter(h => {
         if (fechaDesde && h.fecha < fechaDesde) return false;
         if (fechaHasta && h.fecha > fechaHasta) return false;
@@ -231,11 +241,20 @@ function SecretariaDashboard({
     }
 
     if (vistaActual === 'auditoria') {
+        const colorTemaSecretaria = fondoActivo === 'voluntario' ? 'teal' : 'pink';
+
         contenido = (
             <div className="space-y-4 animate-in slide-in-from-right duration-300 pt-2 pb-24">
-                <div className="px-2 mb-2">
+                
+                {/* NUEVO SELECTOR DE FONDO */}
+                <div className="flex bg-slate-200 p-1.5 rounded-2xl mx-1 shadow-inner">
+                    <button onClick={() => {setFondoActivo('general'); setMesAuditoriaExp(null);}} className={`flex-1 py-3.5 rounded-xl font-black text-xs uppercase tracking-widest transition-all ${fondoActivo === 'general' ? 'bg-white text-pink-600 shadow-md' : 'text-slate-500 hover:text-slate-700'}`}>Fondo General</button>
+                    <button onClick={() => {setFondoActivo('voluntario'); setMesAuditoriaExp(null);}} className={`flex-1 py-3.5 rounded-xl font-black text-xs uppercase tracking-widest transition-all ${fondoActivo === 'voluntario' ? 'bg-white text-teal-600 shadow-md' : 'text-slate-500 hover:text-slate-700'}`}>Voluntario Campos</button>
+                </div>
+
+                <div className="px-2 mb-2 mt-4">
                     <h2 className="text-2xl font-black text-slate-800">Control Cruzado</h2>
-                    <p className="text-slate-400 text-xs mt-1">Compara tu registro interno vs Tesorería</p>
+                    <p className="text-slate-400 text-xs mt-1">Auditando el <strong className={`uppercase text-${colorTemaSecretaria}-500`}>{fondoActivo}</strong></p>
                 </div>
 
                 <div className="bg-slate-800 p-6 rounded-[32px] text-white shadow-xl mx-1 relative overflow-hidden">
@@ -243,11 +262,11 @@ function SecretariaDashboard({
                     <div className="grid grid-cols-2 gap-4 relative z-10">
                         <div className="border-r border-slate-700">
                             <p className="text-[9px] text-slate-400 uppercase font-bold tracking-widest mb-1">Mi Control (Secretaría)</p>
-                            <p className="text-2xl font-black text-pink-400">${Number(fondoSecretariaTotal || 0).toFixed(2)}</p>
+                            <p className={`text-2xl font-black text-${colorTemaSecretaria}-400`}>${Number(saldoSecretariaActual || 0).toFixed(2)}</p>
                         </div>
                         <div className="pl-2">
                             <p className="text-[9px] text-slate-400 uppercase font-bold tracking-widest mb-1">Reporte Tesorería</p>
-                            <p className="text-2xl font-black text-sky-400">${Number(fondoTotal || 0).toFixed(2)}</p>
+                            <p className={`text-2xl font-black ${fondoActivo === 'voluntario' ? 'text-emerald-400' : 'text-sky-400'}`}>${Number(saldoTesoreroActual || 0).toFixed(2)}</p>
                         </div>
                     </div>
                     
@@ -271,10 +290,10 @@ function SecretariaDashboard({
                     )}
                 </div>
 
-                <div className="bg-white p-5 rounded-[24px] border border-slate-100 shadow-sm mx-1 mt-4">
+                <div className={`bg-white p-5 rounded-[24px] border border-${colorTemaSecretaria}-100 shadow-sm mx-1 mt-4`}>
                     <h3 className="font-bold text-slate-700 text-sm mb-4">Añadir a mi Control Interno</h3>
                     <div className="flex bg-slate-100 p-1 rounded-2xl mb-4">
-                        <button onClick={() => setTipoTransaccion('ingreso')} className={`flex-1 py-2 rounded-xl font-bold text-xs transition-all shadow-sm ${tipoTransaccion === 'ingreso' ? 'bg-white text-emerald-600 border border-slate-200' : 'text-slate-400 hover:text-slate-600'}`}>
+                        <button onClick={() => setTipoTransaccion('ingreso')} className={`flex-1 py-2 rounded-xl font-bold text-xs transition-all shadow-sm ${tipoTransaccion === 'ingreso' ? `bg-white text-emerald-600 border border-slate-200` : 'text-slate-400 hover:text-slate-600'}`}>
                             + Ingreso
                         </button>
                         <button onClick={() => setTipoTransaccion('egreso')} className={`flex-1 py-2 rounded-xl font-bold text-xs transition-all shadow-sm ${tipoTransaccion === 'egreso' ? 'bg-white text-rose-600 border border-slate-200' : 'text-slate-400 hover:text-slate-600'}`}>
@@ -292,7 +311,7 @@ function SecretariaDashboard({
                                 <input type="text" required value={descripcion} onChange={(e) => setDescripcion(e.target.value)} placeholder="Concepto..." className="w-full py-3 px-3 bg-slate-50 rounded-xl outline-none border border-slate-100 text-xs font-bold text-slate-700" />
                             </div>
                         </div>
-                        <button type="submit" disabled={cargando} className={`w-full py-3 rounded-xl font-black text-white shadow-md transition-all active:scale-95 ${cargando ? 'bg-slate-400' : 'bg-slate-800 hover:bg-slate-700'}`}>
+                        <button type="submit" disabled={cargando} className={`w-full py-3 rounded-xl font-black text-white shadow-md transition-all active:scale-95 ${cargando ? 'bg-slate-400' : `bg-slate-800 hover:bg-slate-700`}`}>
                             {cargando ? 'Guardando...' : 'Guardar en mi registro'}
                         </button>
                     </form>
@@ -302,14 +321,14 @@ function SecretariaDashboard({
                 <div className="space-y-3 px-1">
                     {gruposMesesAuditoria.length === 0 ? (
                         <div className="text-center p-6 bg-slate-50 rounded-2xl mt-2 border border-slate-100">
-                            <p className="text-xs font-bold text-slate-400">Aún no has registrado movimientos.</p>
+                            <p className="text-xs font-bold text-slate-400">Aún no has registrado movimientos en este fondo.</p>
                         </div>
                     ) : (
                         gruposMesesAuditoria.map(grupo => {
                             const isExpMes = mesAuditoriaExp === grupo.id;
 
                             return (
-                                <div key={grupo.id} className="bg-white rounded-[24px] border border-slate-100 shadow-sm overflow-hidden transition-all duration-300">
+                                <div key={grupo.id} className={`bg-white rounded-[24px] border border-${colorTemaSecretaria}-100 shadow-sm overflow-hidden transition-all duration-300`}>
                                     <button onClick={() => {setMesAuditoriaExp(isExpMes ? null : grupo.id); setSemanaAuditoriaExp(null); setDetalleMovExp(null);}} className="w-full p-4 flex justify-between items-center bg-white hover:bg-slate-50 transition-colors">
                                         <div className="text-left">
                                             <span className="font-bold text-slate-700 text-sm uppercase">{grupo.mesLabel}</span>
@@ -320,7 +339,7 @@ function SecretariaDashboard({
                                                 <p className="text-[10px] font-bold text-emerald-500">+${grupo.totalIngreso.toFixed(2)}</p>
                                                 <p className="text-[10px] font-bold text-rose-500">-${grupo.totalEgreso.toFixed(2)}</p>
                                             </div>
-                                            <div className={`w-8 h-8 flex items-center justify-center rounded-xl transition-colors shadow-sm ${isExpMes ? 'bg-pink-500 text-white' : 'bg-slate-50 text-slate-400'}`}>
+                                            <div className={`w-8 h-8 flex items-center justify-center rounded-xl transition-colors shadow-sm ${isExpMes ? `bg-${colorTemaSecretaria}-500 text-white` : 'bg-slate-50 text-slate-400'}`}>
                                                 <i className={`fas fa-chevron-down transition-transform duration-300 ${isExpMes ? 'rotate-180' : ''}`}></i>
                                             </div>
                                         </div>
@@ -373,7 +392,6 @@ function SecretariaDashboard({
                                                                                     </div>
                                                                                 </div>
                                                                                 
-                                                                                {/* DESPLIEGUE DEL DETALLE COMPLETO DE LA TRANSACCIÓN */}
                                                                                 {isMovExp && (
                                                                                     <div className="pl-2 mt-3 pt-2 border-t border-slate-50 animate-in fade-in duration-200">
                                                                                         <p className="text-[10px] text-slate-500 leading-relaxed"><strong className="text-slate-600">Detalle completo:</strong> {mov.descripcion}</p>
@@ -383,7 +401,7 @@ function SecretariaDashboard({
                                                                                     </div>
                                                                                 )}
                                                                             </div>
-                                                                        )
+                                                                        );
                                                                     })}
                                                                 </div>
                                                             )}
@@ -624,7 +642,7 @@ function SecretariaDashboard({
                                         </div>
                                     )}
                                 </div>
-                            )
+                            );
                         })
                     ) : (
                         registrosFiltrados.sort((a,b) => new Date(b.fecha) - new Date(a.fecha)).map((h, i) => (
