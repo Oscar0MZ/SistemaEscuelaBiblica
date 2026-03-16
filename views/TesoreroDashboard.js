@@ -1,10 +1,13 @@
 const { useState } = React;
 
 function TesoreroDashboard({
-    fondoTotal, historialIngresos, onGuardarIngreso, onGuardarEgreso
+    fondoTotal, fondoVoluntarioTotal, historialIngresos, onGuardarIngreso, onGuardarEgreso
 }) {
     const [vistaActual, setVistaActual] = useState('inicio'); 
     
+    // NUEVO ESTADO: Controla qué fondo estamos viendo ('general' o 'voluntario')
+    const [fondoActivo, setFondoActivo] = useState('general');
+
     // Estados para nuevo ingreso/retiro
     const [tipoTransaccion, setTipoTransaccion] = useState('ingreso'); 
     const [monto, setMonto] = useState('');
@@ -21,15 +24,19 @@ function TesoreroDashboard({
     const [fechaDesde, setFechaDesde] = useState('');
     const [fechaHasta, setFechaHasta] = useState('');
 
-    // NUEVO ESTADO: Controla qué transacción individual está abierta para ver su detalle completo
     const [detalleMovExp, setDetalleMovExp] = useState(null);
 
     const handleSubmit = async (e) => {
         e.preventDefault();
         setLoading(true);
         let exito = false;
-        if (tipoTransaccion === 'ingreso') exito = await onGuardarIngreso(monto, descripcion);
-        else exito = await onGuardarEgreso(monto, descripcion);
+        
+        // Pasamos el fondo activo al backend
+        if (tipoTransaccion === 'ingreso') {
+            exito = await onGuardarIngreso(monto, descripcion, fondoActivo);
+        } else {
+            exito = await onGuardarEgreso(monto, descripcion, fondoActivo);
+        }
 
         if (exito) {
             setMonto(''); setDescripcion(''); setVistaActual('historial'); 
@@ -46,7 +53,6 @@ function TesoreroDashboard({
         return `${p[2]}/${p[1]}/${p[0]}`; 
     };
 
-    // Función Matemática: Calcular semana del mes
     const getWeekOfMonth = (year, month, day) => {
         const firstDayOfMonth = new Date(year, month - 1, 1).getDay(); 
         return Math.ceil((day + firstDayOfMonth) / 7);
@@ -54,7 +60,12 @@ function TesoreroDashboard({
 
     const mesesNombresCompletos = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
 
-    // Función centralizada para agrupar datos financieros en Doble Acordeón
+    // FILTRAMOS EL HISTORIAL SEGÚN EL FONDO SELECCIONADO
+    const historialFiltradoPorFondo = (historialIngresos || []).filter(h => {
+        if (fondoActivo === 'general') return h.fondo === 'general' || !h.fondo;
+        return h.fondo === 'voluntario';
+    });
+
     const agruparFinanzas = (data) => {
         if (!data) return [];
         const grupos = {};
@@ -83,11 +94,9 @@ function TesoreroDashboard({
         });
     };
 
-    // Agrupación para la pestaña de Historial
-    const gruposMesesHistorial = agruparFinanzas(historialIngresos);
+    const gruposMesesHistorial = agruparFinanzas(historialFiltradoPorFondo);
 
-    // Filtrado y Agrupación para la pestaña de Reportes
-    const movsFiltrados = historialIngresos.filter(mov => {
+    const movsFiltrados = historialFiltradoPorFondo.filter(mov => {
         if (fechaDesde && mov.fecha < fechaDesde) return false;
         if (fechaHasta && mov.fecha > fechaHasta) return false;
         return true;
@@ -99,32 +108,43 @@ function TesoreroDashboard({
         else repIngresos += Number(mov.monto);
     });
     const repBalance = repIngresos - repEgresos;
-    
     const gruposMesesReportes = agruparFinanzas(movsFiltrados);
 
     const NavButton = ({ id, icon, label }) => (
-        <button onClick={() => setVistaActual(id)} className={`flex flex-col items-center justify-center w-[90px] h-14 rounded-2xl transition-all ${vistaActual === id ? 'text-amber-600 bg-amber-50 font-black' : 'text-slate-400 hover:text-slate-600 font-bold'}`}>
+        <button onClick={() => setVistaActual(id)} className={`flex flex-col items-center justify-center w-[90px] h-14 rounded-2xl transition-all ${vistaActual === id ? (fondoActivo === 'voluntario' ? 'text-emerald-600 bg-emerald-50 font-black' : 'text-amber-600 bg-amber-50 font-black') : 'text-slate-400 hover:text-slate-600 font-bold'}`}>
             <i className={`fas ${icon} text-xl mb-1 ${vistaActual === id ? 'animate-bounce' : ''}`}></i><span className="text-[10px] tracking-wide">{label}</span>
         </button>
     );
+
+    const saldoVisible = fondoActivo === 'general' ? fondoTotal : (fondoVoluntarioTotal || 0);
+    const colorTema = fondoActivo === 'voluntario' ? 'emerald' : 'amber';
 
     let contenido;
 
     if (vistaActual === 'inicio') {
         contenido = (
             <div className="space-y-6 animate-in fade-in duration-300 pt-2 pb-24">
-                <div className="bg-slate-800 p-8 rounded-[32px] text-white shadow-2xl mx-1 relative overflow-hidden">
+                
+                {/* SELECTOR DE FONDO GLOBAL */}
+                <div className="flex bg-slate-200 p-1.5 rounded-2xl mx-1 shadow-inner">
+                    <button onClick={() => setFondoActivo('general')} className={`flex-1 py-3.5 rounded-xl font-black text-xs uppercase tracking-widest transition-all ${fondoActivo === 'general' ? 'bg-white text-amber-600 shadow-md' : 'text-slate-500 hover:text-slate-700'}`}>Fondo General</button>
+                    <button onClick={() => setFondoActivo('voluntario')} className={`flex-1 py-3.5 rounded-xl font-black text-xs uppercase tracking-widest transition-all ${fondoActivo === 'voluntario' ? 'bg-white text-emerald-600 shadow-md' : 'text-slate-500 hover:text-slate-700'}`}>Fondo Voluntario</button>
+                </div>
+
+                <div className={`bg-slate-800 p-8 rounded-[32px] text-white shadow-2xl mx-1 relative overflow-hidden transition-colors`}>
                     <div className="absolute top-0 right-0 w-40 h-40 bg-white opacity-5 rounded-bl-[100px] pointer-events-none"></div>
                     <div className="relative z-10 text-center">
-                        <p className="text-xs font-bold uppercase opacity-70 tracking-widest mb-2 flex items-center justify-center"><i className="fas fa-vault mr-2 text-amber-400"></i> Fondo General Activo</p>
-                        <p className="text-6xl font-black tracking-tighter text-amber-400">
-                            ${Number(fondoTotal).toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}
+                        <p className={`text-xs font-bold uppercase opacity-90 tracking-widest mb-2 flex items-center justify-center text-${colorTema}-400`}>
+                            <i className="fas fa-vault mr-2"></i> {fondoActivo === 'general' ? 'Fondo General Activo' : 'Fondo Voluntario Activo'}
+                        </p>
+                        <p className={`text-6xl font-black tracking-tighter text-${colorTema}-400`}>
+                            ${Number(saldoVisible).toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}
                         </p>
                     </div>
                 </div>
 
-                <div className="bg-white p-6 rounded-[32px] border border-slate-100 shadow-sm mx-1">
-                    <h3 className="font-black text-slate-700 text-lg mb-4 flex items-center"><i className="fas fa-cash-register text-slate-400 mr-2"></i>Registrar Movimiento</h3>
+                <div className={`bg-white p-6 rounded-[32px] border border-${colorTema}-100 shadow-sm mx-1`}>
+                    <h3 className="font-black text-slate-700 text-lg mb-4 flex items-center"><i className={`fas fa-cash-register text-${colorTema}-400 mr-2`}></i>Registrar Movimiento</h3>
                     
                     <div className="flex bg-slate-100 p-1 rounded-2xl mb-6">
                         <button onClick={() => setTipoTransaccion('ingreso')} className={`flex-1 py-3 rounded-xl font-bold text-xs transition-all shadow-sm ${tipoTransaccion === 'ingreso' ? 'bg-white text-emerald-600 border border-slate-200' : 'text-slate-400 hover:text-slate-600'}`}>
@@ -146,7 +166,7 @@ function TesoreroDashboard({
 
                         <div>
                             <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-2 mb-1 block">Descripción / Motivo</label>
-                            <input type="text" required value={descripcion} onChange={(e) => setDescripcion(e.target.value)} placeholder={tipoTransaccion === 'ingreso' ? "Ej: Ofrenda mensual" : "Ej: Compra de refrigerio"} className={`w-full p-4 bg-slate-50 rounded-2xl outline-none border transition-all font-bold text-slate-700 ${tipoTransaccion === 'ingreso' ? 'border-emerald-100 focus:border-emerald-400' : 'border-rose-100 focus:border-rose-400'}`} />
+                            <input type="text" required value={descripcion} onChange={(e) => setDescripcion(e.target.value)} placeholder={tipoTransaccion === 'ingreso' ? "Ej: Ofrenda voluntaria" : "Ej: Compra de material"} className={`w-full p-4 bg-slate-50 rounded-2xl outline-none border transition-all font-bold text-slate-700 ${tipoTransaccion === 'ingreso' ? 'border-emerald-100 focus:border-emerald-400' : 'border-rose-100 focus:border-rose-400'}`} />
                         </div>
 
                         <button type="submit" disabled={cargando} className={`w-full py-4 mt-2 rounded-2xl font-black text-white shadow-xl transition-all ${cargando ? 'bg-slate-400' : tipoTransaccion === 'ingreso' ? 'bg-emerald-500 hover:bg-emerald-600 shadow-emerald-200' : 'bg-rose-500 hover:bg-rose-600 shadow-rose-200'} active:scale-95`}>
@@ -161,23 +181,29 @@ function TesoreroDashboard({
     if (vistaActual === 'historial') {
         contenido = (
             <div className="space-y-4 animate-in slide-in-from-right duration-300 pt-2 pb-24">
-                <div className="px-2 mb-4">
-                    <h2 className="text-2xl font-black text-slate-800">Libro Mayor</h2>
-                    <p className="text-slate-400 text-xs mt-1">Historial organizado por mes y semana</p>
+                {/* SELECTOR DE FONDO GLOBAL */}
+                <div className="flex bg-slate-200 p-1.5 rounded-2xl mx-1 shadow-inner">
+                    <button onClick={() => {setFondoActivo('general'); setMesExpandido(null);}} className={`flex-1 py-3.5 rounded-xl font-black text-xs uppercase tracking-widest transition-all ${fondoActivo === 'general' ? 'bg-white text-amber-600 shadow-md' : 'text-slate-500 hover:text-slate-700'}`}>Fondo General</button>
+                    <button onClick={() => {setFondoActivo('voluntario'); setMesExpandido(null);}} className={`flex-1 py-3.5 rounded-xl font-black text-xs uppercase tracking-widest transition-all ${fondoActivo === 'voluntario' ? 'bg-white text-emerald-600 shadow-md' : 'text-slate-500 hover:text-slate-700'}`}>Fondo Voluntario</button>
+                </div>
+
+                <div className="px-2 mb-4 mt-4">
+                    <h2 className={`text-2xl font-black text-slate-800 flex items-center`}>Libro Mayor</h2>
+                    <p className="text-slate-400 text-xs mt-1">Viendo movimientos: <strong className={`uppercase ${fondoActivo === 'voluntario' ? 'text-emerald-500' : 'text-amber-500'}`}>{fondoActivo}</strong></p>
                 </div>
                 
                 <div className="space-y-3 px-1">
                     {gruposMesesHistorial.length === 0 ? (
-                        <div className="text-center p-8 bg-slate-50 rounded-[32px] mt-4 border-2 border-dashed border-slate-200">
+                        <div className={`text-center p-8 bg-slate-50 rounded-[32px] mt-4 border-2 border-dashed border-slate-200`}>
                             <i className="fas fa-book-open text-3xl text-slate-300 mb-3"></i>
-                            <p className="text-sm font-bold text-slate-500">El libro de registros está vacío.</p>
+                            <p className="text-sm font-bold text-slate-500">El libro está vacío para este fondo.</p>
                         </div>
                     ) : (
                         gruposMesesHistorial.map(grupo => {
                             const isExpMes = mesExpandido === grupo.id;
 
                             return (
-                                <div key={grupo.id} className="bg-white rounded-[24px] border border-slate-100 shadow-sm overflow-hidden transition-all duration-300">
+                                <div key={grupo.id} className={`bg-white rounded-[24px] border border-${colorTema}-100 shadow-sm overflow-hidden transition-all duration-300`}>
                                     <button onClick={() => { setMesExpandido(isExpMes ? null : grupo.id); setSemanaExpandida(null); setDetalleMovExp(null); }} className="w-full p-5 flex justify-between items-center bg-white hover:bg-slate-50 transition-colors">
                                         <div className="text-left">
                                             <span className="font-black text-slate-700 text-lg uppercase tracking-wide">{grupo.mesLabel}</span>
@@ -188,7 +214,7 @@ function TesoreroDashboard({
                                                 <p className="text-[10px] font-bold text-emerald-500">+${grupo.ingresos.toFixed(2)}</p>
                                                 <p className="text-[10px] font-bold text-rose-500">-${grupo.egresos.toFixed(2)}</p>
                                             </div>
-                                            <div className={`w-8 h-8 flex items-center justify-center rounded-xl transition-colors shadow-sm ${isExpMes ? 'bg-amber-500 text-white' : 'bg-slate-50 text-slate-400'}`}>
+                                            <div className={`w-8 h-8 flex items-center justify-center rounded-xl transition-colors shadow-sm ${isExpMes ? `bg-${colorTema}-500 text-white` : 'bg-slate-50 text-slate-400'}`}>
                                                 <i className={`fas fa-chevron-down transition-transform duration-300 ${isExpMes ? 'rotate-180' : ''}`}></i>
                                             </div>
                                         </div>
@@ -234,7 +260,7 @@ function TesoreroDashboard({
                                                                         const fechaObj = new Date(mov.timestamp || mov.fecha);
                                                                         const hora = mov.timestamp ? fechaObj.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : '';
                                                                         const isMovExp = detalleMovExp === mov.id;
-                                                                        
+
                                                                         return (
                                                                             <div key={mov.id} onClick={() => setDetalleMovExp(isMovExp ? null : mov.id)} className="bg-white p-3 rounded-lg border border-slate-100 shadow-sm relative overflow-hidden cursor-pointer transition-colors hover:bg-slate-50">
                                                                                 <div className={`absolute left-0 top-0 bottom-0 w-1 ${esIngreso ? 'bg-emerald-400' : 'bg-rose-400'}`}></div>
@@ -253,7 +279,6 @@ function TesoreroDashboard({
                                                                                     </div>
                                                                                 </div>
                                                                                 
-                                                                                {/* DESPLIEGUE DEL DETALLE COMPLETO DE LA TRANSACCIÓN */}
                                                                                 {isMovExp && (
                                                                                     <div className="pl-2 mt-3 pt-2 border-t border-slate-50 animate-in fade-in duration-200">
                                                                                         <p className="text-[10px] text-slate-500 leading-relaxed"><strong className="text-slate-600">Detalle completo:</strong> {mov.descripcion}</p>
@@ -285,20 +310,26 @@ function TesoreroDashboard({
     if (vistaActual === 'reportes') {
         contenido = (
             <div className="space-y-4 animate-in slide-in-from-right duration-300 pt-2 pb-24">
-                <div className="px-2 mb-4">
+                {/* SELECTOR DE FONDO GLOBAL */}
+                <div className="flex bg-slate-200 p-1.5 rounded-2xl mx-1 shadow-inner">
+                    <button onClick={() => {setFondoActivo('general'); setRepMesExpandido(null);}} className={`flex-1 py-3.5 rounded-xl font-black text-xs uppercase tracking-widest transition-all ${fondoActivo === 'general' ? 'bg-white text-amber-600 shadow-md' : 'text-slate-500 hover:text-slate-700'}`}>Fondo General</button>
+                    <button onClick={() => {setFondoActivo('voluntario'); setRepMesExpandido(null);}} className={`flex-1 py-3.5 rounded-xl font-black text-xs uppercase tracking-widest transition-all ${fondoActivo === 'voluntario' ? 'bg-white text-emerald-600 shadow-md' : 'text-slate-500 hover:text-slate-700'}`}>Fondo Voluntario</button>
+                </div>
+
+                <div className="px-2 mb-4 mt-4">
                     <h2 className="text-2xl font-black text-slate-800">Rendición de Cuentas</h2>
-                    <p className="text-slate-400 text-xs mt-1">Filtra ingresos y egresos por fechas</p>
+                    <p className="text-slate-400 text-xs mt-1">Viendo: <strong className={`uppercase ${fondoActivo === 'voluntario' ? 'text-emerald-500' : 'text-amber-500'}`}>{fondoActivo}</strong></p>
                 </div>
                 
                 <div className="bg-white p-5 rounded-[24px] mx-1 border border-slate-100 shadow-sm space-y-4">
                     <div className="flex space-x-3">
                         <div className="w-1/2">
                             <label className="text-[9px] font-bold text-slate-400 uppercase tracking-widest ml-1 block mb-1">Desde</label>
-                            <input type="date" className="w-full p-3 bg-slate-50 rounded-xl outline-none text-xs font-bold text-slate-700 border border-slate-100 focus:border-amber-400 focus:ring-1 focus:ring-amber-100 transition-all" value={fechaDesde} onChange={e=>setFechaDesde(e.target.value)} />
+                            <input type="date" className={`w-full p-3 bg-slate-50 rounded-xl outline-none text-xs font-bold text-slate-700 border border-slate-100 focus:border-${colorTema}-400 focus:ring-1 focus:ring-${colorTema}-100 transition-all`} value={fechaDesde} onChange={e=>setFechaDesde(e.target.value)} />
                         </div>
                         <div className="w-1/2">
                             <label className="text-[9px] font-bold text-slate-400 uppercase tracking-widest ml-1 block mb-1">Hasta</label>
-                            <input type="date" className="w-full p-3 bg-slate-50 rounded-xl outline-none text-xs font-bold text-slate-700 border border-slate-100 focus:border-amber-400 focus:ring-1 focus:ring-amber-100 transition-all" value={fechaHasta} onChange={e=>setFechaHasta(e.target.value)} />
+                            <input type="date" className={`w-full p-3 bg-slate-50 rounded-xl outline-none text-xs font-bold text-slate-700 border border-slate-100 focus:border-${colorTema}-400 focus:ring-1 focus:ring-${colorTema}-100 transition-all`} value={fechaHasta} onChange={e=>setFechaHasta(e.target.value)} />
                         </div>
                     </div>
                 </div>
@@ -306,7 +337,7 @@ function TesoreroDashboard({
                 {(fechaDesde || fechaHasta) && (
                     <div className="bg-slate-800 p-6 rounded-[24px] text-white shadow-xl mx-1 relative overflow-hidden animate-in zoom-in-95">
                         <div className="absolute top-0 right-0 w-24 h-24 bg-white opacity-5 rounded-bl-[100px] pointer-events-none"></div>
-                        <p className="text-[10px] font-bold uppercase opacity-70 tracking-widest mb-4 flex items-center"><i className="fas fa-chart-pie mr-2 text-amber-400"></i> Resumen del Período</p>
+                        <p className={`text-[10px] font-bold uppercase opacity-70 tracking-widest mb-4 flex items-center text-${colorTema}-400`}><i className="fas fa-chart-pie mr-2"></i> Resumen del Período</p>
                         
                         <div className="grid grid-cols-2 gap-4 relative z-10">
                             <div>
@@ -321,7 +352,7 @@ function TesoreroDashboard({
                         
                         <div className="mt-4 pt-4 border-t border-slate-700">
                             <p className="text-[9px] text-slate-400 uppercase font-bold tracking-widest mb-1">Balance del período</p>
-                            <p className={`text-3xl font-black tracking-tighter ${repBalance >= 0 ? 'text-amber-400' : 'text-rose-400'}`}>
+                            <p className={`text-3xl font-black tracking-tighter ${repBalance >= 0 ? `text-${colorTema}-400` : 'text-rose-400'}`}>
                                 {repBalance >= 0 ? '+' : '-'}${Math.abs(repBalance).toFixed(2)}
                             </p>
                         </div>
@@ -347,7 +378,7 @@ function TesoreroDashboard({
                                             <span className="font-bold text-slate-700 text-sm uppercase">{grupo.mesLabel}</span>
                                         </div>
                                         <div className="flex items-center space-x-3">
-                                            <div className={`w-8 h-8 flex items-center justify-center rounded-xl transition-colors shadow-sm ${isExpMes ? 'bg-amber-500 text-white' : 'bg-slate-50 text-slate-400'}`}>
+                                            <div className={`w-8 h-8 flex items-center justify-center rounded-xl transition-colors shadow-sm ${isExpMes ? `bg-${colorTema}-500 text-white` : 'bg-slate-50 text-slate-400'}`}>
                                                 <i className={`fas fa-chevron-down transition-transform duration-300 ${isExpMes ? 'rotate-180' : ''}`}></i>
                                             </div>
                                         </div>
@@ -399,8 +430,7 @@ function TesoreroDashboard({
                                                                                         <i className={`fas fa-chevron-down text-[8px] text-slate-300 mt-2 transition-transform duration-300 ${isMovExp ? 'rotate-180' : ''}`}></i>
                                                                                     </div>
                                                                                 </div>
-
-                                                                                {/* DESPLIEGUE DEL DETALLE COMPLETO DE LA TRANSACCIÓN */}
+                                                                                
                                                                                 {isMovExp && (
                                                                                     <div className="pl-2 mt-3 pt-2 border-t border-slate-50 animate-in fade-in duration-200">
                                                                                         <p className="text-[10px] text-slate-500 leading-relaxed"><strong className="text-slate-600">Detalle completo:</strong> {mov.descripcion}</p>
