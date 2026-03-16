@@ -21,10 +21,11 @@ function App() {
     const [inventarioDatos, setInventarioDatos] = useState({ historicoRecibido: 0, actualRecibido: 0 });
 
     const [fondoTotal, setFondoTotal] = useState(0);
-    const [fondoVoluntarioTotal, setFondoVoluntarioTotal] = useState(0); // NUEVO ESTADO PARA FONDO VOLUNTARIO
+    const [fondoVoluntarioTotal, setFondoVoluntarioTotal] = useState(0); // NUEVO ESTADO PARA FONDO VOLUNTARIO TESORERÍA
     const [historialIngresos, setHistorialIngresos] = useState([]);
     
     const [fondoSecretariaTotal, setFondoSecretariaTotal] = useState(0);
+    const [fondoSecretariaVoluntarioTotal, setFondoSecretariaVoluntarioTotal] = useState(0); // NUEVO ESTADO PARA FONDO VOLUNTARIO SECRETARÍA
     const [historialSecretaria, setHistorialSecretaria] = useState([]);
 
     const [modalAbierto, setModalAbierto] = useState(false);
@@ -98,13 +99,12 @@ function App() {
             unsubs.push(AlumnosService.suscribirAsistenciaSemanal(setDatosGlobalesAsistencia));
             unsubs.push(AlumnosService.suscribirHistorialGlobal(setHistorialAsistencias));
             
-            // ESCUCHA DEL FONDO GENERAL
+            // ESCUCHAS DEL TESORERO
             const unsubFondo = window.db.collection('sistema').doc('tesoreria').onSnapshot(doc => {
                 if (doc.exists) setFondoTotal(doc.data().total || 0); else setFondoTotal(0);
             });
             unsubs.push(unsubFondo);
 
-            // NUEVA ESCUCHA DEL FONDO VOLUNTARIO
             const unsubFondoVoluntario = window.db.collection('sistema').doc('tesoreria_voluntaria').onSnapshot(doc => {
                 if (doc.exists) setFondoVoluntarioTotal(doc.data().total || 0); else setFondoVoluntarioTotal(0);
             });
@@ -115,16 +115,23 @@ function App() {
             });
             unsubs.push(unsubIngresos);
 
+            // ESCUCHAS DEL SECRETARIO
             const unsubFondoSec = window.db.collection('sistema').doc('finanzas_secretaria').onSnapshot(doc => {
                 if (doc.exists) setFondoSecretariaTotal(doc.data().total || 0); else setFondoSecretariaTotal(0);
             });
             unsubs.push(unsubFondoSec);
 
-            const unsubIngresosSec = window.db.collection('ingresos_secretaria').orderBy('timestamp', 'desc').limit(200).onSnapshot(snapshot => {
+            const unsubFondoSecVol = window.db.collection('sistema').doc('finanzas_secretaria_voluntaria').onSnapshot(doc => {
+                if (doc.exists) setFondoSecretariaVoluntarioTotal(doc.data().total || 0); else setFondoSecretariaVoluntarioTotal(0);
+            });
+            unsubs.push(unsubFondoSecVol);
+
+            const unsubIngresosSec = window.db.collection('ingresos_secretaria').orderBy('timestamp', 'desc').limit(500).onSnapshot(snapshot => {
                 const hist = []; snapshot.forEach(doc => hist.push({ id: doc.id, ...doc.data() })); setHistorialSecretaria(hist);
             });
             unsubs.push(unsubIngresosSec);
 
+            // LOGÍSTICA E INVENTARIO PARA EL ADMIN
             if (usuario === 'ADMIN') {
                 if(LogisticaService) unsubs.push(LogisticaService.suscribirTodas(setEntregasLogistica)); 
                 const unsubInv = window.db.collection('sistema').doc('inventario').onSnapshot(doc => {
@@ -163,7 +170,6 @@ function App() {
 
     const handleLogin = async (rol, clave, nombre, campo, fechaNacimiento, edad) => {
         
-        // --- AQUÍ ESTÁ LA NUEVA CLAVE SEGURA DEL MODO DESARROLLADOR ---
         if (rol === 'PRUEBA') {
             if (clave === '@Dev2026') {
                 setModoSandboxActivo(true);
@@ -249,7 +255,7 @@ function App() {
         try { await AlumnosService.guardarAsistencia({ fecha: new Date().toLocaleDateString('en-CA'), campo: datosUsuarioActual.campo, clase: 'General', maestro: datosUsuarioActual.nombre, registradoPorId: datosUsuarioActual.id, registros: registros, totales: { presentes: p, ausentes: a, permisos: per }, leccion: leccion, leccionImpartida: leccionImpartida, ofrenda: Number(ofrenda) || 0, timestamp: Date.now() }); alert("Asistencia guardada."); return true; } catch (e) { return false; } 
     };
 
-    // --- ACTUALIZACIÓN: AHORA RECIBEN EL FONDO COMO PARÁMETRO ---
+    // FUNCIONES DEL TESORERO AHORA CON DOBLE FONDO (Sin forzar campoOrigen)
     const handleGuardarIngreso = async (monto, descripcion, fondoActivo = 'general') => {
         if (isSandbox) { candadoSandbox(`Sumar Ingreso ${fondoActivo}: $${monto}`); return true; }
         try { 
@@ -259,7 +265,7 @@ function App() {
                 tipo: 'ingreso', monto: montoNum, descripcion: descripcion.trim(), 
                 fecha: new Date().toLocaleDateString('en-CA'), timestamp: Date.now(), 
                 registradoPor: datosUsuarioActual.nombre,
-                fondo: fondoActivo // Guardamos a qué fondo pertenece
+                fondo: fondoActivo 
             }); 
             
             const docName = fondoActivo === 'voluntario' ? 'tesoreria_voluntaria' : 'tesoreria';
@@ -288,7 +294,7 @@ function App() {
                 tipo: 'egreso', monto: montoNum, descripcion: descripcion.trim(), 
                 fecha: new Date().toLocaleDateString('en-CA'), timestamp: Date.now(), 
                 registradoPor: datosUsuarioActual.nombre,
-                fondo: fondoActivo // Guardamos a qué fondo pertenece
+                fondo: fondoActivo 
             }); 
             
             await docRef.set({ total: actual - montoNum }, { merge: true }); 
@@ -296,13 +302,50 @@ function App() {
         } catch (error) { return false; }
     };
 
-    const handleGuardarIngresoSecretaria = async (monto, descripcion) => {
-        if (isSandbox) { candadoSandbox(`Registro Cruzado Ingreso: $${monto}`); return true; }
-        try { const montoNum = parseFloat(monto); if (isNaN(montoNum) || montoNum <= 0) return false; await window.db.collection('ingresos_secretaria').add({ tipo: 'ingreso', monto: montoNum, descripcion: descripcion.trim(), fecha: new Date().toLocaleDateString('en-CA'), timestamp: Date.now(), registradoPor: datosUsuarioActual.nombre }); const docRef = window.db.collection('sistema').doc('finanzas_secretaria'); const docSnap = await docRef.get(); let actual = docSnap.exists ? (docSnap.data().total || 0) : 0; await docRef.set({ total: actual + montoNum }, { merge: true }); alert(`✅ Ingreso registrado.`); return true; } catch (error) { return false; }
+    // FUNCIONES DEL SECRETARIO AHORA CON DOBLE FONDO
+    const handleGuardarIngresoSecretaria = async (monto, descripcion, fondoActivo = 'general') => {
+        if (isSandbox) { candadoSandbox(`Registro Cruzado Ingreso ${fondoActivo}: $${monto}`); return true; }
+        try { 
+            const montoNum = parseFloat(monto); if (isNaN(montoNum) || montoNum <= 0) return false; 
+            await window.db.collection('ingresos_secretaria').add({ 
+                tipo: 'ingreso', monto: montoNum, descripcion: descripcion.trim(), 
+                fecha: new Date().toLocaleDateString('en-CA'), timestamp: Date.now(), 
+                registradoPor: datosUsuarioActual.nombre,
+                fondo: fondoActivo 
+            }); 
+            
+            const docName = fondoActivo === 'voluntario' ? 'finanzas_secretaria_voluntaria' : 'finanzas_secretaria';
+            const docRef = window.db.collection('sistema').doc(docName); 
+            const docSnap = await docRef.get(); 
+            let actual = docSnap.exists ? (docSnap.data().total || 0) : 0; 
+            await docRef.set({ total: actual + montoNum }, { merge: true }); 
+            
+            alert(`✅ Ingreso registrado en el fondo ${fondoActivo}.`); return true; 
+        } catch (error) { return false; }
     };
-    const handleGuardarEgresoSecretaria = async (monto, descripcion) => {
-        if (isSandbox) { candadoSandbox(`Registro Cruzado Egreso: $${monto}`); return true; }
-        try { const montoNum = parseFloat(monto); if (isNaN(montoNum) || montoNum <= 0) return false; const docRef = window.db.collection('sistema').doc('finanzas_secretaria'); const docSnap = await docRef.get(); let actual = docSnap.exists ? (docSnap.data().total || 0) : 0; if (montoNum > actual) { alert(`❌ Fondos insuficientes.`); return false; } await window.db.collection('ingresos_secretaria').add({ tipo: 'egreso', monto: montoNum, descripcion: descripcion.trim(), fecha: new Date().toLocaleDateString('en-CA'), timestamp: Date.now(), registradoPor: datosUsuarioActual.nombre }); await docRef.set({ total: actual - montoNum }, { merge: true }); alert(`🔻 Retiro registrado.`); return true; } catch (error) { return false; }
+    
+    const handleGuardarEgresoSecretaria = async (monto, descripcion, fondoActivo = 'general') => {
+        if (isSandbox) { candadoSandbox(`Registro Cruzado Egreso ${fondoActivo}: $${monto}`); return true; }
+        try { 
+            const montoNum = parseFloat(monto); if (isNaN(montoNum) || montoNum <= 0) return false; 
+            
+            const docName = fondoActivo === 'voluntario' ? 'finanzas_secretaria_voluntaria' : 'finanzas_secretaria';
+            const docRef = window.db.collection('sistema').doc(docName); 
+            const docSnap = await docRef.get(); 
+            let actual = docSnap.exists ? (docSnap.data().total || 0) : 0; 
+            
+            if (montoNum > actual) { alert(`❌ Fondos insuficientes en el fondo ${fondoActivo}.`); return false; } 
+            
+            await window.db.collection('ingresos_secretaria').add({ 
+                tipo: 'egreso', monto: montoNum, descripcion: descripcion.trim(), 
+                fecha: new Date().toLocaleDateString('en-CA'), timestamp: Date.now(), 
+                registradoPor: datosUsuarioActual.nombre,
+                fondo: fondoActivo 
+            }); 
+            
+            await docRef.set({ total: actual - montoNum }, { merge: true }); 
+            alert(`🔻 Retiro registrado en el fondo ${fondoActivo}.`); return true; 
+        } catch (error) { return false; }
     };
 
     const handleCrearEntrega = async (datos) => { if (isSandbox) { candadoSandbox("Crear Ruta Logística"); return; } try { await LogisticaService.crear({ ...datos, asignadoPor: 'Director' }); alert("Ruta asignada."); } catch (error) { alert("Error."); } };
@@ -475,7 +518,9 @@ function App() {
                     historialIngresos={historialIngresos}
                     onGuardarIngreso={handleGuardarIngreso} onGuardarEgreso={handleGuardarEgreso}
                     
-                    fondoSecretariaTotal={fondoSecretariaTotal} historialSecretaria={historialSecretaria}
+                    fondoSecretariaTotal={fondoSecretariaTotal} 
+                    fondoSecretariaVoluntarioTotal={fondoSecretariaVoluntarioTotal}
+                    historialSecretaria={historialSecretaria}
                     onGuardarIngresoSecretaria={handleGuardarIngresoSecretaria} onGuardarEgresoSecretaria={handleGuardarEgresoSecretaria}
                 />
             </main>
