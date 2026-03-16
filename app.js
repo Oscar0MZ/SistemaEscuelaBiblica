@@ -21,7 +21,9 @@ function App() {
     const [inventarioDatos, setInventarioDatos] = useState({ historicoRecibido: 0, actualRecibido: 0 });
 
     const [fondoTotal, setFondoTotal] = useState(0);
+    const [fondoVoluntarioTotal, setFondoVoluntarioTotal] = useState(0); // NUEVO ESTADO PARA FONDO VOLUNTARIO
     const [historialIngresos, setHistorialIngresos] = useState([]);
+    
     const [fondoSecretariaTotal, setFondoSecretariaTotal] = useState(0);
     const [historialSecretaria, setHistorialSecretaria] = useState([]);
 
@@ -96,12 +98,19 @@ function App() {
             unsubs.push(AlumnosService.suscribirAsistenciaSemanal(setDatosGlobalesAsistencia));
             unsubs.push(AlumnosService.suscribirHistorialGlobal(setHistorialAsistencias));
             
+            // ESCUCHA DEL FONDO GENERAL
             const unsubFondo = window.db.collection('sistema').doc('tesoreria').onSnapshot(doc => {
                 if (doc.exists) setFondoTotal(doc.data().total || 0); else setFondoTotal(0);
             });
             unsubs.push(unsubFondo);
 
-            const unsubIngresos = window.db.collection('ingresos_tesoreria').orderBy('timestamp', 'desc').limit(200).onSnapshot(snapshot => {
+            // NUEVA ESCUCHA DEL FONDO VOLUNTARIO
+            const unsubFondoVoluntario = window.db.collection('sistema').doc('tesoreria_voluntaria').onSnapshot(doc => {
+                if (doc.exists) setFondoVoluntarioTotal(doc.data().total || 0); else setFondoVoluntarioTotal(0);
+            });
+            unsubs.push(unsubFondoVoluntario);
+
+            const unsubIngresos = window.db.collection('ingresos_tesoreria').orderBy('timestamp', 'desc').limit(500).onSnapshot(snapshot => {
                 const hist = []; snapshot.forEach(doc => hist.push({ id: doc.id, ...doc.data() })); setHistorialIngresos(hist);
             });
             unsubs.push(unsubIngresos);
@@ -240,13 +249,51 @@ function App() {
         try { await AlumnosService.guardarAsistencia({ fecha: new Date().toLocaleDateString('en-CA'), campo: datosUsuarioActual.campo, clase: 'General', maestro: datosUsuarioActual.nombre, registradoPorId: datosUsuarioActual.id, registros: registros, totales: { presentes: p, ausentes: a, permisos: per }, leccion: leccion, leccionImpartida: leccionImpartida, ofrenda: Number(ofrenda) || 0, timestamp: Date.now() }); alert("Asistencia guardada."); return true; } catch (e) { return false; } 
     };
 
-    const handleGuardarIngreso = async (monto, descripcion) => {
-        if (isSandbox) { candadoSandbox(`Sumar Ingreso: $${monto}`); return true; }
-        try { const montoNum = parseFloat(monto); if (isNaN(montoNum) || montoNum <= 0) return false; await window.db.collection('ingresos_tesoreria').add({ tipo: 'ingreso', monto: montoNum, descripcion: descripcion.trim(), fecha: new Date().toLocaleDateString('en-CA'), timestamp: Date.now(), registradoPor: datosUsuarioActual.nombre }); const docRef = window.db.collection('sistema').doc('tesoreria'); const docSnap = await docRef.get(); let actual = docSnap.exists ? (docSnap.data().total || 0) : 0; await docRef.set({ total: actual + montoNum }, { merge: true }); alert(`✅ Se han agregado $${montoNum.toFixed(2)}.`); return true; } catch (error) { return false; }
+    // --- ACTUALIZACIÓN: AHORA RECIBEN EL FONDO COMO PARÁMETRO ---
+    const handleGuardarIngreso = async (monto, descripcion, fondoActivo = 'general') => {
+        if (isSandbox) { candadoSandbox(`Sumar Ingreso ${fondoActivo}: $${monto}`); return true; }
+        try { 
+            const montoNum = parseFloat(monto); if (isNaN(montoNum) || montoNum <= 0) return false; 
+            
+            await window.db.collection('ingresos_tesoreria').add({ 
+                tipo: 'ingreso', monto: montoNum, descripcion: descripcion.trim(), 
+                fecha: new Date().toLocaleDateString('en-CA'), timestamp: Date.now(), 
+                registradoPor: datosUsuarioActual.nombre,
+                fondo: fondoActivo // Guardamos a qué fondo pertenece
+            }); 
+            
+            const docName = fondoActivo === 'voluntario' ? 'tesoreria_voluntaria' : 'tesoreria';
+            const docRef = window.db.collection('sistema').doc(docName); 
+            const docSnap = await docRef.get(); 
+            let actual = docSnap.exists ? (docSnap.data().total || 0) : 0; 
+            await docRef.set({ total: actual + montoNum }, { merge: true }); 
+            
+            alert(`✅ Se han agregado $${montoNum.toFixed(2)} al fondo ${fondoActivo}.`); return true; 
+        } catch (error) { return false; }
     };
-    const handleGuardarEgreso = async (monto, descripcion) => {
-        if (isSandbox) { candadoSandbox(`Retirar Fondos: $${monto}`); return true; }
-        try { const montoNum = parseFloat(monto); if (isNaN(montoNum) || montoNum <= 0) return false; const docRef = window.db.collection('sistema').doc('tesoreria'); const docSnap = await docRef.get(); let actual = docSnap.exists ? (docSnap.data().total || 0) : 0; if (montoNum > actual) { alert(`❌ Fondos insuficientes.`); return false; } await window.db.collection('ingresos_tesoreria').add({ tipo: 'egreso', monto: montoNum, descripcion: descripcion.trim(), fecha: new Date().toLocaleDateString('en-CA'), timestamp: Date.now(), registradoPor: datosUsuarioActual.nombre }); await docRef.set({ total: actual - montoNum }, { merge: true }); alert(`🔻 Se han retirado $${montoNum.toFixed(2)}.`); return true; } catch (error) { return false; }
+
+    const handleGuardarEgreso = async (monto, descripcion, fondoActivo = 'general') => {
+        if (isSandbox) { candadoSandbox(`Retirar Fondos ${fondoActivo}: $${monto}`); return true; }
+        try { 
+            const montoNum = parseFloat(monto); if (isNaN(montoNum) || montoNum <= 0) return false; 
+            
+            const docName = fondoActivo === 'voluntario' ? 'tesoreria_voluntaria' : 'tesoreria';
+            const docRef = window.db.collection('sistema').doc(docName); 
+            const docSnap = await docRef.get(); 
+            let actual = docSnap.exists ? (docSnap.data().total || 0) : 0; 
+            
+            if (montoNum > actual) { alert(`❌ Fondos insuficientes en el fondo ${fondoActivo}.`); return false; } 
+            
+            await window.db.collection('ingresos_tesoreria').add({ 
+                tipo: 'egreso', monto: montoNum, descripcion: descripcion.trim(), 
+                fecha: new Date().toLocaleDateString('en-CA'), timestamp: Date.now(), 
+                registradoPor: datosUsuarioActual.nombre,
+                fondo: fondoActivo // Guardamos a qué fondo pertenece
+            }); 
+            
+            await docRef.set({ total: actual - montoNum }, { merge: true }); 
+            alert(`🔻 Se han retirado $${montoNum.toFixed(2)} del fondo ${fondoActivo}.`); return true; 
+        } catch (error) { return false; }
     };
 
     const handleGuardarIngresoSecretaria = async (monto, descripcion) => {
@@ -423,7 +470,9 @@ function App() {
                     onSaveAsistencia={handleGuardarAsistencia} onOpenAlumnoModal={handleAbrirModalAlumno} onEditAlumno={handleEditarAlumno} onDeleteAlumno={setAlumnoBorrar} onDeleteCampo={setCampoABorrar}
                     onResetLecciones={handleResetLecciones} onCrearEntrega={handleCrearEntrega} onActualizarEntrega={handleActualizarEntrega} onGuardarAvanceEntrega={handleGuardarAvanceEntrega} onBorrarEntrega={handleBorrarEntrega} onAssignGroup={handleAssignGroup}
                     
-                    fondoTotal={fondoTotal} historialIngresos={historialIngresos}
+                    fondoTotal={fondoTotal} 
+                    fondoVoluntarioTotal={fondoVoluntarioTotal}
+                    historialIngresos={historialIngresos}
                     onGuardarIngreso={handleGuardarIngreso} onGuardarEgreso={handleGuardarEgreso}
                     
                     fondoSecretariaTotal={fondoSecretariaTotal} historialSecretaria={historialSecretaria}
