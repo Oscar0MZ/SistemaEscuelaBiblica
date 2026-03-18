@@ -21,11 +21,11 @@ function App() {
     const [inventarioDatos, setInventarioDatos] = useState({ historicoRecibido: 0, actualRecibido: 0 });
 
     const [fondoTotal, setFondoTotal] = useState(0);
-    const [fondoVoluntarioTotal, setFondoVoluntarioTotal] = useState(0); // NUEVO ESTADO PARA FONDO VOLUNTARIO TESORERÍA
+    const [fondoVoluntarioTotal, setFondoVoluntarioTotal] = useState(0); 
     const [historialIngresos, setHistorialIngresos] = useState([]);
     
     const [fondoSecretariaTotal, setFondoSecretariaTotal] = useState(0);
-    const [fondoSecretariaVoluntarioTotal, setFondoSecretariaVoluntarioTotal] = useState(0); // NUEVO ESTADO PARA FONDO VOLUNTARIO SECRETARÍA
+    const [fondoSecretariaVoluntarioTotal, setFondoSecretariaVoluntarioTotal] = useState(0); 
     const [historialSecretaria, setHistorialSecretaria] = useState([]);
 
     const [modalAbierto, setModalAbierto] = useState(false);
@@ -99,7 +99,6 @@ function App() {
             unsubs.push(AlumnosService.suscribirAsistenciaSemanal(setDatosGlobalesAsistencia));
             unsubs.push(AlumnosService.suscribirHistorialGlobal(setHistorialAsistencias));
             
-            // ESCUCHAS DEL TESORERO
             const unsubFondo = window.db.collection('sistema').doc('tesoreria').onSnapshot(doc => {
                 if (doc.exists) setFondoTotal(doc.data().total || 0); else setFondoTotal(0);
             });
@@ -115,7 +114,6 @@ function App() {
             });
             unsubs.push(unsubIngresos);
 
-            // ESCUCHAS DEL SECRETARIO
             const unsubFondoSec = window.db.collection('sistema').doc('finanzas_secretaria').onSnapshot(doc => {
                 if (doc.exists) setFondoSecretariaTotal(doc.data().total || 0); else setFondoSecretariaTotal(0);
             });
@@ -131,7 +129,6 @@ function App() {
             });
             unsubs.push(unsubIngresosSec);
 
-            // LOGÍSTICA E INVENTARIO PARA EL ADMIN
             if (usuario === 'ADMIN') {
                 if(LogisticaService) unsubs.push(LogisticaService.suscribirTodas(setEntregasLogistica)); 
                 const unsubInv = window.db.collection('sistema').doc('inventario').onSnapshot(doc => {
@@ -169,7 +166,6 @@ function App() {
     }, [diaNac, mesNac, anioNac]);
 
     const handleLogin = async (rol, clave, nombre, campo, fechaNacimiento, edad) => {
-        
         if (rol === 'PRUEBA') {
             if (clave === '@Dev2026') {
                 setModoSandboxActivo(true);
@@ -255,7 +251,6 @@ function App() {
         try { await AlumnosService.guardarAsistencia({ fecha: new Date().toLocaleDateString('en-CA'), campo: datosUsuarioActual.campo, clase: 'General', maestro: datosUsuarioActual.nombre, registradoPorId: datosUsuarioActual.id, registros: registros, totales: { presentes: p, ausentes: a, permisos: per }, leccion: leccion, leccionImpartida: leccionImpartida, ofrenda: Number(ofrenda) || 0, timestamp: Date.now() }); alert("Asistencia guardada."); return true; } catch (e) { return false; } 
     };
 
-    // FUNCIONES DEL TESORERO AHORA CON DOBLE FONDO (Sin forzar campoOrigen)
     const handleGuardarIngreso = async (monto, descripcion, fondoActivo = 'general') => {
         if (isSandbox) { candadoSandbox(`Sumar Ingreso ${fondoActivo}: $${monto}`); return true; }
         try { 
@@ -302,7 +297,6 @@ function App() {
         } catch (error) { return false; }
     };
 
-    // FUNCIONES DEL SECRETARIO AHORA CON DOBLE FONDO
     const handleGuardarIngresoSecretaria = async (monto, descripcion, fondoActivo = 'general') => {
         if (isSandbox) { candadoSandbox(`Registro Cruzado Ingreso ${fondoActivo}: $${monto}`); return true; }
         try { 
@@ -468,7 +462,7 @@ function App() {
 
             {soyCumpleanero && (
                 <div className="bg-gradient-to-r from-amber-400 to-orange-500 text-white p-3 text-center shadow-md animate-in slide-in-from-top-2 z-30 relative">
-                    <p className="font-black text-sm">🎉 ¡Muchas Felicidades en tu cumpleaños, {datosUsuarioActual?.nombre?.split(' ')[0]}!</p>
+                    <p className="font-black text-sm">🎉 ¡Muchas Felicidades en tu cumpleaños, {datosUsuarioActual?.nombre}!</p>
                     <p className="text-[10px] font-bold opacity-90">Que pases un día excelente y muy especial.</p>
                 </div>
             )}
@@ -477,7 +471,7 @@ function App() {
                 <div className="bg-gradient-to-r from-indigo-500 to-purple-600 text-white p-3 text-center shadow-md animate-in slide-in-from-top-2 z-30 relative">
                     <p className="font-black text-xs">🎉 ¡Cumpleaños de hoy!</p>
                     <p className="text-[10px] font-bold opacity-90 mt-0.5">
-                        No olvides felicitar a: {otrosCumpleaneros.map(c => `${c.nombre.split(' ')[0]} (${c.clase})`).join(', ')}
+                        No olvides felicitar a: {otrosCumpleaneros.map(c => `${c.nombre} (${c.clase})`).join(', ')}
                     </p>
                 </div>
             )}
@@ -486,7 +480,7 @@ function App() {
                 <div className="bg-gradient-to-r from-sky-400 to-blue-500 text-white p-3 text-center shadow-md animate-in slide-in-from-top-2 z-30 relative">
                     <p className="font-black text-xs">🎈 Cumpleañeros de la semana</p>
                     <p className="text-[10px] font-bold opacity-90 mt-0.5">
-                        ¡Aún puedes felicitar a: {cumpleanerosSemana.map(c => `${c.nombre.split(' ')[0]} (fue el ${c.diaCumplePasado})`).join(', ')}!
+                        ¡Aún puedes felicitar a: {cumpleanerosSemana.map(c => `${c.nombre} (fue el ${c.diaCumplePasado})`).join(', ')}!
                     </p>
                 </div>
             )}
