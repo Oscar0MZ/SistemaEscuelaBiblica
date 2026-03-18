@@ -479,14 +479,20 @@ function App() {
             )}
             
             {otrosCumpleanerosSemana.length > 0 && (
-                <div className="bg-gradient-to-r from-indigo-500 to-purple-600 text-white p-3 text-center shadow-md animate-in slide-in-from-top-2 z-30 relative">
-                    <p className="font-black text-xs">🎉 Cumpleañeros de la semana</p>
-                    <p className="text-[10px] font-bold opacity-90 mt-0.5 leading-relaxed">
-                        No olvides felicitar a: <br/>
-                        <span className="font-medium text-white/90">
-                            {otrosCumpleanerosSemana.map(c => `${c.nombreCompleto} (${c.clase}) el día ${c.diaCelebracion}`).join(' • ')}
-                        </span>
-                    </p>
+                <div className="bg-gradient-to-r from-indigo-500 to-purple-600 text-white p-4 shadow-md animate-in slide-in-from-top-2 z-30 relative flex flex-col items-center">
+                    <p className="font-black text-xs mb-1 text-center">🎉 Cumpleañeros de la semana</p>
+                    <p className="text-[10px] font-bold opacity-90 mb-3 text-center">No olvides felicitar a:</p>
+                    <ul className="text-[10px] font-medium text-white/95 space-y-2 w-full max-w-sm px-2 text-left">
+                        {otrosCumpleanerosSemana.map((c, idx) => (
+                            <li key={idx} className="flex items-start bg-white/10 rounded-lg p-2.5">
+                                <span className="mr-2 text-indigo-200 mt-0.5 text-xs">•</span>
+                                <span className="leading-relaxed">
+                                    <strong className="text-white text-[11px]">{c.nombreCompleto}</strong> <span className="opacity-80">({c.clase})</span><br/>
+                                    <span className="text-indigo-200 text-[9px] uppercase tracking-wider font-bold">El día {c.diaCelebracion}</span>
+                                </span>
+                            </li>
+                        ))}
+                    </ul>
                 </div>
             )}
             
