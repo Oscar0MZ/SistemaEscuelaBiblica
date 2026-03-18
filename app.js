@@ -351,44 +351,55 @@ function App() {
     const handleActualizarInventario = async (cantidadAgregada) => { if (isSandbox) { candadoSandbox("Agregar Víveres al Inventario"); return; } try { const docRef = window.db.collection('sistema').doc('inventario'); const data = inventarioDatos; await docRef.set({ historicoRecibido: (data.historicoRecibido || 0) + cantidadAgregada, actualRecibido: (data.actualRecibido || 0) + cantidadAgregada }, { merge: true }); alert(`✅ Agregados al stock.`); } catch(e) { alert("Error."); } };
     const handleCerrarJornada = async (rutasParaArchivar) => { if (isSandbox) { candadoSandbox("Cerrar Jornada Logística"); return; } try { await window.db.collection('sistema').doc('inventario').set({ actualRecibido: 0 }, { merge: true }); if (rutasParaArchivar && rutasParaArchivar.length > 0) { const batch = window.db.batch(); rutasParaArchivar.forEach(ruta => { const ref = window.db.collection('entregas').doc(ruta.id); batch.update(ref, { archivado: true }); }); await batch.commit(); } alert("🏁 Jornada Finalizada."); } catch (e) { alert("Error."); } };
 
+    // =========================================================================
+    // INICIO DEL BLOQUE DE CUMPLEAÑOS
+    // =========================================================================
     const hoy = new Date();
-    const mesHoy = (hoy.getMonth() + 1).toString().padStart(2, '0');
-    const diaHoy = hoy.getDate().toString().padStart(2, '0');
-    const mmddHoy = `${mesHoy}-${diaHoy}`;
-    const esDomingo = hoy.getDay() === 0;
+    const diaSemanaActual = hoy.getDay(); 
+    const diffLunes = diaSemanaActual === 0 ? -6 : 1 - diaSemanaActual;
+    const diasNombres = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
+    
+    const semanaMap = {};
+    for (let i = 0; i < 7; i++) {
+        const d = new Date(hoy);
+        d.setDate(hoy.getDate() + diffLunes + i);
+        const mmdd = `${(d.getMonth()+1).toString().padStart(2,'0')}-${d.getDate().toString().padStart(2,'0')}`;
+        semanaMap[mmdd] = diasNombres[d.getDay()];
+    }
 
-    const getPastWeekDaysMap = () => {
-        const diasNombres = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
-        const map = {};
-        for(let i=1; i<=6; i++) {
-            const d = new Date();
-            d.setDate(hoy.getDate() - i);
-            const mmdd = `${(d.getMonth()+1).toString().padStart(2,'0')}-${d.getDate().toString().padStart(2,'0')}`;
-            map[mmdd] = diasNombres[d.getDay()];
-        }
-        return map; 
-    };
-    const diasPasadosMap = esDomingo ? getPastWeekDaysMap() : {};
+    const mesHoyStr = (hoy.getMonth() + 1).toString().padStart(2, '0');
+    const diaHoyStr = hoy.getDate().toString().padStart(2, '0');
+    const mmddHoyStr = `${mesHoyStr}-${diaHoyStr}`;
 
-    const cumpleanerosHoy = [];
     const cumpleanerosSemana = [];
+    let soyCumpleaneroHoy = false;
 
     maestros.forEach(m => {
         if (m.estado !== 'Activo' || !m.fechaNacimiento) return;
         const partes = m.fechaNacimiento.split('-');
         if (partes.length === 3) {
             const mmdd = `${partes[1]}-${partes[2]}`;
-            if (mmdd === mmddHoy) {
-                cumpleanerosHoy.push(m);
-            } else if (esDomingo && diasPasadosMap[mmdd]) {
-                m.diaCumplePasado = diasPasadosMap[mmdd]; 
-                cumpleanerosSemana.push(m);
+            
+            if (mmdd === mmddHoyStr && datosUsuarioActual && m.id === datosUsuarioActual.id) {
+                soyCumpleaneroHoy = true;
+            }
+
+            if (semanaMap[mmdd]) {
+                const diaCelebracion = mmdd === mmddHoyStr ? 'Hoy' : semanaMap[mmdd];
+                cumpleanerosSemana.push({
+                    id: m.id,
+                    nombreCompleto: m.nombre,
+                    clase: m.clase,
+                    diaCelebracion: diaCelebracion
+                });
             }
         }
     });
 
-    const soyCumpleanero = datosUsuarioActual && cumpleanerosHoy.some(c => c.id === datosUsuarioActual.id);
-    const otrosCumpleaneros = datosUsuarioActual ? cumpleanerosHoy.filter(c => c.id !== datosUsuarioActual.id) : cumpleanerosHoy;
+    const otrosCumpleanerosSemana = cumpleanerosSemana.filter(c => !(soyCumpleaneroHoy && c.diaCelebracion === 'Hoy' && c.id === datosUsuarioActual?.id));
+    // =========================================================================
+    // FIN DEL BLOQUE DE CUMPLEAÑOS
+    // =========================================================================
 
     if (!usuario && !modoSandboxActivo) return <LoginView onLogin={handleLogin} />;
     
@@ -460,27 +471,21 @@ function App() {
                 </button>
             </header>
 
-            {soyCumpleanero && (
+            {soyCumpleaneroHoy && (
                 <div className="bg-gradient-to-r from-amber-400 to-orange-500 text-white p-3 text-center shadow-md animate-in slide-in-from-top-2 z-30 relative">
                     <p className="font-black text-sm">🎉 ¡Muchas Felicidades en tu cumpleaños, {datosUsuarioActual?.nombre}!</p>
                     <p className="text-[10px] font-bold opacity-90">Que pases un día excelente y muy especial.</p>
                 </div>
             )}
             
-            {!soyCumpleanero && otrosCumpleaneros.length > 0 && (
+            {otrosCumpleanerosSemana.length > 0 && (
                 <div className="bg-gradient-to-r from-indigo-500 to-purple-600 text-white p-3 text-center shadow-md animate-in slide-in-from-top-2 z-30 relative">
-                    <p className="font-black text-xs">🎉 ¡Cumpleaños de hoy!</p>
-                    <p className="text-[10px] font-bold opacity-90 mt-0.5">
-                        No olvides felicitar a: {otrosCumpleaneros.map(c => `${c.nombre} (${c.clase})`).join(', ')}
-                    </p>
-                </div>
-            )}
-
-            {esDomingo && cumpleanerosSemana.length > 0 && (
-                <div className="bg-gradient-to-r from-sky-400 to-blue-500 text-white p-3 text-center shadow-md animate-in slide-in-from-top-2 z-30 relative">
-                    <p className="font-black text-xs">🎈 Cumpleañeros de la semana</p>
-                    <p className="text-[10px] font-bold opacity-90 mt-0.5">
-                        ¡Aún puedes felicitar a: {cumpleanerosSemana.map(c => `${c.nombre} (fue el ${c.diaCumplePasado})`).join(', ')}!
+                    <p className="font-black text-xs">🎉 Cumpleañeros de la semana</p>
+                    <p className="text-[10px] font-bold opacity-90 mt-0.5 leading-relaxed">
+                        No olvides felicitar a: <br/>
+                        <span className="font-medium text-white/90">
+                            {otrosCumpleanerosSemana.map(c => `${c.nombreCompleto} (${c.clase}) el día ${c.diaCelebracion}`).join(' • ')}
+                        </span>
                     </p>
                 </div>
             )}
