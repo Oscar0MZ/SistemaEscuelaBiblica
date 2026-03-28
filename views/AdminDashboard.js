@@ -15,7 +15,7 @@ function AdminDashboard({
     const [subVistaInicio, setSubVistaInicio] = useState(null); 
     
     // ESTADOS PARA EL DOBLE ACORDEÓN DE AUDITORÍA
-    const [fondoAuditoriaActivo, setFondoAuditoriaActivo] = useState('general'); // NUEVO
+    const [fondoAuditoriaActivo, setFondoAuditoriaActivo] = useState('general');
     const [tabAuditoria, setTabAuditoria] = useState('tesoreria'); 
     const [mesAuditoriaExp, setMesAuditoriaExp] = useState(null);
     const [semanaAuditoriaExp, setSemanaAuditoriaExp] = useState(null);
@@ -78,6 +78,52 @@ function AdminDashboard({
     const getWeekOfMonth = (year, month, day) => {
         const firstDayOfMonth = new Date(year, month - 1, 1).getDay(); 
         return Math.ceil((day + firstDayOfMonth) / 7);
+    };
+
+    // ==========================================
+    // NUEVA FUNCIÓN: DESCARGAR RESPALDO LOCAL
+    // ==========================================
+    const handleDescargarRespaldo = () => {
+        const isSandbox = datosUsuarioActual?.id === 'user_sandbox_secreto';
+        if (isSandbox) {
+            alert("🔒 MODO DESARROLLADOR\n\nAcción simulada: [Descargar Copia de Seguridad]");
+            return;
+        }
+
+        const confirmar = window.confirm("¿Deseas descargar una copia de seguridad de toda la base de datos ahora mismo?");
+        if (!confirmar) return;
+
+        // Empaquetamos todo lo que el sistema tiene en memoria
+        const datosRespaldo = {
+            fechaGeneracion: new Date().toISOString(),
+            saldos: {
+                tesoreriaGeneral: fondoTotal,
+                tesoreriaVoluntario: fondoVoluntarioTotal,
+                secretariaGeneral: fondoSecretariaTotal,
+                secretariaVoluntario: fondoSecretariaVoluntarioTotal,
+                inventarioLogistica: inventarioDatos
+            },
+            colecciones: {
+                maestros: maestros,
+                alumnos: todosLosAlumnos,
+                asistencias: historialAsistencias,
+                ingresosTesoreria: historialIngresos,
+                ingresosSecretaria: historialSecretaria,
+                entregasLogistica: entregasLogistica
+            }
+        };
+
+        // Creamos el archivo y forzamos la descarga
+        const blob = new Blob([JSON.stringify(datosRespaldo, null, 2)], { type: "application/json" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        const fechaNombre = new Date().toLocaleDateString('en-CA');
+        a.download = `Respaldo_Bitinia_${fechaNombre}.json`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
     };
 
     const agruparFinanzas = (data) => {
@@ -262,7 +308,6 @@ function AdminDashboard({
         try { await window.db.collection('entregas').doc(idEntrega).update({ cantidad: cantidadNumerica }); setRutaEditandoId(null); } catch (error) { alert("Error al actualizar la cantidad."); }
     };
 
-    // CÁLCULOS FINANCIEROS Y DE ASISTENCIA
     let tp = 0, ta = 0, tperm = 0; 
     let totalOfrendaSemana = 0;
     todasAsistencias.forEach(r => { 
@@ -270,7 +315,6 @@ function AdminDashboard({
         totalOfrendaSemana += (Number(r.ofrenda) || 0);
     });
     
-    // VERIFICAR DESCUADRES EN AMBOS FONDOS
     const difGeneral = (fondoTotal || 0) - (fondoSecretariaTotal || 0);
     const difVoluntario = (fondoVoluntarioTotal || 0) - (fondoSecretariaVoluntarioTotal || 0);
     const hayDescuadreGeneral = difGeneral !== 0;
@@ -288,9 +332,16 @@ function AdminDashboard({
                             <h2 className="text-2xl font-black text-slate-800">Centro de Control</h2>
                             <p className="text-slate-400 text-xs mt-1">Supervisión general del ministerio</p>
                         </div>
-                        <button onClick={onToggleMantenimiento} className={`flex items-center px-3 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${mantenimiento ? 'bg-rose-500 text-white shadow-lg shadow-rose-200 animate-pulse' : 'bg-slate-100 text-slate-400 hover:bg-slate-200'}`}>
-                            <i className={`fas fa-tools mr-1.5`}></i> {mantenimiento ? 'En Pausa' : 'Activo'}
-                        </button>
+                        <div className="flex space-x-2">
+                            {/* BOTÓN DE RESPALDO (NUEVO) */}
+                            <button onClick={handleDescargarRespaldo} className="flex items-center px-3 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all bg-sky-500 text-white hover:bg-sky-600 shadow-md active:scale-95" title="Descargar Copia de Seguridad">
+                                <i className="fas fa-cloud-download-alt"></i>
+                            </button>
+                            {/* BOTÓN DE MANTENIMIENTO */}
+                            <button onClick={onToggleMantenimiento} className={`flex items-center px-3 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${mantenimiento ? 'bg-rose-500 text-white shadow-lg shadow-rose-200 animate-pulse' : 'bg-slate-100 text-slate-400 hover:bg-slate-200'}`}>
+                                <i className={`fas fa-tools ${mantenimiento ? '' : 'mr-1.5'}`}></i> {mantenimiento ? 'En Pausa' : 'Activo'}
+                            </button>
+                        </div>
                     </div>
 
                     {pendientes.length > 0 && (
@@ -331,7 +382,6 @@ function AdminDashboard({
         if (subVistaInicio === 'auditoria') {
             const dataActiva = tabAuditoria === 'tesoreria' ? historialIngresos : historialSecretaria;
             
-            // FILTRAMOS POR FONDO ACTIVO
             const historialFiltrado = dataActiva.filter(h => {
                 if (fondoAuditoriaActivo === 'general') return h.fondo === 'general' || !h.fondo;
                 return h.fondo === 'voluntario';
@@ -769,7 +819,7 @@ function AdminDashboard({
                                                 </div>
                                             )}
 
-                                            {/* NUEVO HISTORIAL DE CLASES EN DOBLE ACORDEÓN */}
+                                            {/* HISTORIAL DE CLASES */}
                                             {campoAccionActiva === 'clases' && (
                                                 <div className="mt-4 pt-4 border-t border-slate-200 animate-in fade-in">
                                                     <p className="text-[10px] font-black text-slate-500 mb-3 uppercase tracking-widest"><i className="fas fa-history mr-1"></i> Historial de Clases ({registrosCampo.length})</p>
